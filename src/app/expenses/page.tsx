@@ -49,6 +49,7 @@ export default function ExpensesPage() {
         selectedCategory === "전체"
             ? monthlyExpenses
             : monthlyExpenses.filter((expense) => expense.category === selectedCategory);
+    const filteredTotal = filteredExpenses.reduce((total, expense) => total + expense.amount, 0);
     const sortedExpenses = [...filteredExpenses].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     const monthlyTotal = monthlyExpenses.reduce((total, expense) => total + expense.amount, 0);
     const monthlyCategoryTotals = monthlyExpenses.reduce(
@@ -104,7 +105,9 @@ export default function ExpensesPage() {
                             {currentMonth.year}년 {currentMonth.month + 1}월
                         </p>
 
-                        <p className="mt-1 text-sm text-gray-500">총 지출 ${monthlyTotal.toFixed(2)}</p>
+                        <p className="mt-1 text-sm text-gray-500">
+                            {selectedCategory === "전체" ? "총 지출" : `${selectedCategory} 지출`} ${filteredTotal.toFixed(2)}
+                        </p>
 
                         {!isCurrentMonth && (
                             <button
@@ -139,7 +142,7 @@ export default function ExpensesPage() {
 
                 {/* category button */}
                 <div className="mt-5 flex gap-2 overflow-x-auto pb-1">
-                    {["전체", "식비", "교통", "쇼핑", "여행", "월세"].map((category) => (
+                    {["전체", "식비", "교통", "쇼핑", "여행", "월세", "고정비"].map((category) => (
                         <button
                             key={category}
                             onClick={() => setSelectedCategory(category)}
@@ -153,38 +156,40 @@ export default function ExpensesPage() {
                 </div>
 
                 {/* category expense */}
-                <section className="mt-6 rounded-3xl bg-white p-5 shadow-sm">
-                    <h2 className="text-base font-semibold">카테고리별 소비</h2>
+                {selectedCategory === "전체" && (
+                    <section className="mt-6 rounded-3xl bg-white p-5 shadow-sm">
+                        <h2 className="text-base font-semibold">카테고리별 소비</h2>
 
-                    {Object.keys(monthlyCategoryTotals).length === 0 ? (
-                        <p className="mt-5 text-center text-sm text-gray-400">아직 지출 기록이 없어요.</p>
-                    ) : (
-                        <div className="mt-5 space-y-4">
-                            {Object.entries(monthlyCategoryTotals).map(([category, amount]) => {
-                                const percentage = monthlyTotal > 0 ? (amount / monthlyTotal) * 100 : 0;
+                        {Object.keys(monthlyCategoryTotals).length === 0 ? (
+                            <p className="mt-5 text-center text-sm text-gray-400">아직 지출 기록이 없어요.</p>
+                        ) : (
+                            <div className="mt-5 space-y-4">
+                                {Object.entries(monthlyCategoryTotals).map(([category, amount]) => {
+                                    const percentage = monthlyTotal > 0 ? (amount / monthlyTotal) * 100 : 0;
 
-                                return (
-                                    <div key={category}>
-                                        <div className="mb-2 flex items-center justify-between">
-                                            <span className="font-medium">{category}</span>
+                                    return (
+                                        <div key={category}>
+                                            <div className="mb-2 flex items-center justify-between">
+                                                <span className="font-medium">{category}</span>
 
-                                            <span className="text-sm font-medium">${amount.toFixed(2)}</span>
+                                                <span className="text-sm font-medium">${amount.toFixed(2)}</span>
+                                            </div>
+
+                                            <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+                                                <div
+                                                    className="h-full rounded-full bg-black"
+                                                    style={{
+                                                        width: `${percentage}%`,
+                                                    }}
+                                                />
+                                            </div>
                                         </div>
-
-                                        <div className="h-2 overflow-hidden rounded-full bg-gray-100">
-                                            <div
-                                                className="h-full rounded-full bg-black"
-                                                style={{
-                                                    width: `${percentage}%`,
-                                                }}
-                                            />
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
-                </section>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </section>
+                )}
 
                 <div className="mt-6 space-y-4">
                     {Object.entries(groupedExpenses).map(([dateKey, dateExpenses]) => {

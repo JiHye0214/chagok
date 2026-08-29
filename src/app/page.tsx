@@ -313,12 +313,18 @@ export default function Home() {
                                 <span className="text-xs">홈</span>
                             </button>
 
-                            <button className="flex flex-col items-center gap-1 text-gray-400">
+                            <button
+                                onClick={() => router.push("/living")}
+                                className="flex flex-col items-center gap-1 text-gray-400"
+                            >
                                 <span>₩</span>
                                 <span className="text-xs">생활</span>
                             </button>
 
-                            <button className="flex flex-col items-center gap-1 text-gray-400">
+                            <button
+                                onClick={() => router.push("/salary")}
+                                className="flex flex-col items-center gap-1 text-gray-400"
+                            >
                                 <span>💼</span>
                                 <span className="text-xs">급여</span>
                             </button>
