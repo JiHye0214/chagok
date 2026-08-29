@@ -1,0 +1,129 @@
+.container {
+  min-height: 100vh;
+  background: #f5f5f5;
+  padding: 24px 16px 120px;
+}
+
+.inner {
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.logo {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+.date {
+  font-size: 14px;
+  color: #888;
+}
+
+.card {
+  background: white;
+  border-radius: 24px;
+  padding: 24px;
+  margin-bottom: 12px;
+}
+
+.cardLabel {
+  font-size: 14px;
+  color: #888;
+  margin-bottom: 8px;
+}
+
+.mainAmount {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -1px;
+}
+
+.cardGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.smallCard {
+  background: white;
+  border-radius: 24px;
+  padding: 20px;
+}
+
+.smallAmount {
+  font-size: 21px;
+  font-weight: 700;
+}
+
+.sectionTitle {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 18px;
+}
+
+.expenseItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+}
+
+.expenseLeft {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.icon {
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  background: #f5f5f5;
+}
+
+.expenseName {
+  font-weight: 600;
+}
+
+.expenseCategory {
+  margin-top: 3px;
+  font-size: 12px;
+  color: #999;
+}
+
+.expenseAmount {
+  font-weight: 600;
+}
+
+.addButton {
+  position: fixed;
+  right: 20px;
+  bottom: 24px;
+
+  width: 58px;
+  height: 58px;
+
+  border: none;
+  border-radius: 50%;
+
+  background: #111;
+  color: white;
+
+  font-size: 28px;
+
+  cursor: pointer;
+
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}

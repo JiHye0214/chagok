@@ -1,0 +1,12 @@
+내가 필요한 어플을 만들어서 팔아보겠어
+
+Next.js
+TypeScript
+ESLint
+Tailwind CSS
+src/
+App Router
+@/* import alias
+
+시작
+npm run dev
