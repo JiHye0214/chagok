@@ -2,12 +2,30 @@ import { sql } from "@/lib/db";
 import webpush from "web-push";
 
 webpush.setVapidDetails(
-    "mailto:qkrwlgp1526@gmail.com",
+    "mailto:네이메일@example.com",
     process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
     process.env.VAPID_PRIVATE_KEY!,
 );
 
-export async function GET() {
+export async function GET(request: Request) {
+    const authHeader =
+        request.headers.get("authorization");
+
+    if (
+        authHeader !==
+        `Bearer ${process.env.CRON_SECRET}`
+    ) {
+        return Response.json(
+            {
+                success: false,
+                message: "Unauthorized",
+            },
+            {
+                status: 401,
+            },
+        );
+    }
+
     try {
         const schedules = await sql`
             SELECT *

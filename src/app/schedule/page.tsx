@@ -124,6 +124,12 @@ const schedulePushNotification = async (schedule: WorkSchedule) => {
     const result = await response.json();
 
     console.log("알림 예약 결과:", result);
+
+    console.log("근무 시간:", schedule.date, schedule.startTime);
+
+    console.log("알림 시간:", alarmDateTime.toString());
+
+    console.log("UTC:", alarmDateTime.toISOString());
 };
 
 const getUpcomingAlarm = (schedules: WorkSchedule[]) => {
@@ -370,22 +376,80 @@ export default function SchedulePage() {
         setSelectedDate(null);
     };
 
-    const handleDeleteSchedule = (id: number) => {
+    const handleDeleteSchedule = async (id: number) => {
         const updatedSchedules = schedules.filter((schedule) => schedule.id !== id);
 
         localStorage.setItem("chagok-schedules", JSON.stringify(updatedSchedules));
 
         window.dispatchEvent(new StorageEvent("storage"));
 
+        try {
+            await fetch("/api/push/schedule/delete", {
+                method: "DELETE",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    id,
+                }),
+            });
+        } catch (error) {
+            console.error("알림 예약 삭제 실패:", error);
+        }
+
         setEditingSchedule(null);
     };
 
-    const handleUpdateSchedule = (updatedSchedule: WorkSchedule) => {
+    const handleUpdateSchedule = async (updatedSchedule: WorkSchedule) => {
         const updatedSchedules = schedules.map((schedule) => (schedule.id === updatedSchedule.id ? updatedSchedule : schedule));
 
         localStorage.setItem("chagok-schedules", JSON.stringify(updatedSchedules));
 
         window.dispatchEvent(new StorageEvent("storage"));
+
+        if (updatedSchedule.alarmEnabled) {
+            const alarmDateTime = getAlarmDateTime(updatedSchedule);
+
+            const subscription = await getPushSubscription();
+
+            if (alarmDateTime && subscription) {
+                try {
+                    await fetch("/api/push/schedule/update", {
+                        method: "PUT",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({
+                            id: updatedSchedule.id,
+                            sendAt: alarmDateTime.toISOString(),
+                            title: "차곡",
+                            body: `${updatedSchedule.startTime}에 근무가 있어요.`,
+                            subscription,
+                        }),
+                    });
+                } catch (error) {
+                    console.error("알림 예약 수정 실패:", error);
+                }
+            }
+        } else {
+            try {
+                const response = await fetch("/api/push/schedule/delete", {
+                    method: "DELETE",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        id: updatedSchedule.id,
+                    }),
+                });
+
+                const result = await response.json();
+
+                console.log("알림 예약 삭제 결과:", result);
+            } catch (error) {
+                console.error("알림 예약 삭제 실패:", error);
+            }
+        }
 
         setEditingSchedule(null);
     };
