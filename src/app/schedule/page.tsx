@@ -1,6 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
+
+const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+
+function urlBase64ToUint8Array(base64String: string) {
+    const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+
+    const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+
+    const rawData = window.atob(base64);
+
+    return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
+}
 
 type WorkSchedule = {
     id: number;
@@ -8,867 +20,856 @@ type WorkSchedule = {
     startTime: string;
     endTime: string;
     breakMinutes: number;
+    alarmEnabled: boolean;
+    alarmMinutesBefore: number;
 };
 
-type SalarySettings = {
-    province?: string;
-    payType?: string;
-    payFrequency?: string;
-    hasTips?: boolean;
-    tipType?: string;
-    hourlyWage?: number;
-    monthlySalary?: number;
-    nextPayDate?: string;
+const emptySchedules = "[]";
+
+const getSchedulesSnapshot = () => {
+    if (typeof window === "undefined") {
+        return emptySchedules;
+    }
+
+    return localStorage.getItem("chagok-schedules") ?? emptySchedules;
 };
 
-const weekDays = [
-    "일",
-    "월",
-    "화",
-    "수",
-    "목",
-    "금",
-    "토",
-];
+const getServerSchedulesSnapshot = () => {
+    return emptySchedules;
+};
+
+const subscribeToSchedules = (callback: () => void) => {
+    window.addEventListener("storage", callback);
+
+    return () => {
+        window.removeEventListener("storage", callback);
+    };
+};
+
+const weekDays = ["일", "월", "화", "수", "목", "금", "토"];
+
+const formatDate = (year: number, month: number, day: number) => {
+    return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+};
+
+const calculateWorkHours = (startTime: string, endTime: string, breakMinutes: number) => {
+    const [startHour, startMinute] = startTime.split(":").map(Number);
+
+    const [endHour, endMinute] = endTime.split(":").map(Number);
+
+    const startTotal = startHour * 60 + startMinute;
+
+    let endTotal = endHour * 60 + endMinute;
+
+    // 야간 근무처럼 종료 시간이 다음 날인 경우
+    if (endTotal < startTotal) {
+        endTotal += 24 * 60;
+    }
+
+    const totalMinutes = endTotal - startTotal - breakMinutes;
+
+    return Math.max(totalMinutes, 0) / 60;
+};
+
+const getAlarmDateTime = (schedule: WorkSchedule) => {
+    if (!schedule.alarmEnabled) {
+        return null;
+    }
+
+    const workDateTime = new Date(`${schedule.date}T${schedule.startTime}:00`);
+
+    workDateTime.setMinutes(workDateTime.getMinutes() - schedule.alarmMinutesBefore);
+
+    return workDateTime;
+};
+
+const getPushSubscription = async () => {
+    const registration = await navigator.serviceWorker.ready;
+
+    return registration.pushManager.getSubscription();
+};
+
+const schedulePushNotification = async (schedule: WorkSchedule) => {
+    if (!schedule.alarmEnabled) {
+        return;
+    }
+
+    const alarmDateTime = getAlarmDateTime(schedule);
+
+    if (!alarmDateTime) {
+        return;
+    }
+
+    const subscription = await getPushSubscription();
+
+    if (!subscription) {
+        console.log("Push subscription이 없습니다.");
+        return;
+    }
+
+    const response = await fetch("/api/push/schedule", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+            id: schedule.id,
+            sendAt: alarmDateTime.toISOString(),
+            title: "차곡",
+            body: `${schedule.startTime}에 근무가 있어요.`,
+            subscription,
+        }),
+    });
+
+    const result = await response.json();
+
+    console.log("알림 예약 결과:", result);
+};
+
+const getUpcomingAlarm = (schedules: WorkSchedule[]) => {
+    const now = new Date();
+
+    return (
+        schedules
+            .filter((schedule) => {
+                if (!schedule.alarmEnabled) {
+                    return false;
+                }
+
+                const alarmDateTime = getAlarmDateTime(schedule);
+
+                if (!alarmDateTime) {
+                    return false;
+                }
+
+                return alarmDateTime > now;
+            })
+            .sort((a, b) => {
+                const aTime = getAlarmDateTime(a)?.getTime() ?? 0;
+
+                const bTime = getAlarmDateTime(b)?.getTime() ?? 0;
+
+                return aTime - bTime;
+            })[0] ?? null
+    );
+};
+
+const scheduleNotification = (schedule: WorkSchedule) => {
+    if (!schedule.alarmEnabled) {
+        return;
+    }
+
+    const alarmDateTime = getAlarmDateTime(schedule);
+
+    if (!alarmDateTime) {
+        return;
+    }
+
+    const delay = alarmDateTime.getTime() - Date.now();
+
+    if (delay <= 0) {
+        return;
+    }
+
+    setTimeout(() => {
+        if (Notification.permission !== "granted") {
+            return;
+        }
+
+        new Notification("차곡", {
+            body: `${schedule.startTime}에 근무가 있어요.`,
+        });
+    }, delay);
+};
+
+const requestNotificationPermission = async () => {
+    if (!("Notification" in window)) {
+        alert("이 브라우저에서는 알림을 지원하지 않아요.");
+        return false;
+    }
+
+    if (Notification.permission === "granted") {
+        return true;
+    }
+
+    const permission = await Notification.requestPermission();
+
+    if (permission !== "granted") {
+        alert("알림 권한이 허용되지 않았어요.");
+        return false;
+    }
+
+    return true;
+};
+
+const sendTestNotification = async () => {
+    const allowed = await requestNotificationPermission();
+
+    if (!allowed) {
+        return;
+    }
+
+    new Notification("차곡", {
+        body: "알림이 정상적으로 작동하고 있어요!",
+    });
+};
 
 export default function SchedulePage() {
-    // -----------------------------
-    // Schedule
-    // -----------------------------
+    const schedules = (
+        JSON.parse(
+            useSyncExternalStore(subscribeToSchedules, getSchedulesSnapshot, getServerSchedulesSnapshot),
+        ) as Partial<WorkSchedule>[]
+    ).map((schedule) => ({
+        ...schedule,
+        alarmEnabled: schedule.alarmEnabled ?? false,
+        alarmMinutesBefore: schedule.alarmMinutesBefore ?? 60,
+    })) as WorkSchedule[];
 
-    const [schedules, setSchedules] = useState<WorkSchedule[]>(
-    () => {
-        if (typeof window === "undefined") {
-            return [];
-        }
+    const [currentDate, setCurrentDate] = useState(new Date(2026, 7, 1));
 
-        const saved =
-            localStorage.getItem(
-                "chagok-schedules",
-            );
+    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
-        if (!saved) {
-            return [];
-        }
+    const [editingSchedule, setEditingSchedule] = useState<WorkSchedule | null>(null);
 
-        try {
-            const parsed = JSON.parse(saved);
+    const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
-            return Array.isArray(parsed)
-                ? parsed
-                : [];
-        } catch {
-            return [];
-        }
-    },
-);
+    const [startTime, setStartTime] = useState("09:00");
 
-    // -----------------------------
-    // Salary Settings
-    // -----------------------------
+    const [endTime, setEndTime] = useState("17:00");
 
-    const [salarySettings] =
-        useState<SalarySettings | null>(() => {
-            if (typeof window === "undefined") {
-                return null;
-            }
+    const [breakMinutes, setBreakMinutes] = useState("30");
 
-            const savedSalary =
-                localStorage.getItem(
-                    "chagok-salary-settings",
-                );
+    const [alarmEnabled, setAlarmEnabled] = useState(false);
 
-            if (!savedSalary) {
-                return null;
-            }
+    const [alarmMinutesBefore, setAlarmMinutesBefore] = useState(60);
 
-            try {
-                return JSON.parse(savedSalary);
-            } catch {
-                return null;
-            }
-        });
-
-    const hourlyWage =
-        salarySettings?.payType === "hourly" &&
-        salarySettings.hourlyWage !== undefined
-            ? Number(salarySettings.hourlyWage)
-            : null;
-
-    const nextPayDate =
-        salarySettings?.nextPayDate || null;
-
-    // -----------------------------
-    // Calendar
-    // -----------------------------
-
-    const [currentDate, setCurrentDate] =
-        useState(() => {
-            return new Date(
-                new Date().getFullYear(),
-                new Date().getMonth(),
-                1,
-            );
-        });
-
-    const [selectedDate, setSelectedDate] =
-        useState("");
-
-    // -----------------------------
-    // Work Form
-    // -----------------------------
-
-    const [startTime, setStartTime] =
-        useState("09:00");
-
-    const [endTime, setEndTime] =
-        useState("17:00");
-
-    const [breakMinutes, setBreakMinutes] =
-        useState("30");
-
-    // -----------------------------
-    // Save schedules
-    // -----------------------------
-
-    useEffect(() => {
-        localStorage.setItem(
-            "chagok-schedules",
-            JSON.stringify(schedules),
-        );
-    }, [schedules]);
-
-    // -----------------------------
-    // Calendar Data
-    // -----------------------------
+    const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>("default");
 
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
 
-    const firstDay = new Date(
-        year,
-        month,
-        1,
-    ).getDay();
+    const firstDay = new Date(year, month, 1).getDay();
 
-    const daysInMonth = new Date(
-        year,
-        month + 1,
-        0,
-    ).getDate();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-    const calendarDays: (
-        | number
-        | null
-    )[] = [];
+    const calendarDays = [];
 
-    for (
-        let i = 0;
-        i < firstDay;
-        i++
-    ) {
+    for (let i = 0; i < firstDay; i++) {
         calendarDays.push(null);
     }
 
-    for (
-        let day = 1;
-        day <= daysInMonth;
-        day++
-    ) {
+    for (let day = 1; day <= daysInMonth; day++) {
         calendarDays.push(day);
     }
 
-    // -----------------------------
-    // Date Format
-    // -----------------------------
+    const currentMonthSchedules = schedules.filter((schedule) => {
+        const scheduleDate = new Date(schedule.date);
 
-    const formatDate = (
-        day: number,
-    ) => {
-        const monthString = String(
-            month + 1,
-        ).padStart(2, "0");
+        return scheduleDate.getFullYear() === year && scheduleDate.getMonth() === month;
+    });
 
-        const dayString = String(
-            day,
-        ).padStart(2, "0");
+    const currentMonthTotalHours = currentMonthSchedules.reduce(
+        (total, schedule) => total + calculateWorkHours(schedule.startTime, schedule.endTime, schedule.breakMinutes),
+        0,
+    );
 
-        return `${year}-${monthString}-${dayString}`;
+    const upcomingAlarm = getUpcomingAlarm(schedules);
+
+    const handlePreviousMonth = () => {
+        setCurrentDate(new Date(year, month - 1, 1));
     };
 
-    // -----------------------------
-    // Month Navigation
-    // -----------------------------
-
-    const goToPreviousMonth = () => {
-        setCurrentDate(
-            new Date(
-                year,
-                month - 1,
-                1,
-            ),
-        );
-
-        setSelectedDate("");
+    const handleNextMonth = () => {
+        setCurrentDate(new Date(year, month + 1, 1));
     };
 
-    const goToNextMonth = () => {
-        setCurrentDate(
-            new Date(
-                year,
-                month + 1,
-                1,
-            ),
-        );
-
-        setSelectedDate("");
-    };
-
-    // -----------------------------
-    // Calculate Work Hours
-    // -----------------------------
-
-    const calculateWorkHours = (
-        startTime: string,
-        endTime: string,
-        breakMinutes: number,
-    ) => {
-        const [
-            startHour,
-            startMinute,
-        ] = startTime
-            .split(":")
-            .map(Number);
-
-        const [
-            endHour,
-            endMinute,
-        ] = endTime
-            .split(":")
-            .map(Number);
-
-        const startTotalMinutes =
-            startHour * 60 +
-            startMinute;
-
-        const endTotalMinutes =
-            endHour * 60 +
-            endMinute;
-
-        let totalMinutes =
-            endTotalMinutes -
-            startTotalMinutes;
-
-        // 밤을 넘기는 근무
-        if (totalMinutes < 0) {
-            totalMinutes +=
-                24 * 60;
+    const requestNotificationPermission = async () => {
+        if (!("Notification" in window)) {
+            alert("이 브라우저에서는 알림을 지원하지 않아요.");
+            return false;
         }
 
-        totalMinutes -=
-            breakMinutes;
-
-        return Math.max(
-            totalMinutes / 60,
-            0,
-        );
-    };
-
-    // -----------------------------
-    // Calculate Expected Pay
-    // -----------------------------
-
-    const calculateExpectedPay = (
-        startTime: string,
-        endTime: string,
-        breakMinutes: number,
-    ) => {
-        if (hourlyWage === null) {
-            return null;
+        if (Notification.permission === "granted") {
+            setNotificationPermission("granted");
+            return true;
         }
 
-        const hours =
-            calculateWorkHours(
-                startTime,
-                endTime,
-                breakMinutes,
-            );
+        const permission = await Notification.requestPermission();
 
-        return hours * hourlyWage;
+        setNotificationPermission(permission);
+
+        if (permission !== "granted") {
+            alert("근무 알림을 사용하려면 브라우저 알림 권한을 허용해주세요.");
+
+            return false;
+        }
+
+        return true;
     };
 
-    // -----------------------------
-    // Add Schedule
-    // -----------------------------
+    const subscribeToPush = async () => {
+        try {
+            if (!vapidPublicKey) {
+                alert("VAPID 공개 키가 설정되지 않았어요.");
+                return;
+            }
 
-    const handleAddSchedule = () => {
+            const registration = await navigator.serviceWorker.ready;
+
+            const subscription = await registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+            });
+
+            console.log("Push Subscription:", subscription);
+
+            const response = await fetch("/api/push", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    subscription,
+                }),
+            });
+
+            const result = await response.json();
+
+            console.log("Push result:", result);
+        } catch (error) {
+            console.error("Push Subscription 실패:", error);
+        }
+    };
+
+    const handleAddSchedule = async () => {
         if (!selectedDate) {
-            alert(
-                "날짜를 선택해주세요.",
-            );
-
             return;
         }
 
-        if (!startTime || !endTime) {
-            alert(
-                "근무 시작 시간과 종료 시간을 입력해주세요.",
-            );
+        const breakValue = Number(breakMinutes);
 
-            return;
-        }
-
-        const breakValue =
-            Number(breakMinutes);
-
-        if (
-            Number.isNaN(breakValue) ||
-            breakValue < 0
-        ) {
-            alert(
-                "휴게시간을 올바르게 입력해주세요.",
-            );
-
-            return;
-        }
-
-        const newSchedule: WorkSchedule =
-            {
-                id: Date.now(),
-                date: selectedDate,
-                startTime,
-                endTime,
-                breakMinutes:
-                    breakValue,
-            };
-
-        setSchedules(
-            (prev) => [
-                ...prev,
-                newSchedule,
-            ],
-        );
-    };
-
-    // -----------------------------
-    // Delete Schedule
-    // -----------------------------
-
-    const handleDeleteSchedule = (
-        id: number,
-    ) => {
-        setSchedules(
-            (prev) =>
-                prev.filter(
-                    (schedule) =>
-                        schedule.id !==
-                        id,
-                ),
-        );
-    };
-
-    // -----------------------------
-    // Selected Date Schedules
-    // -----------------------------
-
-    const selectedSchedules =
-        schedules.filter(
-            (schedule) =>
-                schedule.date ===
-                selectedDate,
-        );
-
-    // -----------------------------
-    // Current Pay Period
-    // -----------------------------
-
-    const getPayPeriodStart =
-        () => {
-            if (!nextPayDate) {
-                return null;
-            }
-
-            const payDate =
-                new Date(
-                    `${nextPayDate}T00:00:00`,
-                );
-
-            if (
-                Number.isNaN(
-                    payDate.getTime(),
-                )
-            ) {
-                return null;
-            }
-
-            const startDate =
-                new Date(payDate);
-
-            startDate.setDate(
-                startDate.getDate() -
-                    14,
-            );
-
-            startDate.setHours(
-                0,
-                0,
-                0,
-                0,
-            );
-
-            return startDate;
+        const newSchedule: WorkSchedule = {
+            id: Date.now(),
+            date: selectedDate,
+            startTime,
+            endTime,
+            breakMinutes: breakValue,
+            alarmEnabled,
+            alarmMinutesBefore,
         };
 
-    const payPeriodStart =
-        getPayPeriodStart();
+        const updatedSchedules = [...schedules, newSchedule];
 
-    // -----------------------------
-    // Schedules in Pay Period
-    // -----------------------------
+        localStorage.setItem("chagok-schedules", JSON.stringify(updatedSchedules));
 
-    const payPeriodSchedules =
-        schedules.filter(
-            (schedule) => {
-                if (
-                    !payPeriodStart ||
-                    !nextPayDate
-                ) {
-                    return false;
-                }
+        window.dispatchEvent(new StorageEvent("storage"));
 
-                const scheduleDate =
-                    new Date(
-                        `${schedule.date}T00:00:00`,
-                    );
+        await schedulePushNotification(newSchedule);
 
-                const payDate =
-                    new Date(
-                        `${nextPayDate}T00:00:00`,
-                    );
+        setIsAddModalOpen(false);
+        setSelectedDate(null);
+    };
 
-                return (
-                    scheduleDate >=
-                        payPeriodStart &&
-                    scheduleDate <
-                        payDate
-                );
-            },
-        );
+    const handleDeleteSchedule = (id: number) => {
+        const updatedSchedules = schedules.filter((schedule) => schedule.id !== id);
 
-    // -----------------------------
-    // Total Pay Period Hours
-    // -----------------------------
+        localStorage.setItem("chagok-schedules", JSON.stringify(updatedSchedules));
 
-    const totalPayPeriodHours =
-        payPeriodSchedules.reduce(
-            (
-                total,
-                schedule,
-            ) => {
-                return (
-                    total +
-                    calculateWorkHours(
-                        schedule.startTime,
-                        schedule.endTime,
-                        schedule.breakMinutes,
-                    )
-                );
-            },
-            0,
-        );
+        window.dispatchEvent(new StorageEvent("storage"));
 
-    // -----------------------------
-    // Total Expected Pay
-    // -----------------------------
+        setEditingSchedule(null);
+    };
 
-    const totalPayPeriodPay =
-        hourlyWage !== null
-            ? totalPayPeriodHours *
-              hourlyWage
-            : null;
+    const handleUpdateSchedule = (updatedSchedule: WorkSchedule) => {
+        const updatedSchedules = schedules.map((schedule) => (schedule.id === updatedSchedule.id ? updatedSchedule : schedule));
+
+        localStorage.setItem("chagok-schedules", JSON.stringify(updatedSchedules));
+
+        window.dispatchEvent(new StorageEvent("storage"));
+
+        setEditingSchedule(null);
+    };
+
+    const openAddModal = (date: string) => {
+        setSelectedDate(date);
+
+        setStartTime("09:00");
+        setEndTime("17:00");
+        setBreakMinutes("30");
+
+        setAlarmEnabled(false);
+        setAlarmMinutesBefore(60);
+
+        setIsAddModalOpen(true);
+    };
 
     return (
-        <main className="min-h-screen bg-gray-50 px-5 py-8">
-            <div className="mx-auto max-w-md pb-20">
-
+        <main className="min-h-screen bg-gray-50 px-5 pb-28">
+            <div className="mx-auto max-w-md pt-8">
                 {/* Header */}
 
-                <header>
-                    <p className="text-sm text-gray-500">
-                        차곡
-                    </p>
+                <header className="mb-6 flex items-center justify-between">
+                    <div>
+                        <h1 className="text-2xl font-bold">스케줄</h1>
 
-                    <h1 className="mt-2 text-3xl font-bold">
-                        스케줄
-                    </h1>
-
-                    <p className="mt-2 text-sm text-gray-500">
-                        언제 일하는지 한눈에 관리해보세요.
-                    </p>
+                        <p className="mt-1 text-sm text-gray-400">내 근무 일정을 관리해요</p>
+                    </div>
                 </header>
 
-                {/* Pay Period Summary */}
+                {/* Monthly Summary */}
 
-                <section className="mt-6 rounded-3xl bg-black p-6 text-white">
-                    <p className="text-sm text-gray-400">
-                        이번 Pay Period
-                    </p>
+                <section className="mb-5 rounded-3xl bg-white p-6 shadow-sm">
+                    <p className="text-sm text-gray-500">이번 달 근무</p>
 
                     <p className="mt-2 text-3xl font-bold">
-                        {totalPayPeriodPay !==
-                        null
-                            ? `$${totalPayPeriodPay.toFixed(
-                                  2,
-                              )}`
-                            : "시급을 설정해주세요"}
+                        {currentMonthTotalHours.toFixed(1)}
+                        시간
                     </p>
 
-                    <div className="mt-5 flex justify-between border-t border-white/10 pt-4">
-                        <div>
-                            <p className="text-xs text-gray-400">
-                                근무시간
-                            </p>
-
-                            <p className="mt-1 font-medium">
-                                {totalPayPeriodHours.toFixed(
-                                    1,
-                                )}
-                                시간
-                            </p>
-                        </div>
-
-                        <div className="text-right">
-                            <p className="text-xs text-gray-400">
-                                근무일
-                            </p>
-
-                            <p className="mt-1 font-medium">
-                                {
-                                    payPeriodSchedules.length
-                                }
-                                일
-                            </p>
-                        </div>
-                    </div>
-
-                    {nextPayDate && (
-                        <p className="mt-4 text-xs text-gray-400">
-                            다음 급여일{" "}
-                            {nextPayDate}
-                        </p>
-                    )}
+                    <p className="mt-1 text-xs text-gray-500">{currentMonthSchedules.length}일 근무 예정</p>
                 </section>
+
+                <button
+                    onClick={sendTestNotification}
+                    className="mt-4 w-full rounded-2xl bg-black py-4 text-sm font-semibold text-white"
+                >
+                    알림 테스트
+                </button>
+
+                {upcomingAlarm && (
+                    <div className="mt-4 rounded-2xl bg-gray-50 p-4">
+                        <p className="text-xs text-gray-400">다음 근무 알림</p>
+
+                        <p className="mt-1 font-medium">
+                            {upcomingAlarm.date} {upcomingAlarm.startTime}
+                        </p>
+
+                        <p className="mt-1 text-sm text-gray-500">
+                            🔔{" "}
+                            {upcomingAlarm.alarmMinutesBefore >= 1440
+                                ? "하루 전"
+                                : upcomingAlarm.alarmMinutesBefore >= 60
+                                  ? `${upcomingAlarm.alarmMinutesBefore / 60}시간 전`
+                                  : `${upcomingAlarm.alarmMinutesBefore}분 전`}
+                        </p>
+                    </div>
+                )}
 
                 {/* Calendar */}
 
-                <section className="mt-5 rounded-3xl bg-white p-6 shadow-sm">
+                <section className="rounded-3xl bg-white p-5 shadow-sm">
+                    {/* Month Navigation */}
 
-                    <div className="flex items-center justify-between">
+                    <div className="mb-5 flex items-center justify-between">
                         <button
-                            onClick={
-                                goToPreviousMonth
-                            }
-                            className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-lg"
+                            onClick={handlePreviousMonth}
+                            className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100"
                         >
                             ‹
                         </button>
 
                         <h2 className="text-lg font-semibold">
-                            {year}년{" "}
-                            {month + 1}월
+                            {year}년 {month + 1}월
                         </h2>
 
                         <button
-                            onClick={
-                                goToNextMonth
-                            }
-                            className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-lg"
+                            onClick={handleNextMonth}
+                            className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100"
                         >
                             ›
                         </button>
                     </div>
 
-                    {/* Week Days */}
+                    {/* Week */}
 
-                    <div className="mt-6 grid grid-cols-7 text-center">
-                        {weekDays.map(
-                            (day) => (
-                                <div
-                                    key={day}
-                                    className="pb-3 text-xs font-medium text-gray-400"
+                    <div className="mb-2 grid grid-cols-7 text-center text-xs text-gray-400">
+                        {weekDays.map((day) => (
+                            <div key={day}>{day}</div>
+                        ))}
+                    </div>
+
+                    {/* Calendar */}
+
+                    <div className="grid grid-cols-7 gap-y-2">
+                        {calendarDays.map((day, index) => {
+                            if (day === null) {
+                                return <div key={index} />;
+                            }
+
+                            const date = formatDate(year, month, day);
+
+                            const daySchedules = schedules.filter((schedule) => schedule.date === date);
+
+                            const hasSchedule = daySchedules.length > 0;
+
+                            return (
+                                <button
+                                    key={date}
+                                    onClick={() => openAddModal(date)}
+                                    className="relative flex h-12 flex-col items-center justify-center rounded-xl"
                                 >
-                                    {day}
-                                </div>
-                            ),
-                        )}
-
-                        {/* Calendar Days */}
-
-                        {calendarDays.map(
-                            (
-                                day,
-                                index,
-                            ) => {
-                                if (
-                                    day ===
-                                    null
-                                ) {
-                                    return (
-                                        <div
-                                            key={`empty-${index}`}
-                                        />
-                                    );
-                                }
-
-                                const date =
-                                    formatDate(
-                                        day,
-                                    );
-
-                                const hasSchedule =
-                                    schedules.some(
-                                        (
-                                            schedule,
-                                        ) =>
-                                            schedule.date ===
-                                            date,
-                                    );
-
-                                const isSelected =
-                                    selectedDate ===
-                                    date;
-
-                                return (
-                                    <button
-                                        key={
-                                            date
+                                    <span
+                                        className={
+                                            hasSchedule
+                                                ? "flex h-8 w-8 items-center justify-center rounded-full bg-black text-sm font-medium text-white"
+                                                : "text-sm"
                                         }
-                                        onClick={() =>
-                                            setSelectedDate(
-                                                date,
-                                            )
-                                        }
-                                        className="relative flex h-11 items-center justify-center"
                                     >
-                                        <span
-                                            className={`flex h-9 w-9 items-center justify-center rounded-full text-sm ${
-                                                isSelected
-                                                    ? "bg-black text-white"
-                                                    : "text-gray-700"
-                                            }`}
-                                        >
-                                            {
-                                                day
-                                            }
-                                        </span>
+                                        {day}
+                                    </span>
 
-                                        {hasSchedule && (
-                                            <span className="absolute bottom-0 h-1 w-1 rounded-full bg-black" />
-                                        )}
-                                    </button>
-                                );
-                            },
-                        )}
+                                    {hasSchedule && <span className="absolute bottom-0 h-1 w-1 rounded-full bg-black" />}
+                                </button>
+                            );
+                        })}
                     </div>
                 </section>
 
-                {/* Selected Date */}
+                {/* Schedule List */}
 
-                {selectedDate && (
-                    <section className="mt-5 rounded-3xl bg-white p-6 shadow-sm">
+                <section className="mt-5 rounded-3xl bg-white p-6 shadow-sm">
+                    <div className="mb-5 flex items-center justify-between">
+                        <div>
+                            <h2 className="text-lg font-semibold">이번 달 근무</h2>
 
-                        <h2 className="text-lg font-semibold">
-                            {
-                                selectedDate
-                            }
-                        </h2>
+                            <p className="mt-1 text-xs text-gray-400">근무를 눌러 수정할 수 있어요</p>
+                        </div>
+                    </div>
 
-                        {/* Existing Schedules */}
+                    {currentMonthSchedules.length === 0 ? (
+                        <p className="py-8 text-center text-sm text-gray-400">아직 등록된 근무가 없어요.</p>
+                    ) : (
+                        <div className="space-y-3">
+                            {currentMonthSchedules
+                                .sort((a, b) => a.date.localeCompare(b.date))
+                                .map((schedule) => {
+                                    const hours = calculateWorkHours(schedule.startTime, schedule.endTime, schedule.breakMinutes);
 
-                        {selectedSchedules.length >
-                            0 && (
-                            <div className="mt-4 space-y-3">
-                                {selectedSchedules.map(
-                                    (
-                                        schedule,
-                                    ) => {
-                                        const hours =
-                                            calculateWorkHours(
-                                                schedule.startTime,
-                                                schedule.endTime,
-                                                schedule.breakMinutes,
-                                            );
+                                    return (
+                                        <div
+                                            key={schedule.id}
+                                            onClick={() => setEditingSchedule(schedule)}
+                                            className="flex cursor-pointer items-center justify-between rounded-2xl bg-gray-50 p-4"
+                                        >
+                                            <div>
+                                                <p className="font-medium">
+                                                    {new Date(schedule.date).getMonth() + 1}월 {new Date(schedule.date).getDate()}
+                                                    일
+                                                </p>
 
-                                        const expectedPay =
-                                            calculateExpectedPay(
-                                                schedule.startTime,
-                                                schedule.endTime,
-                                                schedule.breakMinutes,
-                                            );
+                                                <p className="mt-1 text-sm text-gray-500">
+                                                    {schedule.startTime} ~ {schedule.endTime}
+                                                </p>
 
-                                        return (
-                                            <div
-                                                key={
-                                                    schedule.id
-                                                }
-                                                className="flex items-center justify-between rounded-2xl bg-gray-50 p-4"
-                                            >
-                                                <div>
-                                                    <p className="font-medium">
-                                                        {
-                                                            schedule.startTime
-                                                        }{" "}
-                                                        ~{" "}
-                                                        {
-                                                            schedule.endTime
-                                                        }
-                                                    </p>
-
+                                                {schedule.alarmEnabled && (
                                                     <p className="mt-1 text-xs text-gray-400">
-                                                        휴게{" "}
-                                                        {
-                                                            schedule.breakMinutes
-                                                        }
-                                                        분
+                                                        🔔{" "}
+                                                        {schedule.alarmMinutesBefore >= 1440
+                                                            ? "하루 전"
+                                                            : schedule.alarmMinutesBefore >= 60
+                                                              ? `${schedule.alarmMinutesBefore / 60}시간 전`
+                                                              : `${schedule.alarmMinutesBefore}분 전`}{" "}
+                                                        알림
                                                     </p>
+                                                )}
+                                            </div>
 
-                                                    <p className="mt-2 text-sm font-medium">
-                                                        {hours.toFixed(
-                                                            1,
-                                                        )}
-                                                        시간
-                                                    </p>
-
-                                                    {expectedPay !==
-                                                        null && (
-                                                        <p className="mt-1 text-sm text-gray-500">
-                                                            예상 급여 $
-                                                            {expectedPay.toFixed(
-                                                                2,
-                                                            )}
-                                                        </p>
-                                                    )}
-                                                </div>
+                                            <div className="text-right">
+                                                <p className="font-semibold">
+                                                    {hours.toFixed(1)}
+                                                    시간
+                                                </p>
 
                                                 <button
-                                                    onClick={() =>
-                                                        handleDeleteSchedule(
-                                                            schedule.id,
-                                                        )
-                                                    }
-                                                    className="text-sm text-red-500"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+
+                                                        handleDeleteSchedule(schedule.id);
+                                                    }}
+                                                    className="mt-1 text-xs text-gray-400"
                                                 >
                                                     삭제
                                                 </button>
                                             </div>
-                                        );
-                                    },
-                                )}
-                            </div>
-                        )}
+                                        </div>
+                                    );
+                                })}
+                        </div>
+                    )}
+                </section>
+            </div>
 
-                        {/* Add Schedule */}
+            {/* Add Schedule Modal */}
 
-                        <div className="mt-5 border-t border-gray-100 pt-5">
+            {isAddModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-5">
+                    <div className="w-full max-w-md rounded-3xl bg-white p-6">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h2 className="text-xl font-bold">근무 추가</h2>
 
-                            <p className="text-sm font-medium">
-                                근무 추가
-                            </p>
-
-                            <div className="mt-4 grid grid-cols-2 gap-3">
-
-                                <div>
-                                    <p className="mb-2 text-sm text-gray-500">
-                                        시작
-                                    </p>
-
-                                    <input
-                                        type="time"
-                                        value={
-                                            startTime
-                                        }
-                                        onChange={(
-                                            e,
-                                        ) =>
-                                            setStartTime(
-                                                e
-                                                    .target
-                                                    .value,
-                                            )
-                                        }
-                                        className="w-full rounded-2xl bg-gray-100 px-4 py-4 outline-none"
-                                    />
-                                </div>
-
-                                <div>
-                                    <p className="mb-2 text-sm text-gray-500">
-                                        종료
-                                    </p>
-
-                                    <input
-                                        type="time"
-                                        value={
-                                            endTime
-                                        }
-                                        onChange={(
-                                            e,
-                                        ) =>
-                                            setEndTime(
-                                                e
-                                                    .target
-                                                    .value,
-                                            )
-                                        }
-                                        className="w-full rounded-2xl bg-gray-100 px-4 py-4 outline-none"
-                                    />
-                                </div>
-
+                                <p className="mt-1 text-sm text-gray-400">{selectedDate}</p>
                             </div>
 
-                            <div className="mt-4">
+                            <button onClick={() => setIsAddModalOpen(false)} className="text-gray-400">
+                                ✕
+                            </button>
+                        </div>
 
-                                <p className="mb-2 text-sm text-gray-500">
-                                    휴게시간
-                                </p>
+                        {/* Time */}
+
+                        <div className="mt-6 grid grid-cols-2 gap-3">
+                            <div>
+                                <p className="mb-2 text-sm text-gray-500">시작</p>
 
                                 <input
-                                    type="number"
-                                    min="0"
-                                    value={
-                                        breakMinutes
-                                    }
-                                    onChange={(
-                                        e,
-                                    ) =>
-                                        setBreakMinutes(
-                                            e
-                                                .target
-                                                .value,
-                                        )
+                                    type="time"
+                                    value={startTime}
+                                    onChange={(e) => setStartTime(e.target.value)}
+                                    className="w-full rounded-2xl bg-gray-100 px-4 py-4 outline-none"
+                                />
+                            </div>
+
+                            <div>
+                                <p className="mb-2 text-sm text-gray-500">종료</p>
+
+                                <input
+                                    type="time"
+                                    value={endTime}
+                                    onChange={(e) => setEndTime(e.target.value)}
+                                    className="w-full rounded-2xl bg-gray-100 px-4 py-4 outline-none"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Break */}
+
+                        <div className="mt-4">
+                            <p className="mb-2 text-sm text-gray-500">휴게시간</p>
+
+                            <input
+                                type="number"
+                                min="0"
+                                value={breakMinutes}
+                                onChange={(e) => setBreakMinutes(e.target.value)}
+                                className="w-full rounded-2xl bg-gray-100 px-4 py-4 outline-none"
+                            />
+                        </div>
+
+                        {/* Alarm */}
+
+                        <div className="mt-5 rounded-2xl bg-gray-50 p-4">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="font-medium">🔔 근무 알림</p>
+
+                                    <p className="mt-1 text-xs text-gray-400">근무 전에 미리 알려드려요.</p>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={async () => {
+                                        if (!alarmEnabled) {
+                                            const allowed = await requestNotificationPermission();
+
+                                            if (!allowed) {
+                                                return;
+                                            }
+                                        }
+
+                                        setAlarmEnabled((prev) => !prev);
+                                    }}
+                                    className={`relative h-7 w-12 rounded-full transition ${
+                                        alarmEnabled ? "bg-black" : "bg-gray-300"
+                                    }`}
+                                >
+                                    <span
+                                        className={`absolute top-1 h-5 w-5 rounded-full bg-white transition ${
+                                            alarmEnabled ? "left-6" : "left-1"
+                                        }`}
+                                    />
+                                </button>
+                            </div>
+
+                            {alarmEnabled && (
+                                <div className="mt-4">
+                                    <p className="mb-2 text-sm text-gray-500">몇 분 전에 알려드릴까요?</p>
+
+                                    <select
+                                        value={alarmMinutesBefore}
+                                        onChange={(e) => setAlarmMinutesBefore(Number(e.target.value))}
+                                        className="w-full rounded-2xl bg-white px-4 py-4 outline-none"
+                                    >
+                                        <option value={15}>15분 전</option>
+
+                                        <option value={30}>30분 전</option>
+
+                                        <option value={60}>1시간 전</option>
+
+                                        <option value={120}>2시간 전</option>
+
+                                        <option value={1440}>하루 전</option>
+                                    </select>
+                                </div>
+                            )}
+                        </div>
+
+                        <button
+                            onClick={handleAddSchedule}
+                            className="mt-5 w-full rounded-2xl bg-black py-4 font-semibold text-white"
+                        >
+                            근무 등록
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Edit Schedule Modal */}
+
+            {editingSchedule && (
+                <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-5">
+                    <div className="w-full max-w-md rounded-3xl bg-white p-6">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-xl font-bold">근무 수정</h2>
+
+                            <button onClick={() => setEditingSchedule(null)} className="text-gray-400">
+                                ✕
+                            </button>
+                        </div>
+
+                        {/* Time */}
+
+                        <div className="mt-6 grid grid-cols-2 gap-3">
+                            <div>
+                                <p className="mb-2 text-sm text-gray-500">시작</p>
+
+                                <input
+                                    type="time"
+                                    value={editingSchedule.startTime}
+                                    onChange={(e) =>
+                                        setEditingSchedule({
+                                            ...editingSchedule,
+                                            startTime: e.target.value,
+                                        })
                                     }
                                     className="w-full rounded-2xl bg-gray-100 px-4 py-4 outline-none"
                                 />
-
-                                <p className="mt-2 text-xs text-gray-400">
-                                    분 단위로 입력해주세요.
-                                </p>
-
                             </div>
 
-                            <button
-                                onClick={
-                                    handleAddSchedule
-                                }
-                                className="mt-5 w-full rounded-2xl bg-black py-4 text-sm font-semibold text-white"
-                            >
-                                근무 등록
-                            </button>
+                            <div>
+                                <p className="mb-2 text-sm text-gray-500">종료</p>
 
+                                <input
+                                    type="time"
+                                    value={editingSchedule.endTime}
+                                    onChange={(e) =>
+                                        setEditingSchedule({
+                                            ...editingSchedule,
+                                            endTime: e.target.value,
+                                        })
+                                    }
+                                    className="w-full rounded-2xl bg-gray-100 px-4 py-4 outline-none"
+                                />
+                            </div>
                         </div>
-                    </section>
-                )}
 
-            </div>
+                        {/* Break */}
+
+                        <div className="mt-4">
+                            <p className="mb-2 text-sm text-gray-500">휴게시간</p>
+
+                            <input
+                                type="number"
+                                min="0"
+                                value={editingSchedule.breakMinutes}
+                                onChange={(e) =>
+                                    setEditingSchedule({
+                                        ...editingSchedule,
+                                        breakMinutes: Number(e.target.value),
+                                    })
+                                }
+                                className="w-full rounded-2xl bg-gray-100 px-4 py-4 outline-none"
+                            />
+                        </div>
+
+                        {/* Alarm */}
+
+                        <div className="mt-5 rounded-2xl bg-gray-50 p-4">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="font-medium">🔔 근무 알림</p>
+
+                                    <p className="mt-1 text-xs text-gray-400">근무 전에 미리 알려드려요.</p>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        setEditingSchedule({
+                                            ...editingSchedule,
+                                            alarmEnabled: !editingSchedule.alarmEnabled,
+                                        })
+                                    }
+                                    className={`relative h-7 w-12 rounded-full transition ${
+                                        editingSchedule.alarmEnabled ? "bg-black" : "bg-gray-300"
+                                    }`}
+                                >
+                                    <span
+                                        className={`absolute top-1 h-5 w-5 rounded-full bg-white transition ${
+                                            editingSchedule.alarmEnabled ? "left-6" : "left-1"
+                                        }`}
+                                    />
+                                </button>
+                            </div>
+
+                            {editingSchedule.alarmEnabled && (
+                                <div className="mt-4">
+                                    <p className="mb-2 text-sm text-gray-500">몇 분 전에 알려드릴까요?</p>
+
+                                    <select
+                                        value={editingSchedule.alarmMinutesBefore}
+                                        onChange={(e) =>
+                                            setEditingSchedule({
+                                                ...editingSchedule,
+                                                alarmMinutesBefore: Number(e.target.value),
+                                            })
+                                        }
+                                        className="w-full rounded-2xl bg-white px-4 py-4 outline-none"
+                                    >
+                                        <option value={15}>15분 전</option>
+
+                                        <option value={30}>30분 전</option>
+
+                                        <option value={60}>1시간 전</option>
+
+                                        <option value={120}>2시간 전</option>
+
+                                        <option value={1440}>하루 전</option>
+                                    </select>
+                                </div>
+                            )}
+                        </div>
+
+                        <button
+                            onClick={() => handleUpdateSchedule(editingSchedule)}
+                            className="mt-5 w-full rounded-2xl bg-black py-4 font-semibold text-white"
+                        >
+                            수정 완료
+                        </button>
+
+                        <button
+                            onClick={() => handleDeleteSchedule(editingSchedule.id)}
+                            className="mt-3 w-full py-3 text-sm text-red-500"
+                        >
+                            근무 삭제
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            <button onClick={subscribeToPush} className="mt-4 rounded-2xl bg-black px-4 py-3 text-sm font-semibold text-white">
+                Push 알림 등록 테스트
+            </button>
         </main>
     );
 }
