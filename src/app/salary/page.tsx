@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { calculatePayrollTax } from "@/lib/payrollTax";
+import { useEffect, useState } from "react";
+import { getPayPeriodEndDate } from "@/lib/payPeriod";
 
 type PayType = "hourly" | "salary" | "commission" | "other";
 
@@ -21,402 +21,120 @@ type SalarySettings = {
     tipType?: TipType;
     hourlyWage?: number;
     monthlySalary?: number;
-    nextPayDate: string;
+    payPeriodStartDate?: string;
+    payDate?: string;
     semiMonthlyType?: SemiMonthlyType;
     customPayDays?: number;
 };
 
-type PayPeriod = {
-    startDate: string;
-    endDate: string;
-    payDate: string;
-};
-
-const formatDate = (date: Date) => {
-    return date.toISOString().split("T")[0];
-};
-
-const getPayPeriod = (
-    payDate: Date,
-    payFrequency: PayFrequency,
-    semiMonthlyType?: SemiMonthlyType,
-    customPayDays?: number,
-): PayPeriod | null => {
-    const endDate = new Date(payDate);
-    const startDate = new Date(payDate);
-
-    switch (payFrequency) {
-        case "weekly":
-            startDate.setDate(startDate.getDate() - 7);
-            break;
-
-        case "biweekly":
-            startDate.setDate(startDate.getDate() - 14);
-            break;
-
-        case "monthly":
-            startDate.setMonth(startDate.getMonth() - 1);
-            break;
-
-        case "semi-monthly":
-            if (semiMonthlyType === "fifteenth-end") {
-                if (endDate.getDate() === 15) {
-                    startDate.setDate(1);
-                } else {
-                    startDate.setMonth(startDate.getMonth() - 1);
-                    startDate.setDate(16);
-                }
-            } else {
-                if (endDate.getDate() === 1) {
-                    startDate.setMonth(startDate.getMonth() - 1);
-                    startDate.setDate(16);
-                } else {
-                    startDate.setDate(1);
-                }
-            }
-            break;
-
-        case "custom":
-            if (!customPayDays || customPayDays < 1) {
-                return null;
-            }
-
-            startDate.setDate(startDate.getDate() - customPayDays);
-            break;
-
-        default:
-            return null;
-    }
-
-    return {
-        startDate: formatDate(startDate),
-        endDate: formatDate(endDate),
-        payDate: formatDate(endDate),
-    };
-};
-
-const getNextPayDate = (
-    savedNextPayDate: string,
-    payFrequency: PayFrequency,
-    today: Date,
-    customPayDays?: number,
-    semiMonthlyType?: SemiMonthlyType,
-) => {
-    const date = new Date(`${savedNextPayDate}T00:00:00`);
-
-    const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-
-    if (date >= todayDate) {
-        return date;
-    }
-
-    switch (payFrequency) {
-        case "weekly":
-            while (date < todayDate) {
-                date.setDate(date.getDate() + 7);
-            }
-            break;
-
-        case "biweekly":
-            while (date < todayDate) {
-                date.setDate(date.getDate() + 14);
-            }
-            break;
-
-        case "monthly":
-            while (date < todayDate) {
-                date.setMonth(date.getMonth() + 1);
-            }
-            break;
-
-        case "semi-monthly":
-            while (date < todayDate) {
-                if (semiMonthlyType === "fifteenth-end") {
-                    if (date.getDate() === 15) {
-                        date.setMonth(date.getMonth() + 1);
-                        date.setDate(15);
-                    } else {
-                        date.setDate(15);
-                    }
-
-                    if (date < todayDate) {
-                        date.setMonth(date.getMonth() + 1);
-                        date.setDate(15);
-                    }
-                } else {
-                    if (date.getDate() === 1) {
-                        date.setDate(15);
-                    } else {
-                        date.setMonth(date.getMonth() + 1);
-                        date.setDate(1);
-                    }
-                }
-            }
-            break;
-
-        case "custom":
-            if (!customPayDays || customPayDays < 1) {
-                return null;
-            }
-
-            while (date < todayDate) {
-                date.setDate(date.getDate() + customPayDays);
-            }
-            break;
-
-        default:
-            return null;
-    }
-
-    return date;
-};
-
 export default function SalaryPage() {
-    const [payType, setPayType] = useState<PayType>(() => {
-        if (typeof window === "undefined") {
-            return "hourly";
-        }
-
-        const saved = localStorage.getItem("chagok-salary-settings");
-
-        if (!saved) {
-            return "hourly";
-        }
-
-        const settings: SalarySettings = JSON.parse(saved);
-
-        return settings.payType ?? "hourly";
-    });
-
-    const [payFrequency, setPayFrequency] = useState<PayFrequency>(() => {
-        if (typeof window === "undefined") {
-            return "biweekly";
-        }
-
-        const saved = localStorage.getItem("chagok-salary-settings");
-
-        if (!saved) {
-            return "biweekly";
-        }
-
-        const settings: SalarySettings = JSON.parse(saved);
-
-        return settings.payFrequency ?? "biweekly";
-    });
-
-    const [hasTips, setHasTips] = useState<boolean>(() => {
-        if (typeof window === "undefined") {
-            return false;
-        }
-
-        const saved = localStorage.getItem("chagok-salary-settings");
-
-        if (!saved) {
-            return false;
-        }
-
-        const settings: SalarySettings = JSON.parse(saved);
-
-        return settings.hasTips ?? false;
-    });
-
-    const [tipType, setTipType] = useState<TipType>(() => {
-        if (typeof window === "undefined") {
-            return "paycheque";
-        }
-
-        const saved = localStorage.getItem("chagok-salary-settings");
-
-        if (!saved) {
-            return "paycheque";
-        }
-
-        const settings: SalarySettings = JSON.parse(saved);
-
-        return settings.tipType ?? "paycheque";
-    });
-
-    const [hourlyWage, setHourlyWage] = useState<string>(() => {
-        if (typeof window === "undefined") {
-            return "";
-        }
-
-        const saved = localStorage.getItem("chagok-salary-settings");
-
-        if (!saved) {
-            return "";
-        }
-
-        const settings: SalarySettings = JSON.parse(saved);
-
-        return settings.hourlyWage !== undefined ? String(settings.hourlyWage) : "";
-    });
-
-    const [monthlySalary, setMonthlySalary] = useState<string>(() => {
-        if (typeof window === "undefined") {
-            return "";
-        }
-
-        const saved = localStorage.getItem("chagok-salary-settings");
-
-        if (!saved) {
-            return "";
-        }
-
-        const settings: SalarySettings = JSON.parse(saved);
-
-        return settings.monthlySalary !== undefined ? String(settings.monthlySalary) : "";
-    });
-
-    const [nextPayDate, setNextPayDate] = useState<string>(() => {
-        if (typeof window === "undefined") {
-            return "";
-        }
-
-        const saved = localStorage.getItem("chagok-salary-settings");
-
-        if (!saved) {
-            return "";
-        }
-
-        const settings: SalarySettings = JSON.parse(saved);
-
-        return settings.nextPayDate ?? "";
-    });
-
-    const [semiMonthlyType, setSemiMonthlyType] = useState<SemiMonthlyType>(() => {
-        if (typeof window === "undefined") {
-            return "first-fifteenth";
-        }
-
-        const saved = localStorage.getItem("chagok-salary-settings");
-
-        if (!saved) {
-            return "first-fifteenth";
-        }
-
-        const settings: SalarySettings = JSON.parse(saved);
-
-        return settings.semiMonthlyType ?? "first-fifteenth";
-    });
-
-    const [customPayDays, setCustomPayDays] = useState<number>(() => {
-        if (typeof window === "undefined") {
-            return 14;
-        }
-
-        const saved = localStorage.getItem("chagok-salary-settings");
-
-        if (!saved) {
-            return 14;
-        }
-
-        const settings: SalarySettings = JSON.parse(saved);
-
-        return settings.customPayDays ?? 14;
-    });
-
-    const [province, setProvince] = useState<Province>(() => {
-        if (typeof window === "undefined") {
-            return "ON";
-        }
-
-        const saved = localStorage.getItem("chagok-salary-settings");
-
-        if (!saved) {
-            return "ON";
-        }
-
-        const settings: SalarySettings = JSON.parse(saved);
-
-        return settings.province ?? "ON";
-    });
-
-    // --------------------------------------------------
-    // Today
-    // --------------------------------------------------
-
-    const today = new Date();
-
-    // --------------------------------------------------
-    // Next pay date
-    // --------------------------------------------------
-
-    const actualNextPayDate = nextPayDate
-        ? getNextPayDate(nextPayDate, payFrequency, today, customPayDays, semiMonthlyType)
-        : null;
-
-    // --------------------------------------------------
-    // Pay period
-    // --------------------------------------------------
-
-    const currentPayPeriod =
-        actualNextPayDate && payType !== "salary"
-            ? getPayPeriod(actualNextPayDate, payFrequency, semiMonthlyType, customPayDays)
-            : null;
-
-    // --------------------------------------------------
-    // Days until pay
-    // --------------------------------------------------
-
-    const getDaysUntilPay = () => {
-        if (!actualNextPayDate) {
-            return null;
-        }
-
-        const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-
-        const payDate = new Date(actualNextPayDate.getFullYear(), actualNextPayDate.getMonth(), actualNextPayDate.getDate());
-
-        const difference = payDate.getTime() - todayDate.getTime();
-
-        return Math.ceil(difference / (1000 * 60 * 60 * 24));
-    };
-
-    const daysUntilPay = getDaysUntilPay();
-
-    // --------------------------------------------------
-    // Estimated Payroll Tax
-    // --------------------------------------------------
-
-    const estimatedGrossPay =
-        payType === "hourly" ? Number(hourlyWage) || 0 : payType === "salary" ? Number(monthlySalary) || 0 : 0;
-
-    const estimatedTax = estimatedGrossPay > 0 ? calculatePayrollTax(estimatedGrossPay, province, payFrequency) : null;
-
-    // --------------------------------------------------
-    // Save
-    // --------------------------------------------------
-
-    const handleSave = () => {
+    const [payType, setPayType] = useState<PayType>("hourly");
+    const [payFrequency, setPayFrequency] = useState<PayFrequency>("biweekly");
+    const [hasTips, setHasTips] = useState(false);
+    const [tipType, setTipType] = useState<TipType>("paycheque");
+    const [hourlyWage, setHourlyWage] = useState("");
+    const [monthlySalary, setMonthlySalary] = useState("");
+    const [payPeriodStartDate, setPayPeriodStartDate] = useState("");
+    const [payDate, setPayDate] = useState("");
+    const [semiMonthlyType, setSemiMonthlyType] = useState<SemiMonthlyType>("first-fifteenth");
+    const [customPayDays, setCustomPayDays] = useState(14);
+    const [province, setProvince] = useState<Province>("ON");
+
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        const loadSalarySettings = async () => {
+            try {
+                const response = await fetch("/api/salary-settings");
+
+                if (!response.ok) {
+                    throw new Error("급여 설정 조회 실패");
+                }
+
+                const settings: SalarySettings | null = await response.json();
+
+                if (settings) {
+                    setPayType(settings.payType ?? "hourly");
+                    setPayFrequency(settings.payFrequency ?? "biweekly");
+                    setHasTips(settings.hasTips ?? false);
+                    setTipType(settings.tipType ?? "paycheque");
+
+                    setHourlyWage(settings.hourlyWage !== undefined ? String(settings.hourlyWage) : "");
+
+                    setMonthlySalary(settings.monthlySalary !== undefined ? String(settings.monthlySalary) : "");
+
+                    setPayPeriodStartDate(settings.payPeriodStartDate ?? "");
+                    setPayDate(settings.payDate ?? "");
+
+                    setSemiMonthlyType(settings.semiMonthlyType ?? "first-fifteenth");
+
+                    setCustomPayDays(settings.customPayDays ?? 14);
+
+                    setProvince(settings.province ?? "ON");
+                }
+            } catch (error) {
+                console.error(error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        loadSalarySettings();
+    }, []);
+
+    const handleSave = async () => {
         const settings: SalarySettings = {
             province,
-
             payType,
-
             payFrequency,
-
             hasTips,
-
             tipType: hasTips ? tipType : undefined,
 
             hourlyWage: payType === "hourly" ? Math.max(0, Number(hourlyWage) || 0) : undefined,
 
             monthlySalary: payType === "salary" ? Math.max(0, Number(monthlySalary) || 0) : undefined,
 
-            nextPayDate,
+            payPeriodStartDate,
+            payDate,
 
             semiMonthlyType: payFrequency === "semi-monthly" ? semiMonthlyType : undefined,
 
             customPayDays: payFrequency === "custom" ? Math.max(1, customPayDays || 1) : undefined,
         };
 
-        localStorage.setItem("chagok-salary-settings", JSON.stringify(settings));
+        try {
+            const response = await fetch("/api/salary-settings", {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(settings),
+            });
 
-        window.dispatchEvent(new StorageEvent("storage"));
+            if (!response.ok) {
+                throw new Error("급여 설정 저장 실패");
+            }
 
-        alert("급여 설정이 저장됐어요!");
+            alert("급여 설정이 저장됐어요!");
+        } catch (error) {
+            console.error(error);
+            alert("급여 설정 저장에 실패했어요.");
+        }
     };
+    const calculatedEndDate = payPeriodStartDate
+        ? getPayPeriodEndDate(payPeriodStartDate, payFrequency, semiMonthlyType, customPayDays)
+        : "";
+
+    // Loading...
+    if (isLoading) {
+        return (
+            <main className="min-h-screen bg-gray-50 px-5 py-8">
+                <div className="mx-auto max-w-md">
+                    <p className="text-sm text-gray-400">급여 정보를 불러오는 중...</p>
+                </div>
+            </main>
+        );
+    }
 
     return (
         <main className="min-h-screen bg-gray-50 px-5 py-8">
@@ -438,6 +156,7 @@ export default function SalaryPage() {
 
                     <div className="mt-4 grid grid-cols-2 gap-2">
                         <button
+                            type="button"
                             onClick={() => setPayType("hourly")}
                             className={`rounded-2xl p-4 text-sm font-medium ${
                                 payType === "hourly" ? "bg-black text-white" : "bg-gray-100"
@@ -447,7 +166,11 @@ export default function SalaryPage() {
                         </button>
 
                         <button
-                            onClick={() => setPayType("salary")}
+                            type="button"
+                            onClick={() => {
+                                setPayType("salary");
+                                setPayFrequency("monthly");
+                            }}
                             className={`rounded-2xl p-4 text-sm font-medium ${
                                 payType === "salary" ? "bg-black text-white" : "bg-gray-100"
                             }`}
@@ -456,6 +179,7 @@ export default function SalaryPage() {
                         </button>
 
                         <button
+                            type="button"
                             onClick={() => setPayType("commission")}
                             className={`rounded-2xl p-4 text-sm font-medium ${
                                 payType === "commission" ? "bg-black text-white" : "bg-gray-100"
@@ -465,6 +189,7 @@ export default function SalaryPage() {
                         </button>
 
                         <button
+                            type="button"
                             onClick={() => setPayType("other")}
                             className={`rounded-2xl p-4 text-sm font-medium ${
                                 payType === "other" ? "bg-black text-white" : "bg-gray-100"
@@ -484,12 +209,13 @@ export default function SalaryPage() {
                         <div className="mt-4 space-y-2">
                             {[
                                 ["weekly", "매주"],
-                                ["biweekly", "격주 (Biweekly)"],
+                                ["biweekly", "격주"],
                                 ["semi-monthly", "월 2회"],
                                 ["monthly", "매월"],
                                 ["custom", "직접 설정"],
                             ].map(([value, label]) => (
                                 <button
+                                    type="button"
                                     key={value}
                                     onClick={() => setPayFrequency(value as PayFrequency)}
                                     className={`w-full rounded-2xl p-4 text-left text-sm font-medium ${
@@ -503,24 +229,26 @@ export default function SalaryPage() {
 
                         {payFrequency === "semi-monthly" && (
                             <div className="mt-4 space-y-2">
-                                <p className="text-sm text-gray-500">급여일을 선택해주세요.</p>
+                                <p className="text-sm text-gray-500">급여 기간 규칙을 선택해주세요.</p>
 
                                 <button
+                                    type="button"
                                     onClick={() => setSemiMonthlyType("first-fifteenth")}
                                     className={`w-full rounded-2xl p-4 text-left text-sm ${
                                         semiMonthlyType === "first-fifteenth" ? "bg-black text-white" : "bg-gray-100"
                                     }`}
                                 >
-                                    1일 / 15일
+                                    1일 ~ 15일 / 16일 ~ 말일
                                 </button>
 
                                 <button
+                                    type="button"
                                     onClick={() => setSemiMonthlyType("fifteenth-end")}
                                     className={`w-full rounded-2xl p-4 text-left text-sm ${
                                         semiMonthlyType === "fifteenth-end" ? "bg-black text-white" : "bg-gray-100"
                                     }`}
                                 >
-                                    15일 / 말일
+                                    16일 ~ 다음달 15일
                                 </button>
                             </div>
                         )}
@@ -604,6 +332,7 @@ export default function SalaryPage() {
 
                     <div className="mt-4 grid grid-cols-2 gap-2">
                         <button
+                            type="button"
                             onClick={() => setHasTips(true)}
                             className={`rounded-2xl p-4 text-sm font-medium ${hasTips ? "bg-black text-white" : "bg-gray-100"}`}
                         >
@@ -611,6 +340,7 @@ export default function SalaryPage() {
                         </button>
 
                         <button
+                            type="button"
                             onClick={() => setHasTips(false)}
                             className={`rounded-2xl p-4 text-sm font-medium ${!hasTips ? "bg-black text-white" : "bg-gray-100"}`}
                         >
@@ -628,6 +358,7 @@ export default function SalaryPage() {
                                 ["both", "둘 다"],
                             ].map(([value, label]) => (
                                 <button
+                                    type="button"
                                     key={value}
                                     onClick={() => setTipType(value as TipType)}
                                     className={`w-full rounded-2xl p-3 text-left text-sm ${
@@ -641,74 +372,51 @@ export default function SalaryPage() {
                     )}
                 </section>
 
-                {/* Next Pay Date */}
+                {/* Pay Period */}
 
                 <section className="mt-5 rounded-3xl bg-white p-6 shadow-sm">
-                    <h2 className="text-lg font-semibold">다음 급여일</h2>
+                    <h2 className="text-lg font-semibold">급여 기간</h2>
 
-                    <p className="mt-2 text-sm text-gray-400">가장 가까운 급여일을 입력해주세요.</p>
+                    <p className="mt-2 text-sm text-gray-400">최근 실제 근무 기간의 시작일과 급여일을 설정해주세요.</p>
 
-                    <input
-                        type="date"
-                        value={nextPayDate}
-                        onChange={(e) => setNextPayDate(e.target.value)}
-                        className="mt-4 w-full rounded-2xl bg-gray-100 px-4 py-4 outline-none"
-                    />
-                </section>
+                    <div className="mt-4 space-y-4">
+                        {/* Start Date */}
 
-                {/* Next Pay */}
+                        <div>
+                            <p className="mb-2 text-sm text-gray-500">급여 기간 시작일</p>
 
-                {actualNextPayDate && (
-                    <section className="mt-5 rounded-3xl bg-white p-6 shadow-sm">
-                        <p className="text-sm text-gray-500">다음 급여</p>
-
-                        <p className="mt-2 text-3xl font-bold">
-                            {daysUntilPay === 0
-                                ? "오늘이에요 💰"
-                                : daysUntilPay !== null && daysUntilPay > 0
-                                  ? `${daysUntilPay}일 남았어요`
-                                  : "급여일을 확인해주세요"}
-                        </p>
-
-                        <p className="mt-2 text-sm text-gray-400">{formatDate(actualNextPayDate)}</p>
-
-                        <p className="mt-1 text-sm text-gray-400">
-                            {payFrequency === "biweekly"
-                                ? "격주 급여"
-                                : payFrequency === "weekly"
-                                  ? "주급"
-                                  : payFrequency === "semi-monthly"
-                                    ? semiMonthlyType === "first-fifteenth"
-                                        ? "월 2회 · 1일 / 15일"
-                                        : "월 2회 · 15일 / 말일"
-                                    : payFrequency === "monthly"
-                                      ? "매월 급여"
-                                      : payFrequency === "custom"
-                                        ? `${customPayDays}일마다 급여`
-                                        : ""}
-                        </p>
-                    </section>
-                )}
-
-                {/* Current Pay Period */}
-
-                {currentPayPeriod && (
-                    <section className="mt-5 rounded-3xl bg-white p-6 shadow-sm">
-                        <p className="text-sm text-gray-500">현재 Pay Period</p>
-
-                        <p className="mt-2 text-2xl font-semibold">{currentPayPeriod.startDate}</p>
-
-                        <p className="text-gray-400">~</p>
-
-                        <p className="text-2xl font-semibold">{currentPayPeriod.endDate}</p>
-
-                        <div className="mt-5 rounded-2xl bg-gray-50 p-4">
-                            <p className="text-sm text-gray-500">Pay Day</p>
-
-                            <p className="mt-1 font-semibold">{currentPayPeriod.payDate}</p>
+                            <input
+                                type="date"
+                                value={payPeriodStartDate}
+                                onChange={(e) => setPayPeriodStartDate(e.target.value)}
+                                className="w-full rounded-2xl bg-gray-100 px-4 py-4 outline-none"
+                            />
                         </div>
-                    </section>
-                )}
+
+                        {/* Auto End Date */}
+
+                        <div className="rounded-2xl bg-gray-50 p-4">
+                            <p className="text-sm text-gray-500">급여 기간 종료일</p>
+
+                            <p className="mt-1 font-semibold">{calculatedEndDate || "시작일과 주기를 먼저 설정해주세요"}</p>
+
+                            <p className="mt-1 text-xs text-gray-400">급여 주기에 따라 자동으로 계산돼요.</p>
+                        </div>
+
+                        {/* Pay Date */}
+
+                        <div>
+                            <p className="mb-2 text-sm text-gray-500">급여일</p>
+
+                            <input
+                                type="date"
+                                value={payDate}
+                                onChange={(e) => setPayDate(e.target.value)}
+                                className="w-full rounded-2xl bg-gray-100 px-4 py-4 outline-none"
+                            />
+                        </div>
+                    </div>
+                </section>
 
                 {/* Province */}
 
@@ -727,6 +435,7 @@ export default function SalaryPage() {
                             ["QC", "Quebec"],
                         ].map(([value, label]) => (
                             <button
+                                type="button"
                                 key={value}
                                 onClick={() => setProvince(value as Province)}
                                 className={`w-full rounded-2xl p-4 text-left text-sm font-medium ${
@@ -741,57 +450,13 @@ export default function SalaryPage() {
                     <p className="mt-4 text-xs text-gray-400">선택한 지역을 기준으로 급여 계산을 적용할 예정이에요.</p>
                 </section>
 
-                {/* Tax Information */}
-                {/* 나중에 v2에서 나라별 어쩌고 진행할 것 */}
-                {/* 
-                <section className="mt-5 rounded-3xl bg-white p-6 shadow-sm">
-                    <h2 className="text-lg font-semibold">급여 공제 안내</h2>
-
-                    <p className="mt-2 text-sm text-gray-400">
-                        {province === "ON"
-                            ? "Ontario"
-                            : province === "BC"
-                              ? "British Columbia"
-                              : province === "AB"
-                                ? "Alberta"
-                                : province === "SK"
-                                  ? "Saskatchewan"
-                                  : province === "MB"
-                                    ? "Manitoba"
-                                    : "Quebec"}
-                        기준으로 급여 공제가 적용돼요.
-                    </p>
-
-                    <div className="mt-4 space-y-2">
-                        <div className="rounded-2xl bg-gray-50 p-4">
-                            <p className="font-medium">Federal Income Tax</p>
-                            <p className="mt-1 text-xs text-gray-400">캐나다 연방 소득세</p>
-                        </div>
-
-                        <div className="rounded-2xl bg-gray-50 p-4">
-                            <p className="font-medium">
-                                {province === "ON" ? "Ontario Income Tax" : `${province} Provincial Tax`}
-                            </p>
-                            <p className="mt-1 text-xs text-gray-400">근무 지역에 따른 주 소득세</p>
-                        </div>
-
-                        <div className="rounded-2xl bg-gray-50 p-4">
-                            <p className="font-medium">CPP</p>
-                            <p className="mt-1 text-xs text-gray-400">Canada Pension Plan</p>
-                        </div>
-
-                        <div className="rounded-2xl bg-gray-50 p-4">
-                            <p className="font-medium">EI</p>
-                            <p className="mt-1 text-xs text-gray-400">Employment Insurance</p>
-                        </div>
-                    </div>
-
-                    <p className="mt-4 text-xs text-gray-400">실제 공제액은 근무시간과 급여에 따라 스케줄에서 계산돼요.</p>
-                </section> */}
-
                 {/* Save */}
 
-                <button onClick={handleSave} className="mt-6 w-full rounded-2xl bg-black py-4 text-sm font-semibold text-white">
+                <button
+                    type="button"
+                    onClick={handleSave}
+                    className="mt-6 w-full rounded-2xl bg-black py-4 text-sm font-semibold text-white"
+                >
                     급여 설정 저장
                 </button>
             </div>
