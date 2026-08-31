@@ -9,12 +9,24 @@ export type SemiMonthlyType =
     | "first-fifteenth"
     | "fifteenth-end";
 
-const formatDate = (date: Date) => {
+export const formatDate = (date: Date) => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, "0");
     const day = String(date.getDate()).padStart(2, "0");
 
     return `${year}-${month}-${day}`;
+};
+
+export const addDays = (dateString: string, days: number) => {
+    const date = new Date(`${dateString}T00:00:00`);
+
+    if (Number.isNaN(date.getTime())) {
+        return "";
+    }
+
+    date.setDate(date.getDate() + days);
+
+    return formatDate(date);
 };
 
 export const getPayPeriodEndDate = (
@@ -77,4 +89,26 @@ export const getPayPeriodEndDate = (
     }
 
     return formatDate(date);
+};
+
+export const getPeriodsPerYear = (frequency: PayFrequency) => {
+    switch (frequency) {
+        case "weekly":
+            return 52;
+
+        case "biweekly":
+            return 26;
+
+        case "semi-monthly":
+            return 24;
+
+        case "monthly":
+            return 12;
+
+        case "custom":
+            return 26;
+
+        default:
+            return 26;
+    }
 };
