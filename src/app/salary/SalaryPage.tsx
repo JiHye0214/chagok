@@ -190,7 +190,7 @@ export default function SchedulePage() {
      * --------------------------------------------------
      */
 
-    const [currentDate, setCurrentDate] = useState(() => new Date(2026, 7, 1));
+    const [currentDate, setCurrentDate] = useState(() => new Date());
 
     const year = currentDate.getFullYear();
 
@@ -752,7 +752,7 @@ export default function SchedulePage() {
     const hasPaychequeTips =
         salarySettings?.hasTips && (salarySettings.tipType === "paycheque" || salarySettings.tipType === "both");
 
-    const vacationPayRate = Number(salarySettings?.vacationPayRate ?? 4);
+    const vacationPayRate = Number(salarySettings?.vacationPayRate ?? 4.15);
 
     const estimatedVacationPay = estimatedBasePay * (vacationPayRate / 100);
 
@@ -916,348 +916,6 @@ export default function SchedulePage() {
                                 <p className="mt-1 text-sm font-semibold">{formatDisplayDate(currentPayPeriod.payDate)}</p>
                             </div>
                         </div>
-                    </section>
-                )}
-
-                {/* Expected Salary */}
-
-                <section className="mt-6 rounded-3xl bg-black p-6 text-white shadow-sm">
-                    <p className="text-sm text-gray-400">예상 급여</p>
-
-                    <div className="mt-2 flex items-start gap-2">
-                        <p className="text-4xl font-bold">${estimatedNetPay.toFixed(2)}</p>
-
-                        {payDifference !== null && payChangePercent !== null && (
-                            <div className={`mb-1 text-xs font-medium ${payDifference >= 0 ? "text-green-400" : "text-red-400"}`}>
-                                {payDifference >= 0 ? "↑" : "↓"} {Math.abs(payChangePercent).toFixed(1)}%
-                                <span className="ml-1">
-                                    {payDifference >= 0 ? "+" : "-"}${Math.abs(payDifference).toFixed(2)}
-                                </span>
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="mt-6 space-y-3 text-sm">
-                        {/* 근무시간 */}
-                        <div className="flex justify-between">
-                            <span className="text-gray-400">근무시간</span>
-
-                            <span>{periodHours.toFixed(2)}시간</span>
-                        </div>
-
-                        {/* 기본 급여 */}
-                        <div className="flex justify-between">
-                            <span className="text-gray-400">기본 급여</span>
-
-                            <span>${estimatedBasePay.toFixed(2)}</span>
-                        </div>
-
-                        {/* 급여 포함 팁 */}
-                        {salarySettings?.hasTips &&
-                            (salarySettings.tipType === "paycheque" || salarySettings.tipType === "both") && (
-                                <div className="flex justify-between">
-                                    <span className="text-gray-400">급여 포함 팁</span>
-
-                                    <span>${periodPaychequeTips.toFixed(2)}</span>
-                                </div>
-                            )}
-
-                        {/* Holiday Pay */}
-                        {holidaySchedules.length > 0 && (
-                            <div className="flex justify-between">
-                                <span className="text-gray-400">Holiday Pay</span>
-
-                                <span>${holidayPay.toFixed(2)}</span>
-                            </div>
-                        )}
-
-                        {/* Vacation Pay */}
-                        <div className="flex justify-between">
-                            <span className="text-gray-400">Vacation Pay ({vacationPayRate}%)</span>
-
-                            <span>${estimatedVacationPay.toFixed(2)}</span>
-                        </div>
-
-                        {/* 세전 급여 */}
-                        <div className="mt-4 border-t border-gray-800 pt-4">
-                            <div className="flex justify-between">
-                                <span className="text-gray-300">세전 급여</span>
-
-                                <span className="font-semibold">${taxableGrossPay.toFixed(2)}</span>
-                            </div>
-                        </div>
-
-                        {/* 예상 공제 */}
-                        <div className="flex justify-between">
-                            <span className="text-gray-400">예상 공제</span>
-
-                            <span>-${payrollDeductions.totalDeductions.toFixed(2)}</span>
-                        </div>
-
-                        {/* 실수령 급여 */}
-                        <div className="flex justify-between">
-                            <span className="text-gray-300">실수령 급여</span>
-
-                            <span className="font-semibold">${estimatedNetPay.toFixed(2)}</span>
-                        </div>
-
-                        {/* 현금 팁 */}
-                        {hasCashTips && (
-                            <div className="mt-4 border-t border-gray-800 pt-4">
-                                <div className="flex justify-between">
-                                    <span className="text-gray-400">현금 팁</span>
-
-                                    <span>${periodCashTips.toFixed(2)}</span>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* 최종 총액 */}
-                        <div className="flex items-center justify-between rounded-2xl bg-white p-3 my-6 text-black">
-                            <span className="text-sm font-medium">{hasCashTips ? "예상 총 수령액" : "예상 실수령액"}</span>
-
-                            <span className="text-xl font-bold">
-                                ${(hasCashTips ? finalEstimatedIncome : estimatedNetPay).toFixed(2)}
-                            </span>
-                        </div>
-                    </div>
-
-                    {/* 공제 상세 */}
-                    <div className="mt-5 rounded-2xl bg-white/5 p-4">
-                        <p className="text-xs font-medium text-gray-300">예상 공제 내역</p>
-
-                        <div className="mt-3 space-y-2 text-xs">
-                            <div className="flex justify-between">
-                                <span className="text-gray-500">CPP</span>
-                                <span className="text-gray-300">-${payrollDeductions.cpp.toFixed(2)}</span>
-                            </div>
-
-                            <div className="flex justify-between">
-                                <span className="text-gray-500">CPP2</span>
-                                <span className="text-gray-300">-${payrollDeductions.cpp2.toFixed(2)}</span>
-                            </div>
-
-                            <div className="flex justify-between">
-                                <span className="text-gray-500">EI</span>
-                                <span className="text-gray-300">-${payrollDeductions.ei.toFixed(2)}</span>
-                            </div>
-
-                            <div className="flex justify-between">
-                                <span className="text-gray-500">연방 소득세</span>
-                                <span className="text-gray-300">-${payrollDeductions.federalTax.toFixed(2)}</span>
-                            </div>
-
-                            <div className="flex justify-between">
-                                <span className="text-gray-500">{taxes.provinceName} 소득세</span>
-
-                                <span className="text-gray-300">-${payrollDeductions.provincialTax.toFixed(2)}</span>
-                            </div>
-
-                            <div className="mt-3 border-t border-white/10 pt-3">
-                                <div className="flex justify-between">
-                                    <span className="text-gray-300">총 공제</span>
-
-                                    <span className="font-medium text-white">
-                                        -${payrollDeductions.totalDeductions.toFixed(2)}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {salarySettings?.payType === "hourly" && (
-                        <p className="mt-5 text-xs text-gray-400">${hourlyWage.toFixed(2)} / 시간 기준</p>
-                    )}
-
-                    {salarySettings?.payType === "salary" && (
-                        <p className="mt-5 text-xs text-gray-400">
-                            설정된 월급 ${Number(salarySettings.monthlySalary ?? 0).toFixed(2)}
-                        </p>
-                    )}
-
-                    <Link
-                        href="/salary/pay-history"
-                        className="mt-3 block w-full text-right text-xs text-gray-400 transition hover:text-gray-600"
-                    >
-                        급여 기록을 확인해보세요 →
-                    </Link>
-                </section>
-
-                {/* Pay Period Tips */}
-
-                {currentPayPeriod && salarySettings?.hasTips && (
-                    <section className="mt-5 rounded-3xl bg-white p-6 shadow-sm">
-                        <div>
-                            <h2 className="text-lg font-semibold">이번 급여 기간 팁</h2>
-
-                            <p className="mt-1 text-sm text-gray-400">
-                                {formatDisplayDate(currentPayPeriod.startDate)}
-                                {" ~ "}
-                                {formatDisplayDate(currentPayPeriod.endDate)}
-                            </p>
-                        </div>
-
-                        {salarySettings.tipType === "cash" && (
-                            <div className="mt-4">
-                                <p className="mb-2 text-sm text-gray-500">현금으로 받은 팁</p>
-
-                                <div className="flex items-center rounded-2xl bg-gray-100 px-4">
-                                    <span className="text-gray-500">$</span>
-
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        step="0.01"
-                                        value={cashTips}
-                                        onChange={(e) => {
-                                            const value = e.target.value;
-
-                                            if (value === "") {
-                                                setCashTips("");
-                                                return;
-                                            }
-
-                                            setCashTips(value.replace(/^0+(?=\d)/, ""));
-                                        }}
-                                        placeholder="0"
-                                        className="w-full bg-transparent px-2 py-4 outline-none"
-                                    />
-                                </div>
-                            </div>
-                        )}
-
-                        {salarySettings.tipType === "paycheque" && (
-                            <div className="mt-4">
-                                <p className="mb-2 text-sm text-gray-500">급여에 포함되는 팁</p>
-
-                                <div className="flex items-center rounded-2xl bg-gray-100 px-4">
-                                    <span className="text-gray-500">$</span>
-
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        step="0.01"
-                                        value={paychequeTips}
-                                        onChange={(e) => {
-                                            const value = e.target.value;
-
-                                            if (value === "") {
-                                                setPaychequeTips("");
-                                                return;
-                                            }
-
-                                            setPaychequeTips(value.replace(/^0+(?=\d)/, ""));
-                                        }}
-                                        placeholder="0"
-                                        className="w-full bg-transparent px-2 py-4 outline-none"
-                                    />
-                                </div>
-                            </div>
-                        )}
-
-                        {salarySettings.tipType === "both" && (
-                            <div className="mt-4 space-y-4">
-                                <div>
-                                    <p className="mb-2 text-sm text-gray-500">급여에 포함되는 팁</p>
-
-                                    <div className="flex items-center rounded-2xl bg-gray-100 px-4">
-                                        <span className="text-gray-500">$</span>
-
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            step="0.01"
-                                            value={paychequeTips}
-                                            onChange={(e) => {
-                                                const value = e.target.value;
-
-                                                if (value === "") {
-                                                    setPaychequeTips("");
-                                                    return;
-                                                }
-
-                                                setPaychequeTips(value.replace(/^0+(?=\d)/, ""));
-                                            }}
-                                            placeholder="0"
-                                            className="w-full bg-transparent px-2 py-4 outline-none"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <p className="mb-2 text-sm text-gray-500">현금으로 받은 팁</p>
-
-                                    <div className="flex items-center rounded-2xl bg-gray-100 px-4">
-                                        <span className="text-gray-500">$</span>
-
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            step="0.01"
-                                            value={cashTips}
-                                            onChange={(e) => {
-                                                const value = e.target.value;
-
-                                                if (value === "") {
-                                                    setCashTips("");
-                                                    return;
-                                                }
-
-                                                setCashTips(value.replace(/^0+(?=\d)/, ""));
-                                            }}
-                                            placeholder="0"
-                                            className="w-full bg-transparent px-2 py-4 outline-none"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        <button
-                            type="button"
-                            onClick={async () => {
-                                if (!currentPayPeriod) {
-                                    return;
-                                }
-
-                                const newTips: PayPeriodTips = {
-                                    payPeriodStart: currentPayPeriod.startDate,
-                                    payPeriodEnd: currentPayPeriod.endDate,
-                                    cashTips: Math.max(0, Number(cashTips) || 0),
-                                    paychequeTips: Math.max(0, Number(paychequeTips) || 0),
-                                };
-
-                                try {
-                                    const response = await fetch("/api/pay-period-tips", {
-                                        method: "PUT",
-                                        headers: {
-                                            "Content-Type": "application/json",
-                                        },
-                                        body: JSON.stringify(newTips),
-                                    });
-
-                                    if (!response.ok) {
-                                        throw new Error("팁 저장 실패");
-                                    }
-
-                                    const saved: PayPeriodTips = await response.json();
-
-                                    setSavedTips(saved);
-
-                                    setCashTips(saved.cashTips > 0 ? String(saved.cashTips) : "");
-
-                                    setPaychequeTips(saved.paychequeTips > 0 ? String(saved.paychequeTips) : "");
-
-                                    alert("팁이 저장됐어요!");
-                                } catch (error) {
-                                    console.error(error);
-                                    alert("팁 저장에 실패했어요.");
-                                }
-                            }}
-                            className="mt-4 w-full rounded-2xl bg-black py-4 text-sm font-semibold text-white"
-                        >
-                            팁 저장
-                        </button>
                     </section>
                 )}
 
@@ -1487,7 +1145,7 @@ export default function SchedulePage() {
                 {/* Add / Edit Modal */}
 
                 {isAddModalOpen && (
-                    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-5">
+                    <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40 p-5">
                         <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl bg-white p-6 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                             {/* Modal Header */}
                             <div className="flex items-start justify-between">
@@ -1528,9 +1186,9 @@ export default function SchedulePage() {
                                         setEditingSchedule(null);
                                         setShowHolidayInfo(false);
                                     }}
-                                    className="text-gray-400"
+                                    className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-500"
                                 >
-                                    ✕
+                                    ×
                                 </button>
                             </div>
                             {/* Time */}
@@ -1748,6 +1406,348 @@ export default function SchedulePage() {
                         </div>
                     </div>
                 )}
+
+                {/* Pay Period Tips */}
+
+                {currentPayPeriod && salarySettings?.hasTips && (
+                    <section className="mt-5 rounded-3xl bg-white p-6 shadow-sm">
+                        <div>
+                            <h2 className="text-lg font-semibold">이번 급여 기간 팁</h2>
+
+                            <p className="mt-1 text-sm text-gray-400">
+                                {formatDisplayDate(currentPayPeriod.startDate)}
+                                {" ~ "}
+                                {formatDisplayDate(currentPayPeriod.endDate)}
+                            </p>
+                        </div>
+
+                        {salarySettings.tipType === "cash" && (
+                            <div className="mt-4">
+                                <p className="mb-2 text-sm text-gray-500">현금으로 받은 팁</p>
+
+                                <div className="flex items-center rounded-2xl bg-gray-100 px-4">
+                                    <span className="text-gray-500">$</span>
+
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        value={cashTips}
+                                        onChange={(e) => {
+                                            const value = e.target.value;
+
+                                            if (value === "") {
+                                                setCashTips("");
+                                                return;
+                                            }
+
+                                            setCashTips(value.replace(/^0+(?=\d)/, ""));
+                                        }}
+                                        placeholder="0"
+                                        className="w-full bg-transparent px-2 py-4 outline-none"
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+                        {salarySettings.tipType === "paycheque" && (
+                            <div className="mt-4">
+                                <p className="mb-2 text-sm text-gray-500">급여에 포함되는 팁</p>
+
+                                <div className="flex items-center rounded-2xl bg-gray-100 px-4">
+                                    <span className="text-gray-500">$</span>
+
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        value={paychequeTips}
+                                        onChange={(e) => {
+                                            const value = e.target.value;
+
+                                            if (value === "") {
+                                                setPaychequeTips("");
+                                                return;
+                                            }
+
+                                            setPaychequeTips(value.replace(/^0+(?=\d)/, ""));
+                                        }}
+                                        placeholder="0"
+                                        className="w-full bg-transparent px-2 py-4 outline-none"
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+                        {salarySettings.tipType === "both" && (
+                            <div className="mt-4 space-y-4">
+                                <div>
+                                    <p className="mb-2 text-sm text-gray-500">급여에 포함되는 팁</p>
+
+                                    <div className="flex items-center rounded-2xl bg-gray-100 px-4">
+                                        <span className="text-gray-500">$</span>
+
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="0.01"
+                                            value={paychequeTips}
+                                            onChange={(e) => {
+                                                const value = e.target.value;
+
+                                                if (value === "") {
+                                                    setPaychequeTips("");
+                                                    return;
+                                                }
+
+                                                setPaychequeTips(value.replace(/^0+(?=\d)/, ""));
+                                            }}
+                                            placeholder="0"
+                                            className="w-full bg-transparent px-2 py-4 outline-none"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <p className="mb-2 text-sm text-gray-500">현금으로 받은 팁</p>
+
+                                    <div className="flex items-center rounded-2xl bg-gray-100 px-4">
+                                        <span className="text-gray-500">$</span>
+
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="0.01"
+                                            value={cashTips}
+                                            onChange={(e) => {
+                                                const value = e.target.value;
+
+                                                if (value === "") {
+                                                    setCashTips("");
+                                                    return;
+                                                }
+
+                                                setCashTips(value.replace(/^0+(?=\d)/, ""));
+                                            }}
+                                            placeholder="0"
+                                            className="w-full bg-transparent px-2 py-4 outline-none"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        <button
+                            type="button"
+                            onClick={async () => {
+                                if (!currentPayPeriod) {
+                                    return;
+                                }
+
+                                const newTips: PayPeriodTips = {
+                                    payPeriodStart: currentPayPeriod.startDate,
+                                    payPeriodEnd: currentPayPeriod.endDate,
+                                    cashTips: Math.max(0, Number(cashTips) || 0),
+                                    paychequeTips: Math.max(0, Number(paychequeTips) || 0),
+                                };
+
+                                try {
+                                    const response = await fetch("/api/pay-period-tips", {
+                                        method: "PUT",
+                                        headers: {
+                                            "Content-Type": "application/json",
+                                        },
+                                        body: JSON.stringify(newTips),
+                                    });
+
+                                    if (!response.ok) {
+                                        throw new Error("팁 저장 실패");
+                                    }
+
+                                    const saved: PayPeriodTips = await response.json();
+
+                                    setSavedTips(saved);
+
+                                    setCashTips(saved.cashTips > 0 ? String(saved.cashTips) : "");
+
+                                    setPaychequeTips(saved.paychequeTips > 0 ? String(saved.paychequeTips) : "");
+
+                                    alert("팁이 저장됐어요!");
+                                } catch (error) {
+                                    console.error(error);
+                                    alert("팁 저장에 실패했어요.");
+                                }
+                            }}
+                            className="mt-4 w-full rounded-2xl bg-black py-4 text-sm font-semibold text-white"
+                        >
+                            팁 저장
+                        </button>
+                    </section>
+                )}
+
+                {/* Expected Salary */}
+
+                <section className="mt-6 rounded-3xl bg-black p-6 text-white shadow-sm">
+                    <p className="text-sm text-gray-400">예상 급여</p>
+
+                    <div className="mt-2 flex items-start gap-2">
+                        <p className="text-4xl font-bold">${estimatedNetPay.toFixed(2)}</p>
+
+                        {payDifference !== null && payChangePercent !== null && (
+                            <div className={`mb-1 text-xs font-medium ${payDifference >= 0 ? "text-green-400" : "text-red-400"}`}>
+                                {payDifference >= 0 ? "↑" : "↓"} {Math.abs(payChangePercent).toFixed(1)}%
+                                <span className="ml-1">
+                                    {payDifference >= 0 ? "+" : "-"}${Math.abs(payDifference).toFixed(2)}
+                                </span>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="mt-6 space-y-3 text-sm">
+                        {/* 근무시간 */}
+                        <div className="flex justify-between">
+                            <span className="text-gray-400">근무시간</span>
+
+                            <span>{periodHours.toFixed(2)}시간</span>
+                        </div>
+
+                        {/* 기본 급여 */}
+                        <div className="flex justify-between">
+                            <span className="text-gray-400">기본 급여</span>
+
+                            <span>${estimatedBasePay.toFixed(2)}</span>
+                        </div>
+
+                        {/* 급여 포함 팁 */}
+                        {salarySettings?.hasTips &&
+                            (salarySettings.tipType === "paycheque" || salarySettings.tipType === "both") && (
+                                <div className="flex justify-between">
+                                    <span className="text-gray-400">급여 포함 팁</span>
+
+                                    <span>${periodPaychequeTips.toFixed(2)}</span>
+                                </div>
+                            )}
+
+                        {/* Holiday Pay */}
+                        {holidaySchedules.length > 0 && (
+                            <div className="flex justify-between">
+                                <span className="text-gray-400">Holiday Pay</span>
+
+                                <span>${holidayPay.toFixed(2)}</span>
+                            </div>
+                        )}
+
+                        {/* Vacation Pay */}
+                        <div className="flex justify-between">
+                            <span className="text-gray-400">Vacation Pay ({vacationPayRate}%)</span>
+
+                            <span>${estimatedVacationPay.toFixed(2)}</span>
+                        </div>
+
+                        {/* 세전 급여 */}
+                        <div className="mt-4 border-t border-gray-800 pt-4">
+                            <div className="flex justify-between">
+                                <span className="text-gray-300">세전 급여</span>
+
+                                <span className="font-semibold">${taxableGrossPay.toFixed(2)}</span>
+                            </div>
+                        </div>
+
+                        {/* 예상 공제 */}
+                        <div className="flex justify-between">
+                            <span className="text-gray-400">예상 공제</span>
+
+                            <span>-${payrollDeductions.totalDeductions.toFixed(2)}</span>
+                        </div>
+
+                        {/* 실수령 급여 */}
+                        <div className="flex justify-between">
+                            <span className="text-gray-300">실수령 급여</span>
+
+                            <span className="font-semibold">${estimatedNetPay.toFixed(2)}</span>
+                        </div>
+
+                        {/* 현금 팁 */}
+                        {hasCashTips && (
+                            <div className="mt-4 border-t border-gray-800 pt-4">
+                                <div className="flex justify-between">
+                                    <span className="text-gray-400">현금 팁</span>
+
+                                    <span>${periodCashTips.toFixed(2)}</span>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 최종 총액 */}
+                        <div className="flex items-center justify-between rounded-2xl bg-white p-3 my-6 text-black">
+                            <span className="text-sm font-medium">{hasCashTips ? "예상 총 수령액" : "예상 실수령액"}</span>
+
+                            <span className="text-xl font-bold">
+                                ${(hasCashTips ? finalEstimatedIncome : estimatedNetPay).toFixed(2)}
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* 공제 상세 */}
+                    <div className="mt-5 rounded-2xl bg-white/5 p-4">
+                        <p className="text-xs font-medium text-gray-300">예상 공제 내역</p>
+
+                        <div className="mt-3 space-y-2 text-xs">
+                            <div className="flex justify-between">
+                                <span className="text-gray-500">CPP</span>
+                                <span className="text-gray-300">-${payrollDeductions.cpp.toFixed(2)}</span>
+                            </div>
+
+                            <div className="flex justify-between">
+                                <span className="text-gray-500">CPP2</span>
+                                <span className="text-gray-300">-${payrollDeductions.cpp2.toFixed(2)}</span>
+                            </div>
+
+                            <div className="flex justify-between">
+                                <span className="text-gray-500">EI</span>
+                                <span className="text-gray-300">-${payrollDeductions.ei.toFixed(2)}</span>
+                            </div>
+
+                            <div className="flex justify-between">
+                                <span className="text-gray-500">연방 소득세</span>
+                                <span className="text-gray-300">-${payrollDeductions.federalTax.toFixed(2)}</span>
+                            </div>
+
+                            <div className="flex justify-between">
+                                <span className="text-gray-500">{taxes.provinceName} 소득세</span>
+
+                                <span className="text-gray-300">-${payrollDeductions.provincialTax.toFixed(2)}</span>
+                            </div>
+
+                            <div className="mt-3 border-t border-white/10 pt-3">
+                                <div className="flex justify-between">
+                                    <span className="text-gray-300">총 공제</span>
+
+                                    <span className="font-medium text-white">
+                                        -${payrollDeductions.totalDeductions.toFixed(2)}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {salarySettings?.payType === "hourly" && (
+                        <p className="mt-5 text-xs text-gray-400">${hourlyWage.toFixed(2)} / 시간 기준</p>
+                    )}
+
+                    {salarySettings?.payType === "salary" && (
+                        <p className="mt-5 text-xs text-gray-400">
+                            설정된 월급 ${Number(salarySettings.monthlySalary ?? 0).toFixed(2)}
+                        </p>
+                    )}
+
+                    <Link
+                        href="/salary/pay-history"
+                        className="mt-3 block w-full text-right text-xs text-gray-400 transition hover:text-gray-600"
+                    >
+                        급여 기록을 확인해보세요 →
+                    </Link>
+                </section>
             </div>
         </main>
     );

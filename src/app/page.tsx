@@ -305,37 +305,6 @@ export default function Home() {
                         </div>
                     </section>
 
-                    {/* Bottom Navigation */}
-                    <nav className="fixed bottom-0 left-0 right-0 border-t border-gray-100 bg-white/90 px-5 py-3 backdrop-blur-md">
-                        <div className="mx-auto flex max-w-md items-center justify-around">
-                            <button className="flex flex-col items-center gap-1 text-black">
-                                <span>⌂</span>
-                                <span className="text-xs">홈</span>
-                            </button>
-
-                            <button
-                                onClick={() => router.push("/living")}
-                                className="flex flex-col items-center gap-1 text-gray-400"
-                            >
-                                <span>₩</span>
-                                <span className="text-xs">생활</span>
-                            </button>
-
-                            <button
-                                onClick={() => router.push("/salary")}
-                                className="flex flex-col items-center gap-1 text-gray-400"
-                            >
-                                <span>💼</span>
-                                <span className="text-xs">급여</span>
-                            </button>
-
-                            <button className="flex flex-col items-center gap-1 text-gray-400">
-                                <span>✈️</span>
-                                <span className="text-xs">여행</span>
-                            </button>
-                        </div>
-                    </nav>
-
                     <div className="h-20" />
 
                     <button

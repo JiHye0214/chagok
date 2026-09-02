@@ -95,7 +95,7 @@ export async function GET() {
             // 세금 계산 대상 급여
             // --------------------------------
 
-            const vacationPay = basePay * 0.04;
+            const vacationPay = basePay * 0.0415;
 
             const taxableGrossPay = basePay + paychequeTips + vacationPay;
 
