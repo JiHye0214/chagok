@@ -68,101 +68,99 @@ export default function LivingPage() {
     const remainingLivingBudget = livingBudget !== null ? livingBudget - totalLivingExpense : null;
 
     return (
-        <main className="min-h-screen bg-gray-50 px-5 py-8">
-            <div className="mx-auto max-w-md">
-                <header>
-                    <p className="text-sm text-gray-500">차곡</p>
+        <div className="mx-auto max-w-md">
+            <header>
+                <p className="text-sm text-gray-500">차곡</p>
 
-                    <h1 className="mt-2 text-3xl font-bold">생활비</h1>
-                </header>
+                <h1 className="mt-2 text-3xl font-bold">생활비</h1>
+            </header>
 
-                <section className="mt-6 rounded-3xl bg-white p-6 shadow-sm">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-sm text-gray-500">이번 달 생활비</p>
+            <section className="mt-6 rounded-3xl bg-white p-6 shadow-sm">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <p className="text-sm text-gray-500">이번 달 생활비</p>
 
-                            <p className="mt-2 text-4xl font-bold">${totalLivingExpense.toFixed(2)}</p>
+                        <p className="mt-2 text-4xl font-bold">${totalLivingExpense.toFixed(2)}</p>
+                    </div>
+
+                    <button
+                        onClick={() => {
+                            const value = window.prompt("이번 달 생활비 예산을 입력해주세요.");
+
+                            if (value === null) return;
+
+                            const numberValue = Number(value);
+
+                            if (!numberValue || numberValue <= 0) {
+                                alert("올바른 금액을 입력해주세요.");
+                                return;
+                            }
+
+                            setLivingBudget(numberValue);
+                        }}
+                        className="rounded-full bg-gray-100 px-4 py-2 text-sm font-medium"
+                    >
+                        {livingBudget === null ? "예산 설정" : "수정"}
+                    </button>
+                </div>
+
+                {livingBudget !== null && (
+                    <div className="mt-6">
+                        <div className="mb-2 flex justify-between text-sm">
+                            <span className="text-gray-500">예산 ${livingBudget.toFixed(2)}</span>
+
+                            <span>{livingBudgetUsage.toFixed(0)}%</span>
                         </div>
 
-                        <button
-                            onClick={() => {
-                                const value = window.prompt("이번 달 생활비 예산을 입력해주세요.");
-
-                                if (value === null) return;
-
-                                const numberValue = Number(value);
-
-                                if (!numberValue || numberValue <= 0) {
-                                    alert("올바른 금액을 입력해주세요.");
-                                    return;
-                                }
-
-                                setLivingBudget(numberValue);
-                            }}
-                            className="rounded-full bg-gray-100 px-4 py-2 text-sm font-medium"
-                        >
-                            {livingBudget === null ? "예산 설정" : "수정"}
-                        </button>
-                    </div>
-
-                    {livingBudget !== null && (
-                        <div className="mt-6">
-                            <div className="mb-2 flex justify-between text-sm">
-                                <span className="text-gray-500">예산 ${livingBudget.toFixed(2)}</span>
-
-                                <span>{livingBudgetUsage.toFixed(0)}%</span>
-                            </div>
-
-                            <div className="h-2 overflow-hidden rounded-full bg-gray-100">
-                                <div
-                                    className="h-full rounded-full bg-black"
-                                    style={{
-                                        width: `${livingBudgetUsage}%`,
-                                    }}
-                                />
-                            </div>
-
-                            <p className="mt-3 text-sm text-gray-500">
-                                {remainingLivingBudget !== null && remainingLivingBudget >= 0
-                                    ? `$${remainingLivingBudget.toFixed(2)} 남았어요`
-                                    : `$${Math.abs(remainingLivingBudget ?? 0).toFixed(2)} 초과했어요`}
-                            </p>
+                        <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+                            <div
+                                className="h-full rounded-full bg-black"
+                                style={{
+                                    width: `${livingBudgetUsage}%`,
+                                }}
+                            />
                         </div>
-                    )}
-                </section>
 
-                <section className="mt-5 grid grid-cols-2 gap-3">
-                    <div className="rounded-3xl bg-white p-5 shadow-sm">
-                        <p className="text-sm text-gray-500">🍜 식비</p>
-
-                        <p className="mt-2 text-xl font-semibold">${(categoryTotals["식비"] || 0).toFixed(2)}</p>
+                        <p className="mt-3 text-sm text-gray-500">
+                            {remainingLivingBudget !== null && remainingLivingBudget >= 0
+                                ? `$${remainingLivingBudget.toFixed(2)} 남았어요`
+                                : `$${Math.abs(remainingLivingBudget ?? 0).toFixed(2)} 초과했어요`}
+                        </p>
                     </div>
+                )}
+            </section>
 
-                    <div className="rounded-3xl bg-white p-5 shadow-sm">
-                        <p className="text-sm text-gray-500">🚇 교통</p>
+            <section className="mt-5 grid grid-cols-2 gap-3">
+                <div className="rounded-3xl bg-white p-5 shadow-sm">
+                    <p className="text-sm text-gray-500">🍜 식비</p>
 
-                        <p className="mt-2 text-xl font-semibold">${(categoryTotals["교통"] || 0).toFixed(2)}</p>
-                    </div>
+                    <p className="mt-2 text-xl font-semibold">${(categoryTotals["식비"] || 0).toFixed(2)}</p>
+                </div>
 
-                    <div className="rounded-3xl bg-white p-5 shadow-sm">
-                        <p className="text-sm text-gray-500">🏠 주거</p>
+                <div className="rounded-3xl bg-white p-5 shadow-sm">
+                    <p className="text-sm text-gray-500">🚇 교통</p>
 
-                        <p className="mt-2 text-xl font-semibold">${(categoryTotals["월세"] || 0).toFixed(2)}</p>
-                    </div>
+                    <p className="mt-2 text-xl font-semibold">${(categoryTotals["교통"] || 0).toFixed(2)}</p>
+                </div>
 
-                    <div className="rounded-3xl bg-white p-5 shadow-sm">
-                        <p className="text-sm text-gray-500">🛍️ 쇼핑</p>
+                <div className="rounded-3xl bg-white p-5 shadow-sm">
+                    <p className="text-sm text-gray-500">🏠 주거</p>
 
-                        <p className="mt-2 text-xl font-semibold">${(categoryTotals["쇼핑"] || 0).toFixed(2)}</p>
-                    </div>
+                    <p className="mt-2 text-xl font-semibold">${(categoryTotals["월세"] || 0).toFixed(2)}</p>
+                </div>
 
-                    <div className="col-span-2 rounded-3xl bg-white p-5 shadow-sm">
-                        <p className="text-sm text-gray-500">💳 기타</p>
+                <div className="rounded-3xl bg-white p-5 shadow-sm">
+                    <p className="text-sm text-gray-500">🛍️ 쇼핑</p>
 
-                        <p className="mt-2 text-xl font-semibold">${(categoryTotals["기타"] || 0).toFixed(2)}</p>
-                    </div>
-                </section>
-            </div>
-        </main>
+                    <p className="mt-2 text-xl font-semibold">${(categoryTotals["쇼핑"] || 0).toFixed(2)}</p>
+                </div>
+
+                <div className="col-span-2 rounded-3xl bg-white p-5 shadow-sm">
+                    <p className="text-sm text-gray-500">💳 기타</p>
+
+                    <p className="mt-2 text-xl font-semibold">${(categoryTotals["기타"] || 0).toFixed(2)}</p>
+                </div>
+            </section>
+        </div>
     );
 }

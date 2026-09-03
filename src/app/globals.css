@@ -84,3 +84,19 @@ body {
 .modal-content {
     animation: modalSlideIn 400ms ease-out;
 }
+
+@keyframes modalSlideUp {
+    from {
+        transform: translateY(100%);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.modal-content {
+    animation: modalSlideUp 0.35s ease-out;
+}

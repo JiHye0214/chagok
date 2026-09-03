@@ -43,6 +43,46 @@ const trips = [
     },
 ];
 
+type SavedTrip = {
+    id: number;
+    tripType: "upcoming" | "completed";
+    title: string;
+    city: string;
+    country: string;
+    countryCode: string;
+    startDate: string;
+    endDate: string;
+    people: number;
+    budget?: number;
+    currency?: string;
+    rating: number;
+};
+
+type CitySearchResult = {
+    name: string;
+    countryCode: string;
+};
+
+const countryCodeToFlag = (countryCode: string) => {
+    return countryCode
+        .toUpperCase()
+        .split("")
+        .map((char) => String.fromCodePoint(127397 + char.charCodeAt(0)))
+        .join("");
+};
+
+const getCountryName = (countryCode: string) => {
+    try {
+        return (
+            new Intl.DisplayNames(["en"], {
+                type: "region",
+            }).of(countryCode) || countryCode
+        );
+    } catch {
+        return countryCode;
+    }
+};
+
 const countries = [
     {
         country: "🇺🇸",
@@ -74,27 +114,137 @@ const categoryData = [
 ];
 
 const categoryColors = ["#D9E2EC", "#E8E1D9", "#E2E8D9", "#E6DDE8", "#DDE7E8", "#E8E8E8"];
+
 const categoryActiveColors = ["#8FA6BA", "#B5A18D", "#A8B895", "#B19BB5", "#A5BABC", "#AFAFAF"];
 
 export default function TravelPage() {
+    const typeRef = useRef<HTMLDivElement>(null);
     const formRef = useRef<HTMLDivElement>(null);
+    const isSelectingCityRef = useRef(false);
 
     const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
     const [tripType, setTripType] = useState<"upcoming" | "completed">("upcoming");
+
     const [addStep, setAddStep] = useState<"type" | "form">("type");
 
     const [city, setCity] = useState("");
     const [country, setCountry] = useState("");
+    const [countryCode, setCountryCode] = useState("");
+
+    const [title, setTitle] = useState("");
     const [startDate, setStartDate] = useState("");
     const [endDate, setEndDate] = useState("");
     const [people, setPeople] = useState("1");
     const [budget, setBudget] = useState("");
     const [rating, setRating] = useState(0);
 
+    const [savedTrip, setSavedTrip] = useState<SavedTrip | null>(null);
+
+    // 위치 검색
+    const [citySearchResults, setCitySearchResults] = useState<CitySearchResult[]>([]);
+
+    const [isCitySearching, setIsCitySearching] = useState(false);
+    const [showCityResults, setShowCityResults] = useState(false);
+
+    // 위치 검색 API
+    useEffect(() => {
+        const keyword = city.trim();
+
+        if (isSelectingCityRef.current) {
+            isSelectingCityRef.current = false;
+            return;
+        }
+
+        if (keyword.length < 2) {
+            return;
+        }
+
+        const timer = window.setTimeout(async () => {
+            try {
+                setIsCitySearching(true);
+
+                const response = await fetch(`https://countries.dev/cities?q=${encodeURIComponent(keyword)}&limit=8`);
+
+                if (!response.ok) {
+                    throw new Error("도시 검색에 실패했습니다.");
+                }
+
+                const data: CitySearchResult[] = await response.json();
+
+                setCitySearchResults(data);
+                setShowCityResults(true);
+            } catch (error) {
+                console.error("도시 검색 오류:", error);
+            } finally {
+                setIsCitySearching(false);
+            }
+        }, 400);
+
+        return () => {
+            window.clearTimeout(timer);
+        };
+    }, [city]);
+
+    // 국가 코드로 국가 정보 가져오기
+    const getCountryInfo = async (code: string) => {
+        try {
+            const response = await fetch(`https://countries.dev/alpha/${encodeURIComponent(code)}?fields=name,flag`);
+
+            if (!response.ok) {
+                throw new Error("국가 정보를 가져오지 못했습니다.");
+            }
+
+            const data = await response.json();
+
+            return {
+                name: data.name || "",
+                flag: data.flag || "",
+            };
+        } catch (error) {
+            console.error("국가 정보 오류:", error);
+
+            return {
+                name: "",
+                flag: "",
+            };
+        }
+    };
+
+    // 도시 선택
+    const handleCitySelect = async (result: CitySearchResult) => {
+        isSelectingCityRef.current = true;
+
+        setCity(result.name);
+        setCountryCode(result.countryCode);
+        setShowCityResults(false);
+        setCitySearchResults([]);
+
+        const countryInfo = await getCountryInfo(result.countryCode);
+
+        setCountry(countryInfo.name);
+    };
+
+    // 인풋 초기화
+    const resetTripForm = () => {
+        setTitle("");
+        setCity("");
+        setCountry("");
+        setCountryCode("");
+        setStartDate("");
+        setEndDate("");
+        setPeople("1");
+        setBudget("");
+        setRating(0);
+
+        setCitySearchResults([]);
+        setShowCityResults(false);
+    };
+
     return (
-        <div className="mx-auto max-w-md px-5 py-8">
+        <div className="mx-auto max-w-md">
+            {" "}
             {/* Header */}
             <header>
                 <p className="text-sm text-gray-500">차곡</p>
@@ -353,10 +503,12 @@ export default function TravelPage() {
                 </div>
             </section>
             {/* Add Travel */}
-            <section className="mt-6 pb-8">
+            <section className="mt-6">
                 <button
                     type="button"
                     onClick={() => {
+                        resetTripForm();
+                        setTripType("upcoming");
                         setAddStep("type");
                         setIsAddModalOpen(true);
                     }}
@@ -365,6 +517,61 @@ export default function TravelPage() {
                     ＋ 여행 추가
                 </button>
             </section>
+            {/* Trip Saved Popup */}
+            {savedTrip && (
+                <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/30 px-5">
+                    <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-xl">
+                        <p className="text-lg font-bold">여행이 추가됐어요 ✈️</p>
+
+                        {savedTrip.title ? (
+                            <p className="mt-4 text-2xl font-bold">{savedTrip.title}</p>
+                        ) : (
+                            <p className="mt-4 text-2xl font-bold">{savedTrip.city}</p>
+                        )}
+
+                        <p className="mt-2 text-sm text-gray-500">
+                            {savedTrip.city} · {savedTrip.countryCode}
+                        </p>
+
+                        <p className="mt-1 text-sm text-gray-500">
+                            {(() => {
+                                const start = new Date(savedTrip.startDate);
+                                const end = new Date(savedTrip.endDate);
+
+                                const nights = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+
+                                return nights === 0
+                                    ? `당일치기 · ${savedTrip.people}명`
+                                    : `${nights}박 ${nights + 1}일 · ${savedTrip.people}명`;
+                            })()}
+                        </p>
+
+                        <p className="mt-6 text-sm text-gray-500">여행 지출도 기록할까요?</p>
+
+                        <div className="mt-5 space-y-2">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    window.location.href = `/travel/${savedTrip.id}`;
+                                }}
+                                className="w-full rounded-2xl bg-black py-4 text-sm font-medium text-white"
+                            >
+                                지출 기록하기
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setSavedTrip(null);
+                                }}
+                                className="w-full rounded-2xl bg-gray-100 py-4 text-sm font-medium text-gray-700"
+                            >
+                                나중에 할게요
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
             {/* Add Travel Modal */}
             {isAddModalOpen && (
                 <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/30 px-4 pb-4 modal-overlay">
@@ -375,7 +582,11 @@ export default function TravelPage() {
 
                             <button
                                 type="button"
-                                onClick={() => setIsAddModalOpen(false)}
+                                onClick={() => {
+                                    resetTripForm();
+                                    setAddStep("type");
+                                    setIsAddModalOpen(false);
+                                }}
                                 className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-500"
                             >
                                 ×
@@ -384,22 +595,26 @@ export default function TravelPage() {
 
                         {/* 화면 영역 */}
                         <div
-                            className={`relative mt-5 overflow-hidden transition-all duration-500 ease-out ${
-                                addStep === "type" ? "h-[180px]" : "min-h-[650px]"
+                            className={`relative mt-5 overflow-hidden transition-[height] duration-500 ease-in-out ${
+                                addStep === "form" && tripType === "upcoming"
+                                    ? "h-[666px]"
+                                    : addStep === "form" && tripType === "completed"
+                                      ? "h-[650px]"
+                                      : "h-[210px]"
                             }`}
                         >
                             {/* 여행 종류 선택 */}
                             <div
-                                ref={formRef}
+                                ref={typeRef}
                                 onScroll={() => {
-                                    if (addStep !== "form" && formRef.current) {
-                                        formRef.current.scrollTop = 0;
+                                    if (addStep !== "form" && typeRef.current) {
+                                        typeRef.current.scrollTop = 0;
                                     }
                                 }}
-                                className={`absolute inset-0 px-1 transition-all duration-500 ease-out ${
+                                className={`absolute inset-0 px-1 transition-[height] duration-500 ease-in-out duration-500 ease-out ${
                                     addStep === "type"
                                         ? "translate-x-0 opacity-100"
-                                        : "-translate-x-5 opacity-0 pointer-events-none"
+                                        : "-translate-x-5 pointer-events-none opacity-0"
                                 }`}
                             >
                                 <div className="flex flex-col gap-5">
@@ -417,7 +632,7 @@ export default function TravelPage() {
 
                                                 setAddStep("form");
                                             }}
-                                            className="flex flex-1 flex-col items-center rounded-3xl border border-gray-200 py-6 transition-transform active:scale-[0.98]"
+                                            className="flex flex-1 flex-col items-center rounded-3xl border border-gray-200 py-12 transition-transform active:scale-[0.98]"
                                         >
                                             <Plane size={25} strokeWidth={1.7} className="mb-2" />
 
@@ -435,7 +650,7 @@ export default function TravelPage() {
 
                                                 setAddStep("form");
                                             }}
-                                            className="flex flex-1 flex-col items-center rounded-3xl border border-gray-200 py-6 transition-transform active:scale-[0.98]"
+                                            className="flex flex-1 flex-col items-center rounded-3xl border border-gray-200 py-12 transition-transform active:scale-[0.98]"
                                         >
                                             <CheckCircle2 size={25} strokeWidth={1.7} className="mb-2" />
 
@@ -448,10 +663,10 @@ export default function TravelPage() {
                             {/* 입력 폼 */}
                             <div
                                 ref={formRef}
-                                className={`absolute inset-0 [scrollbar-width:none] overflow-y-auto px-1 transition-[opacity,transform] duration-500 ease-out ${
+                                className={`absolute inset-0 scrollbar-hide px-1 transition-[opacity,transform] duration-500 ease-out ${
                                     addStep === "form"
                                         ? "translate-x-0 opacity-100"
-                                        : "translate-x-3 opacity-0 pointer-events-none"
+                                        : "translate-x-3 pointer-events-none opacity-0"
                                 }`}
                             >
                                 <div className="space-y-5">
@@ -476,30 +691,120 @@ export default function TravelPage() {
                                         </p>
                                     </div>
 
-                                    {/* 도시 */}
+                                    {/* 여행 제목 */}
                                     <div>
-                                        <p className="text-sm font-medium text-gray-700">도시</p>
+                                        <p className="text-sm font-medium text-gray-700">여행 제목</p>
 
                                         <input
                                             type="text"
-                                            value={city}
-                                            onChange={(e) => setCity(e.target.value)}
-                                            placeholder="예: New York"
+                                            value={title}
+                                            onChange={(e) => setTitle(e.target.value)}
+                                            placeholder="이 여행을 한마디로 남겨보세요"
+                                            maxLength={50}
                                             className="mt-2 w-full rounded-2xl bg-gray-100 px-4 py-4 text-sm outline-none"
                                         />
                                     </div>
 
-                                    {/* 국가 */}
-                                    <div>
-                                        <p className="text-sm font-medium text-gray-700">국가</p>
+                                    {/* 위치 */}
+                                    <div className="relative">
+                                        <p className="text-sm font-medium text-gray-700">위치</p>
 
-                                        <input
-                                            type="text"
-                                            value={country}
-                                            onChange={(e) => setCountry(e.target.value)}
-                                            placeholder="예: United States"
-                                            className="mt-2 w-full rounded-2xl bg-gray-100 px-4 py-4 text-sm outline-none"
-                                        />
+                                        {countryCode ? (
+                                            <div className="mt-2 flex h-[52px] w-full items-center gap-3 rounded-2xl bg-gray-50 px-4">
+                                                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-base">
+                                                    <img
+                                                        src={`https://flagcdn.com/w40/${countryCode.toLowerCase()}.png`}
+                                                        alt={country}
+                                                        className="h-3 object-cover"
+                                                    />
+                                                </span>
+
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="truncate text-sm font-medium leading-4 text-gray-900">{city}</p>
+                                                    <p className="mt-0.5 truncate text-xs leading-3 text-gray-400">{country}</p>
+                                                </div>
+
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setCity("");
+                                                        setCountry("");
+                                                        setCountryCode("");
+                                                        setCitySearchResults([]);
+                                                        setShowCityResults(false);
+                                                    }}
+                                                    className="shrink-0 text-xs text-gray-400"
+                                                >
+                                                    변경
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <input
+                                                type="text"
+                                                value={city}
+                                                onChange={(e) => {
+                                                    const value = e.target.value;
+
+                                                    setCity(value);
+                                                    setCountry("");
+                                                    setCountryCode("");
+                                                    setCitySearchResults([]);
+                                                    setShowCityResults(value.trim().length >= 2);
+                                                }}
+                                                onFocus={() => {
+                                                    if (city.trim().length >= 2 && citySearchResults.length > 0) {
+                                                        setShowCityResults(true);
+                                                    }
+                                                }}
+                                                placeholder="도시를 입력해주세요 (예: New York)"
+                                                className="mt-2 h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
+                                            />
+                                        )}
+
+                                        {/* 검색 결과 */}
+                                        {showCityResults && (
+                                            <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-2xl bg-white shadow-lg ring-1 ring-black/5">
+                                                {isCitySearching ? (
+                                                    <div className="px-4 py-4 text-sm text-gray-400">도시를 찾고 있어요...</div>
+                                                ) : citySearchResults.length > 0 ? (
+                                                    <div className="max-h-64 overflow-y-auto scrollbar-hide">
+                                                        {citySearchResults.map((result) => (
+                                                            <button
+                                                                key={`${result.name}-${result.countryCode}`}
+                                                                type="button"
+                                                                onClick={() => handleCitySelect(result)}
+                                                                className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition hover:bg-gray-50 active:bg-gray-100"
+                                                            >
+                                                                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-50 text-lg">
+                                                                    {/* {countryCodeToFlag(result.countryCode)} */}
+                                                                    <img
+                                                                        src={`https://flagcdn.com/w40/${result.countryCode.toLowerCase()}.png`}
+                                                                        alt={country}
+                                                                        className="h-3 object-cover"
+                                                                    />
+                                                                </span>
+
+                                                                <div className="min-w-0 flex-1">
+                                                                    <p className="truncate text-sm font-medium text-gray-900">
+                                                                        {result.name}
+                                                                    </p>
+
+                                                                    <p className="mt-0.5 truncate text-xs text-gray-400">
+                                                                        {getCountryName(result.countryCode)}
+                                                                    </p>
+                                                                </div>
+
+                                                                <span className="text-xs text-gray-300">→</span>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                ) : (
+                                                    <div className="px-4 py-4 text-sm text-gray-400">
+                                                        일치하는 도시를 찾지 못했어요.
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
 
                                     {/* 날짜 */}
@@ -510,7 +815,16 @@ export default function TravelPage() {
                                             <input
                                                 type="date"
                                                 value={startDate}
-                                                onChange={(e) => setStartDate(e.target.value)}
+                                                onChange={(e) => {
+                                                    const value = e.target.value;
+
+                                                    setStartDate(value);
+
+                                                    // 기존 종료일이 새 시작일보다 빠르면 초기화
+                                                    if (endDate && value > endDate) {
+                                                        setEndDate("");
+                                                    }
+                                                }}
                                                 min={tripType === "upcoming" ? new Date().toISOString().split("T")[0] : undefined}
                                                 max={
                                                     tripType === "completed"
@@ -524,13 +838,17 @@ export default function TravelPage() {
                                                 type="date"
                                                 value={endDate}
                                                 onChange={(e) => setEndDate(e.target.value)}
-                                                min={tripType === "upcoming" ? new Date().toISOString().split("T")[0] : undefined}
+                                                min={
+                                                    startDate ||
+                                                    (tripType === "upcoming" ? new Date().toISOString().split("T")[0] : undefined)
+                                                }
                                                 max={
                                                     tripType === "completed"
                                                         ? new Date(Date.now() - 86400000).toISOString().split("T")[0]
                                                         : undefined
                                                 }
-                                                className="w-full rounded-2xl bg-gray-100 px-4 py-4 text-sm outline-none"
+                                                disabled={!startDate}
+                                                className="w-full rounded-2xl bg-gray-100 px-4 py-4 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-50"
                                             />
                                         </div>
                                     </div>
@@ -551,20 +869,22 @@ export default function TravelPage() {
                                     </div>
 
                                     {/* 예산 */}
-                                    <div>
-                                        <p className="text-sm font-medium text-gray-700">여행 예산</p>
+                                    {tripType === "upcoming" && (
+                                        <div>
+                                            <p className="text-sm font-medium text-gray-700">여행 예산</p>
 
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            value={budget}
-                                            onChange={(e) => {
-                                                setBudget(e.target.value.replace(/^0+(?=\d)/, ""));
-                                            }}
-                                            placeholder="예: 2000"
-                                            className="mt-2 w-full rounded-2xl bg-gray-100 px-4 py-4 text-sm outline-none"
-                                        />
-                                    </div>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                value={budget}
+                                                onChange={(e) => {
+                                                    setBudget(e.target.value.replace(/^0+(?=\d)/, ""));
+                                                }}
+                                                placeholder="예: 2000"
+                                                className="mt-2 w-full rounded-2xl bg-gray-100 px-4 py-4 text-sm outline-none"
+                                            />
+                                        </div>
+                                    )}
 
                                     {/* 평점 */}
                                     {tripType === "completed" && (
@@ -572,35 +892,50 @@ export default function TravelPage() {
                                             <p className="text-sm font-medium text-gray-700">여행 평점</p>
 
                                             <div className="mt-3 flex items-center gap-1">
-                                                <div className="flex items-center gap-2">
+                                                <div className="flex items-center">
                                                     {[1, 2, 3, 4, 5].map((star) => {
                                                         const isFull = rating >= star;
                                                         const isHalf = rating === star - 0.5;
 
                                                         return (
-                                                            <div key={star} className="relative h-9 w-9">
+                                                            <div key={star} className="relative h-8 w-8">
+                                                                {/* 기본 별 */}
                                                                 <Star
-                                                                    size={30}
+                                                                    size={25}
                                                                     strokeWidth={1.7}
-                                                                    className="absolute inset-0 text-gray-200"
+                                                                    className="absolute left-0 top-0 text-gray-200"
                                                                 />
 
-                                                                {isHalf && (
-                                                                    <div className="absolute inset-0 w-1/2 overflow-hidden">
-                                                                        <Star
-                                                                            size={30}
-                                                                            strokeWidth={1.7}
-                                                                            className="fill-gray-900 text-gray-900"
-                                                                        />
-                                                                    </div>
-                                                                )}
-
+                                                                {/* 꽉 찬 별 */}
                                                                 {isFull && (
                                                                     <Star
-                                                                        size={30}
+                                                                        size={25}
                                                                         strokeWidth={1.7}
-                                                                        className="absolute inset-0 fill-gray-900 text-gray-900"
+                                                                        className="absolute left-0 top-0 fill-gray-900 text-gray-900"
                                                                     />
+                                                                )}
+
+                                                                {/* 0.5 별 */}
+                                                                {isHalf && (
+                                                                    <svg
+                                                                        className="absolute left-0 top-0"
+                                                                        width="25"
+                                                                        height="25"
+                                                                        viewBox="0 0 24 24"
+                                                                    >
+                                                                        <defs>
+                                                                            <clipPath id={`half-star-${star}`}>
+                                                                                <rect x="0" y="0" width="12" height="24" />
+                                                                            </clipPath>
+                                                                        </defs>
+
+                                                                        <Star
+                                                                            size={25}
+                                                                            strokeWidth={1.7}
+                                                                            className="fill-gray-900 text-gray-900"
+                                                                            clipPath={`url(#half-star-${star})`}
+                                                                        />
+                                                                    </svg>
                                                                 )}
 
                                                                 <button
@@ -635,6 +970,7 @@ export default function TravelPage() {
                                                     formRef.current.scrollTop = 0;
                                                 }
 
+                                                resetTripForm();
                                                 setAddStep("type");
                                             }}
                                             className="flex-1 rounded-2xl border border-gray-200 py-4 text-sm font-medium text-gray-700"
@@ -644,6 +980,44 @@ export default function TravelPage() {
 
                                         <button
                                             type="button"
+                                            onClick={() => {
+                                                if (!city || !country || !countryCode || !startDate || !endDate) {
+                                                    alert("위치와 여행 정보를 모두 입력해주세요.");
+                                                    return;
+                                                }
+
+                                                if (new Date(endDate) < new Date(startDate)) {
+                                                    alert("여행 종료일은 시작일보다 빠를 수 없어요.");
+                                                    return;
+                                                }
+
+                                                const newTrip: SavedTrip = {
+                                                    id: Date.now(),
+                                                    tripType,
+                                                    title,
+                                                    city,
+                                                    country,
+                                                    countryCode,
+                                                    startDate,
+                                                    endDate,
+                                                    people: Number(people) || 1,
+                                                    ...(tripType === "upcoming" ? { budget: Number(budget) || 0 } : {}), // 예정된 여행만 budget을 저장하고, 다녀온 여행에는 budget: 0이 억지로 들어가지 않
+                                                    rating: tripType === "completed" ? rating : 0,
+                                                };
+
+                                                const existingTrips: SavedTrip[] = JSON.parse(
+                                                    localStorage.getItem("chagok-trips") || "[]",
+                                                );
+
+                                                const updatedTrips = [...existingTrips, newTrip];
+
+                                                localStorage.setItem("chagok-trips", JSON.stringify(updatedTrips));
+
+                                                resetTripForm();
+                                                setAddStep("type");
+                                                setSavedTrip(newTrip);
+                                                setIsAddModalOpen(false);
+                                            }}
                                             className="flex-1 rounded-2xl bg-black py-4 text-sm font-medium text-white"
                                         >
                                             저장

@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 
 export const metadata = {
     title: "차곡",
-    description: "생활비와 급여, 스케줄을 관리하는 앱",
+    description: "생활비와 급여, 스케줄 관리 앱",
     manifest: "/manifest.json",
 };
 
@@ -24,11 +24,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     return (
         <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
             <body className="min-h-full flex flex-col">
-                <main className="pb-24">
-                    {children}
-                </main>
+                <main className="min-h-screen bg-gray-50 px-5 pt-8 pb-30">{children}</main>
                 <ServiceWorkerRegister />
-
                 <BottomNav />
             </body>
         </html>

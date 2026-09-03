@@ -841,11 +841,9 @@ export default function SchedulePage() {
 
     if (isSchedulesLoading) {
         return (
-            <main className="min-h-screen bg-gray-50 px-5 py-8">
-                <div className="mx-auto max-w-md">
-                    <p className="text-sm text-gray-400">근무 기록을 불러오는 중...</p>
-                </div>
-            </main>
+            <div className="mx-auto max-w-md">
+                <p className="text-sm text-gray-400">근무 기록을 불러오는 중...</p>
+            </div>
         );
     }
 
@@ -856,602 +854,631 @@ export default function SchedulePage() {
      */
 
     return (
-        <main className="min-h-screen bg-gray-50 px-5 py-8">
-            <div className="mx-auto max-w-md pb-24">
-                {/* Header */}
+        <div className="mx-auto max-w-md">
+            {/* Header */}
 
-                <header>
-                    <p className="text-sm text-gray-500">차곡</p>
+            <header>
+                <p className="text-sm text-gray-500">차곡</p>
 
-                    <div className="mt-2 flex items-center justify-between">
-                        <h1 className="text-3xl font-bold">근무 관리</h1>
+                <div className="mt-2 flex items-center justify-between">
+                    <h1 className="text-3xl font-bold">근무 관리</h1>
 
-                        <Link
-                            href="/salary/settings"
-                            className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-gray-500 shadow-sm"
-                            aria-label="급여 설정"
-                        >
-                            ⚙
-                        </Link>
-                    </div>
-
-                    <p className="mt-2 text-sm text-gray-500">근무 일정을 등록하고 예상 급여를 확인해보세요.</p>
-                </header>
-
-                {latestPayHistory && !latestPayHistory.isConfirmed && (
-                    <button
-                        type="button"
-                        onClick={() => router.push("/salary/pay-history")}
-                        className="mt-5 flex w-full items-center justify-between rounded-2xl bg-black px-4 py-4 text-left text-white shadow-sm transition hover:shadow-md"
+                    <Link
+                        href="/salary/settings"
+                        className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-gray-500 shadow-sm"
+                        aria-label="급여 설정"
                     >
-                        <div>
-                            <p className="text-xs text-gray-400">급여 확인</p>
+                        ⚙
+                    </Link>
+                </div>
 
-                            <p className="mt-1 text-sm font-semibold">지난번에 이만큼 받으셨나요?</p>
+                <p className="mt-2 text-sm text-gray-500">근무 일정을 등록하고 예상 급여를 확인해보세요.</p>
+            </header>
 
-                            <p className="mt-1 text-lg font-bold">${latestPayHistory.totalIncome.toFixed(2)}</p>
-                        </div>
+            {latestPayHistory && !latestPayHistory.isConfirmed && (
+                <button
+                    type="button"
+                    onClick={() => router.push("/salary/pay-history")}
+                    className="mt-5 flex w-full items-center justify-between rounded-2xl bg-black px-4 py-4 text-left text-white shadow-sm transition hover:shadow-md"
+                >
+                    <div>
+                        <p className="text-xs text-gray-400">급여 확인</p>
 
-                        <span className="ml-4 shrink-0 text-xs text-gray-400">확인하기 →</span>
-                    </button>
-                )}
+                        <p className="mt-1 text-sm font-semibold">지난번에 이만큼 받으셨나요?</p>
 
-                {/* Pay Period Notice */}
-                {currentPayPeriod && (
-                    <section className="mt-5 rounded-3xl bg-white px-5 py-4 shadow-sm">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-xs text-gray-400">현재 급여 기간</p>
-
-                                <p className="mt-1 text-sm font-semibold">
-                                    {formatDisplayDate(currentPayPeriod.startDate)}
-                                    {" ~ "}
-                                    {formatDisplayDate(currentPayPeriod.endDate)}
-                                </p>
-                            </div>
-
-                            <div className="text-right">
-                                <p className="text-xs text-gray-400">급여일</p>
-
-                                <p className="mt-1 text-sm font-semibold">{formatDisplayDate(currentPayPeriod.payDate)}</p>
-                            </div>
-                        </div>
-                    </section>
-                )}
-
-                {/* Calendar */}
-
-                <section className="mt-5 rounded-3xl bg-white p-5 shadow-sm">
-                    <div className="mb-5 flex items-center justify-between">
-                        <button
-                            onClick={() => setCurrentDate(new Date(year, month - 1, 1))}
-                            className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100"
-                        >
-                            ‹
-                        </button>
-
-                        <h2 className="text-lg font-semibold">
-                            {year}년 {month + 1}월
-                        </h2>
-
-                        <button
-                            onClick={() => setCurrentDate(new Date(year, month + 1, 1))}
-                            className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100"
-                        >
-                            ›
-                        </button>
+                        <p className="mt-1 text-lg font-bold">${latestPayHistory.totalIncome.toFixed(2)}</p>
                     </div>
 
-                    <div className="mb-2 grid grid-cols-7 text-center text-xs text-gray-400">
-                        {WEEK_DAYS.map((day) => (
-                            <div key={day}>{day}</div>
-                        ))}
-                    </div>
+                    <span className="ml-4 shrink-0 text-xs text-gray-400">확인하기 →</span>
+                </button>
+            )}
 
-                    <div className="grid grid-cols-7 gap-y-2">
-                        {calendarDays.map((day, index) => {
-                            if (day === null) {
-                                return <div key={index} />;
-                            }
-
-                            const date = formatDate(new Date(year, month, day));
-
-                            const holiday = holidays.find((item) => item.date === date);
-
-                            const daySchedules = schedules.filter((schedule) => {
-                                return schedule.date.slice(0, 10) === date;
-                            });
-
-                            const hasSchedule = daySchedules.length > 0;
-
-                            const isPayPeriodDay = currentPayPeriod
-                                ? date >= currentPayPeriod.startDate && date <= currentPayPeriod.endDate
-                                : false;
-
-                            const isPayDate = currentPayPeriod ? date === currentPayPeriod.payDate : false;
-
-                            return (
-                                <div
-                                    key={date}
-                                    className={`relative flex h-16 flex-col items-center ${
-                                        isPayPeriodDay ? "rounded-xl bg-gray-100" : ""
-                                    }`}
-                                >
-                                    <button
-                                        onClick={() => (hasSchedule ? openEditModal(daySchedules[0]) : openAddModal(date))}
-                                        className="flex h-12 w-full flex-col items-center justify-center rounded-xl"
-                                    >
-                                        <span
-                                            className={
-                                                hasSchedule
-                                                    ? "flex h-8 w-8 items-center justify-center rounded-full bg-black text-sm font-medium text-white"
-                                                    : holiday
-                                                      ? "text-sm font-semibold text-red-500"
-                                                      : "text-sm"
-                                            }
-                                        >
-                                            {day}
-                                        </span>
-
-                                        {hasSchedule && !isPayDate && !holiday && (
-                                            <span className="absolute bottom-1 h-1 w-1 rounded-full bg-black" />
-                                        )}
-
-                                        {holiday && (
-                                            <span className="absolute bottom-0 max-w-full truncate px-1 text-[8px] font-medium text-red-500">
-                                                {holiday.name}
-                                            </span>
-                                        )}
-
-                                        {isPayDate && (
-                                            <span className="absolute bottom-0 text-[8px] font-medium text-gray-500">급여일</span>
-                                        )}
-                                    </button>
-                                </div>
-                            );
-                        })}
-                    </div>
-
-                    <div className="mt-4 flex items-center gap-4 text-xs text-gray-400">
-                        <div className="flex items-center gap-2">
-                            <span className="h-3 w-3 rounded bg-gray-100" />
-                            급여 기간
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                            <span className="h-3 w-3 rounded-full bg-black" />
-                            근무 등록
-                        </div>
-                    </div>
-                </section>
-
-                {/* This Month Schedule List */}
-
-                <section className="mt-5 rounded-3xl bg-white p-6 shadow-sm">
+            {/* Pay Period Notice */}
+            {currentPayPeriod && (
+                <section className="mt-5 rounded-3xl bg-white px-5 py-4 shadow-sm">
                     <div className="flex items-center justify-between">
-                        <h2 className="text-lg font-semibold">이번 달 근무</h2>
-
-                        <span className="text-sm text-gray-400">{currentMonthSchedules.length}회</span>
-                    </div>
-
-                    {currentMonthSchedules.length === 0 ? (
-                        <p className="mt-5 text-sm text-gray-400">아직 등록된 근무가 없어요.</p>
-                    ) : (
-                        <>
-                            <div className="mt-4 space-y-3">
-                                {currentMonthSchedules
-                                    .slice(0, showAllSchedules ? currentMonthSchedules.length : 3)
-                                    .map((schedule) => {
-                                        const hours = calculateHours(
-                                            schedule.startTime,
-                                            schedule.endTime,
-                                            schedule.hasBreak ? schedule.breakMinutes : 0,
-                                        );
-
-                                        const basePay = hours * hourlyWage;
-
-                                        const scheduleDate = schedule.date.slice(0, 10);
-
-                                        const holiday = isHoliday(scheduleDate, holidays);
-
-                                        const premiumPay = holiday ? basePay * 0.5 : 0;
-
-                                        const totalPay = basePay + premiumPay;
-
-                                        return (
-                                            <button
-                                                key={schedule.id}
-                                                onClick={() => openEditModal(schedule)}
-                                                className="w-full rounded-2xl bg-gray-50 p-4 text-left"
-                                            >
-                                                <div className="flex items-center justify-between">
-                                                    <div>
-                                                        <div className="flex items-center gap-2">
-                                                            <p className={`font-semibold ${holiday ? "text-red-500" : ""}`}>
-                                                                {formatDisplayDate(schedule.date)}
-                                                            </p>
-
-                                                            {holiday && (
-                                                                <span className="text-[10px] font-medium text-red-400">
-                                                                    {holiday.name}
-                                                                </span>
-                                                            )}
-                                                        </div>
-
-                                                        <p className="mt-1 text-sm text-gray-500">
-                                                            {schedule.startTime.slice(0, 5)}
-                                                            {" ~ "}
-                                                            {schedule.endTime.slice(0, 5)}
-                                                        </p>
-                                                    </div>
-
-                                                    <div className="text-right">
-                                                        {salarySettings?.payType === "hourly" ? (
-                                                            <>
-                                                                <p className="font-semibold">${totalPay.toFixed(2)}</p>
-
-                                                                <p className="mt-1 text-xs text-gray-400">
-                                                                    {hours.toFixed(1)}
-                                                                    시간
-                                                                </p>
-                                                            </>
-                                                        ) : salarySettings?.payType === "salary" ? (
-                                                            <>
-                                                                <p className="font-semibold">월급</p>
-
-                                                                <p className="mt-1 text-xs text-gray-400">
-                                                                    {hours.toFixed(1)}
-                                                                    시간
-                                                                </p>
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <p className="font-semibold">-</p>
-
-                                                                <p className="mt-1 text-xs text-gray-400">
-                                                                    {hours.toFixed(1)}
-                                                                    시간
-                                                                </p>
-                                                            </>
-                                                        )}
-                                                    </div>
-                                                </div>
-
-                                                <div className="mt-3 flex gap-2">
-                                                    {schedule.alarmEnabled && (
-                                                        <span className="rounded-full bg-white px-3 py-1 text-xs text-gray-500">
-                                                            🔔 {schedule.alarmMinutesBefore}분 전
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </button>
-                                        );
-                                    })}
-                            </div>
-
-                            {currentMonthSchedules.length > 3 && (
-                                <button
-                                    type="button"
-                                    onClick={() => setShowAllSchedules((prev) => !prev)}
-                                    className="mt-4 w-full rounded-2xl bg-gray-100 py-3 text-sm font-medium text-gray-600"
-                                >
-                                    {showAllSchedules ? "접기" : `전체 ${currentMonthSchedules.length}개 보기`}
-                                </button>
-                            )}
-                        </>
-                    )}
-                </section>
-
-                {/* Add / Edit Modal */}
-
-                {isAddModalOpen && (
-                    <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40 p-5">
-                        <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl bg-white p-6 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-                            {/* Modal Header */}
-                            <div className="flex items-start justify-between">
-                                <div className="relative">
-                                    <h2 className="text-xl font-bold">{editingSchedule ? "근무 수정" : "근무 추가"}</h2>
-
-                                    <div className="mt-1 flex items-center gap-2">
-                                        <p
-                                            className={`text-sm ${
-                                                selectedDate && isHoliday(selectedDate.slice(0, 10), holidays)
-                                                    ? "text-red-500"
-                                                    : "text-gray-400"
-                                            }`}
-                                        >
-                                            {selectedDate && formatDisplayDate(selectedDate)}
-                                        </p>
-
-                                        {/* Holiday Notice */}
-                                        {selectedDate && isHoliday(selectedDate.slice(0, 10), holidays) && (
-                                            <div className="flex items-center gap-1 rounded-lg bg-red-50 px-2 py-0.5">
-                                                <span className="text-[9px]">🇨🇦</span>
-
-                                                <p className="max-w-[100px] truncate text-[9px] font-medium text-red-500">
-                                                    {isHoliday(selectedDate.slice(0, 10), holidays)?.name}
-                                                </p>
-
-                                                <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[8px] font-semibold text-red-500">
-                                                    PREMIUM
-                                                </span>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-
-                                <button
-                                    onClick={() => {
-                                        setIsAddModalOpen(false);
-                                        setEditingSchedule(null);
-                                        setShowHolidayInfo(false);
-                                    }}
-                                    className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-500"
-                                >
-                                    ×
-                                </button>
-                            </div>
-                            {/* Time */}
-                            <div className="mt-6 grid grid-cols-2 gap-3">
-                                <div>
-                                    <p className="mb-2 text-sm text-gray-500">시작</p>
-
-                                    <input
-                                        type="time"
-                                        value={startTime}
-                                        onChange={(e) => setStartTime(e.target.value)}
-                                        className="w-full rounded-2xl bg-gray-100 px-4 py-4 outline-none"
-                                    />
-                                </div>
-
-                                <div>
-                                    <p className="mb-2 text-sm text-gray-500">종료</p>
-
-                                    <input
-                                        type="time"
-                                        value={endTime}
-                                        onChange={(e) => setEndTime(e.target.value)}
-                                        className="w-full rounded-2xl bg-gray-100 px-4 py-4 outline-none"
-                                    />
-                                </div>
-                            </div>
-                            {/* Break */}
-                            <div className="mt-5 rounded-2xl bg-gray-50 p-4">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <p className="font-medium">☕ 휴게시간</p>
-
-                                        <p className="mt-1 text-xs text-gray-400">이번 근무에 휴게시간이 있었나요?</p>
-                                    </div>
-
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setHasBreak((prev) => {
-                                                const next = !prev;
-
-                                                if (!next) {
-                                                    setBreakMinutes("0");
-                                                }
-
-                                                return next;
-                                            });
-                                        }}
-                                        className={`relative h-7 w-12 rounded-full transition ${
-                                            hasBreak ? "bg-black" : "bg-gray-300"
-                                        }`}
-                                    >
-                                        <span
-                                            className={`absolute top-1 h-5 w-5 rounded-full bg-white transition ${
-                                                hasBreak ? "left-6" : "left-1"
-                                            }`}
-                                        />
-                                    </button>
-                                </div>
-
-                                {hasBreak && (
-                                    <div className="mt-4">
-                                        <p className="mb-2 text-sm text-gray-500">휴게시간은 몇 분이었나요?</p>
-
-                                        <div className="flex items-center rounded-2xl bg-white px-4">
-                                            <input
-                                                type="number"
-                                                min={0}
-                                                value={breakMinutes}
-                                                onChange={(e) => {
-                                                    const value = e.target.value;
-
-                                                    if (value === "") {
-                                                        setBreakMinutes("");
-                                                        return;
-                                                    }
-
-                                                    setBreakMinutes(value.replace(/^0+(?=\d)/, ""));
-                                                }}
-                                                className="w-full bg-transparent px-2 py-4 outline-none"
-                                                placeholder="30"
-                                            />
-
-                                            <span className="shrink-0 text-sm text-gray-400">분</span>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                            {/* Hours Preview */}
-                            <div className="mt-4 rounded-2xl bg-gray-50 p-4">
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-gray-500">실제 근무시간</span>
-
-                                    <span className="font-semibold">
-                                        {calculateHours(startTime, endTime, hasBreak ? Number(breakMinutes) || 0 : 0).toFixed(2)}
-                                        시간
-                                    </span>
-                                </div>
-                            </div>
-                            {/* Alarm */}
-                            <div className="mt-5 rounded-2xl bg-gray-50 p-4">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <p className="font-medium">🔔 근무 알림</p>
-
-                                        <p className="mt-1 text-xs text-gray-400">근무 전에 미리 알려드려요.</p>
-                                    </div>
-
-                                    <button
-                                        type="button"
-                                        onClick={async () => {
-                                            if (!alarmEnabled) {
-                                                try {
-                                                    await subscribeToPush();
-                                                } catch (error) {
-                                                    console.error(error);
-
-                                                    alert(error instanceof Error ? error.message : "알림 설정에 실패했어요.");
-
-                                                    return;
-                                                }
-                                            }
-
-                                            setAlarmEnabled((prev) => !prev);
-                                        }}
-                                        className={`relative h-7 w-12 rounded-full transition ${
-                                            alarmEnabled ? "bg-black" : "bg-gray-300"
-                                        }`}
-                                    >
-                                        <span
-                                            className={`absolute top-1 h-5 w-5 rounded-full bg-white transition ${
-                                                alarmEnabled ? "left-6" : "left-1"
-                                            }`}
-                                        />
-                                    </button>
-                                </div>
-
-                                {alarmEnabled && (
-                                    <div className="mt-4">
-                                        <p className="mb-2 text-sm text-gray-500">몇 분 전에 알려드릴까요?</p>
-
-                                        <select
-                                            value={alarmMinutesBefore}
-                                            onChange={(e) => setAlarmMinutesBefore(Number(e.target.value))}
-                                            className="w-full rounded-2xl bg-white px-4 py-4 outline-none"
-                                        >
-                                            <option value={15}>15분 전</option>
-
-                                            <option value={30}>30분 전</option>
-
-                                            <option value={60}>1시간 전</option>
-
-                                            <option value={120}>2시간 전</option>
-
-                                            <option value={1440}>하루 전</option>
-                                        </select>
-                                    </div>
-                                )}
-                            </div>
-                            {/* Buttons */}
-                            <button
-                                onClick={handleSaveSchedule}
-                                className="mt-5 w-full rounded-2xl bg-black py-4 font-semibold text-white"
-                            >
-                                {editingSchedule ? "근무 수정" : "근무 등록"}
-                            </button>
-                            {editingSchedule && (
-                                <button
-                                    onClick={handleDeleteSchedule}
-                                    className="mt-3 w-full rounded-2xl bg-red-50 py-4 font-semibold text-red-500"
-                                >
-                                    근무 삭제
-                                </button>
-                            )}
-                            <button
-                                onClick={() => {
-                                    setIsAddModalOpen(false);
-                                    setEditingSchedule(null);
-                                }}
-                                className="mt-3 w-full py-3 text-sm text-gray-400"
-                            >
-                                취소
-                            </button>
-                        </div>
-                    </div>
-                )}
-
-                {/* Handle Break Modal */}
-                {isDefaultBreakConfirmOpen && (
-                    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-5">
-                        <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-xl">
-                            <p className="text-lg font-bold">휴게시간 설정이 변경됐어요.</p>
-
-                            <p className="mt-2 text-sm leading-6 text-gray-500">
-                                이번 근무에만 적용할까요, 아니면 앞으로 기본값으로 사용할까요?
-                            </p>
-
-                            <div className="mt-6 grid grid-cols-2 gap-3">
-                                <button
-                                    type="button"
-                                    onClick={useBreakOnce}
-                                    className="rounded-2xl bg-gray-100 py-4 text-sm font-semibold"
-                                >
-                                    이번 근무만
-                                </button>
-
-                                <button
-                                    type="button"
-                                    onClick={saveAsDefaultBreak}
-                                    className="rounded-2xl bg-black py-4 text-sm font-semibold text-white"
-                                >
-                                    기본값으로 변경
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* Pay Period Tips */}
-
-                {currentPayPeriod && salarySettings?.hasTips && (
-                    <section className="mt-5 rounded-3xl bg-white p-6 shadow-sm">
                         <div>
-                            <h2 className="text-lg font-semibold">이번 급여 기간 팁</h2>
+                            <p className="text-xs text-gray-400">현재 급여 기간</p>
 
-                            <p className="mt-1 text-sm text-gray-400">
+                            <p className="mt-1 text-sm font-semibold">
                                 {formatDisplayDate(currentPayPeriod.startDate)}
                                 {" ~ "}
                                 {formatDisplayDate(currentPayPeriod.endDate)}
                             </p>
                         </div>
 
-                        {salarySettings.tipType === "cash" && (
-                            <div className="mt-4">
-                                <p className="mb-2 text-sm text-gray-500">현금으로 받은 팁</p>
+                        <div className="text-right">
+                            <p className="text-xs text-gray-400">급여일</p>
 
-                                <div className="flex items-center rounded-2xl bg-gray-100 px-4">
-                                    <span className="text-gray-500">$</span>
+                            <p className="mt-1 text-sm font-semibold">{formatDisplayDate(currentPayPeriod.payDate)}</p>
+                        </div>
+                    </div>
+                </section>
+            )}
 
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        step="0.01"
-                                        value={cashTips}
-                                        onChange={(e) => {
-                                            const value = e.target.value;
+            {/* Calendar */}
 
-                                            if (value === "") {
-                                                setCashTips("");
-                                                return;
-                                            }
+            <section className="mt-5 rounded-3xl bg-white p-5 shadow-sm">
+                <div className="mb-5 flex items-center justify-between">
+                    <button
+                        onClick={() => setCurrentDate(new Date(year, month - 1, 1))}
+                        className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100"
+                    >
+                        ‹
+                    </button>
 
-                                            setCashTips(value.replace(/^0+(?=\d)/, ""));
-                                        }}
-                                        placeholder="0"
-                                        className="w-full bg-transparent px-2 py-4 outline-none"
-                                    />
+                    <h2 className="text-lg font-semibold">
+                        {year}년 {month + 1}월
+                    </h2>
+
+                    <button
+                        onClick={() => setCurrentDate(new Date(year, month + 1, 1))}
+                        className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100"
+                    >
+                        ›
+                    </button>
+                </div>
+
+                <div className="mb-2 grid grid-cols-7 text-center text-xs text-gray-400">
+                    {WEEK_DAYS.map((day) => (
+                        <div key={day}>{day}</div>
+                    ))}
+                </div>
+
+                <div className="grid grid-cols-7 gap-y-2">
+                    {calendarDays.map((day, index) => {
+                        if (day === null) {
+                            return <div key={index} />;
+                        }
+
+                        const date = formatDate(new Date(year, month, day));
+
+                        const holiday = holidays.find((item) => item.date === date);
+
+                        const daySchedules = schedules.filter((schedule) => {
+                            return schedule.date.slice(0, 10) === date;
+                        });
+
+                        const hasSchedule = daySchedules.length > 0;
+
+                        const isPayPeriodDay = currentPayPeriod
+                            ? date >= currentPayPeriod.startDate && date <= currentPayPeriod.endDate
+                            : false;
+
+                        const isPayDate = currentPayPeriod ? date === currentPayPeriod.payDate : false;
+
+                        return (
+                            <div
+                                key={date}
+                                className={`relative flex h-16 flex-col items-center ${
+                                    isPayPeriodDay ? "rounded-xl bg-gray-100" : ""
+                                }`}
+                            >
+                                <button
+                                    onClick={() => (hasSchedule ? openEditModal(daySchedules[0]) : openAddModal(date))}
+                                    className="flex h-12 w-full flex-col items-center justify-center rounded-xl"
+                                >
+                                    <span
+                                        className={
+                                            hasSchedule
+                                                ? "flex h-8 w-8 items-center justify-center rounded-full bg-black text-sm font-medium text-white"
+                                                : holiday
+                                                  ? "text-sm font-semibold text-red-500"
+                                                  : "text-sm"
+                                        }
+                                    >
+                                        {day}
+                                    </span>
+
+                                    {hasSchedule && !isPayDate && !holiday && (
+                                        <span className="absolute bottom-1 h-1 w-1 rounded-full bg-black" />
+                                    )}
+
+                                    {holiday && (
+                                        <span className="absolute bottom-0 max-w-full truncate px-1 text-[8px] font-medium text-red-500">
+                                            {holiday.name}
+                                        </span>
+                                    )}
+
+                                    {isPayDate && (
+                                        <span className="absolute bottom-0 text-[8px] font-medium text-gray-500">급여일</span>
+                                    )}
+                                </button>
+                            </div>
+                        );
+                    })}
+                </div>
+
+                <div className="mt-4 flex items-center gap-4 text-xs text-gray-400">
+                    <div className="flex items-center gap-2">
+                        <span className="h-3 w-3 rounded bg-gray-100" />
+                        급여 기간
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <span className="h-3 w-3 rounded-full bg-black" />
+                        근무 등록
+                    </div>
+                </div>
+            </section>
+
+            {/* This Month Schedule List */}
+
+            <section className="mt-5 rounded-3xl bg-white p-6 shadow-sm">
+                <div className="flex items-center justify-between">
+                    <h2 className="text-lg font-semibold">이번 달 근무</h2>
+
+                    <span className="text-sm text-gray-400">{currentMonthSchedules.length}회</span>
+                </div>
+
+                {currentMonthSchedules.length === 0 ? (
+                    <p className="mt-5 text-sm text-gray-400">아직 등록된 근무가 없어요.</p>
+                ) : (
+                    <>
+                        <div className="mt-4 space-y-3">
+                            {currentMonthSchedules
+                                .slice(0, showAllSchedules ? currentMonthSchedules.length : 3)
+                                .map((schedule) => {
+                                    const hours = calculateHours(
+                                        schedule.startTime,
+                                        schedule.endTime,
+                                        schedule.hasBreak ? schedule.breakMinutes : 0,
+                                    );
+
+                                    const basePay = hours * hourlyWage;
+
+                                    const scheduleDate = schedule.date.slice(0, 10);
+
+                                    const holiday = isHoliday(scheduleDate, holidays);
+
+                                    const premiumPay = holiday ? basePay * 0.5 : 0;
+
+                                    const totalPay = basePay + premiumPay;
+
+                                    return (
+                                        <button
+                                            key={schedule.id}
+                                            onClick={() => openEditModal(schedule)}
+                                            className="w-full rounded-2xl bg-gray-50 p-4 text-left"
+                                        >
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <div className="flex items-center gap-2">
+                                                        <p className={`font-semibold ${holiday ? "text-red-500" : ""}`}>
+                                                            {formatDisplayDate(schedule.date)}
+                                                        </p>
+
+                                                        {holiday && (
+                                                            <span className="text-[10px] font-medium text-red-400">
+                                                                {holiday.name}
+                                                            </span>
+                                                        )}
+                                                    </div>
+
+                                                    <p className="mt-1 text-sm text-gray-500">
+                                                        {schedule.startTime.slice(0, 5)}
+                                                        {" ~ "}
+                                                        {schedule.endTime.slice(0, 5)}
+                                                    </p>
+                                                </div>
+
+                                                <div className="text-right">
+                                                    {salarySettings?.payType === "hourly" ? (
+                                                        <>
+                                                            <p className="font-semibold">${totalPay.toFixed(2)}</p>
+
+                                                            <p className="mt-1 text-xs text-gray-400">
+                                                                {hours.toFixed(1)}
+                                                                시간
+                                                            </p>
+                                                        </>
+                                                    ) : salarySettings?.payType === "salary" ? (
+                                                        <>
+                                                            <p className="font-semibold">월급</p>
+
+                                                            <p className="mt-1 text-xs text-gray-400">
+                                                                {hours.toFixed(1)}
+                                                                시간
+                                                            </p>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <p className="font-semibold">-</p>
+
+                                                            <p className="mt-1 text-xs text-gray-400">
+                                                                {hours.toFixed(1)}
+                                                                시간
+                                                            </p>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            <div className="mt-3 flex gap-2">
+                                                {schedule.alarmEnabled && (
+                                                    <span className="rounded-full bg-white px-3 py-1 text-xs text-gray-500">
+                                                        🔔 {schedule.alarmMinutesBefore}분 전
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                        </div>
+
+                        {currentMonthSchedules.length > 3 && (
+                            <button
+                                type="button"
+                                onClick={() => setShowAllSchedules((prev) => !prev)}
+                                className="mt-4 w-full rounded-2xl bg-gray-100 py-3 text-sm font-medium text-gray-600"
+                            >
+                                {showAllSchedules ? "접기" : `전체 ${currentMonthSchedules.length}개 보기`}
+                            </button>
+                        )}
+                    </>
+                )}
+            </section>
+
+            {/* Add / Edit Modal */}
+
+            {isAddModalOpen && (
+                <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40 p-5">
+                    <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl bg-white p-6 scrollbar-hide">
+                        {/* Modal Header */}
+                        <div className="flex items-start justify-between">
+                            <div className="relative">
+                                <h2 className="text-xl font-bold">{editingSchedule ? "근무 수정" : "근무 추가"}</h2>
+
+                                <div className="mt-1 flex items-center gap-2">
+                                    <p
+                                        className={`text-sm ${
+                                            selectedDate && isHoliday(selectedDate.slice(0, 10), holidays)
+                                                ? "text-red-500"
+                                                : "text-gray-400"
+                                        }`}
+                                    >
+                                        {selectedDate && formatDisplayDate(selectedDate)}
+                                    </p>
+
+                                    {/* Holiday Notice */}
+                                    {selectedDate && isHoliday(selectedDate.slice(0, 10), holidays) && (
+                                        <div className="flex items-center gap-1 rounded-lg bg-red-50 px-2 py-0.5">
+                                            <span className="text-[9px]">🇨🇦</span>
+
+                                            <p className="max-w-[100px] truncate text-[9px] font-medium text-red-500">
+                                                {isHoliday(selectedDate.slice(0, 10), holidays)?.name}
+                                            </p>
+
+                                            <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[8px] font-semibold text-red-500">
+                                                PREMIUM
+                                            </span>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
-                        )}
 
-                        {salarySettings.tipType === "paycheque" && (
-                            <div className="mt-4">
+                            <button
+                                onClick={() => {
+                                    setIsAddModalOpen(false);
+                                    setEditingSchedule(null);
+                                    setShowHolidayInfo(false);
+                                }}
+                                className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-500"
+                            >
+                                ×
+                            </button>
+                        </div>
+                        {/* Time */}
+                        <div className="mt-6 grid grid-cols-2 gap-3">
+                            <div>
+                                <p className="mb-2 text-sm text-gray-500">시작</p>
+
+                                <input
+                                    type="time"
+                                    value={startTime}
+                                    onChange={(e) => setStartTime(e.target.value)}
+                                    className="w-full rounded-2xl bg-gray-100 px-4 py-4 outline-none"
+                                />
+                            </div>
+
+                            <div>
+                                <p className="mb-2 text-sm text-gray-500">종료</p>
+
+                                <input
+                                    type="time"
+                                    value={endTime}
+                                    onChange={(e) => setEndTime(e.target.value)}
+                                    className="w-full rounded-2xl bg-gray-100 px-4 py-4 outline-none"
+                                />
+                            </div>
+                        </div>
+                        {/* Break */}
+                        <div className="mt-5 rounded-2xl bg-gray-50 p-4">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="font-medium">☕ 휴게시간</p>
+
+                                    <p className="mt-1 text-xs text-gray-400">이번 근무에 휴게시간이 있었나요?</p>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setHasBreak((prev) => {
+                                            const next = !prev;
+
+                                            if (!next) {
+                                                setBreakMinutes("0");
+                                            }
+
+                                            return next;
+                                        });
+                                    }}
+                                    className={`relative h-7 w-12 rounded-full transition ${
+                                        hasBreak ? "bg-black" : "bg-gray-300"
+                                    }`}
+                                >
+                                    <span
+                                        className={`absolute top-1 h-5 w-5 rounded-full bg-white transition ${
+                                            hasBreak ? "left-6" : "left-1"
+                                        }`}
+                                    />
+                                </button>
+                            </div>
+
+                            {hasBreak && (
+                                <div className="mt-4">
+                                    <p className="mb-2 text-sm text-gray-500">휴게시간은 몇 분이었나요?</p>
+
+                                    <div className="flex items-center rounded-2xl bg-white px-4">
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            value={breakMinutes}
+                                            onChange={(e) => {
+                                                const value = e.target.value;
+
+                                                if (value === "") {
+                                                    setBreakMinutes("");
+                                                    return;
+                                                }
+
+                                                setBreakMinutes(value.replace(/^0+(?=\d)/, ""));
+                                            }}
+                                            className="w-full bg-transparent px-2 py-4 outline-none"
+                                            placeholder="30"
+                                        />
+
+                                        <span className="shrink-0 text-sm text-gray-400">분</span>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        {/* Hours Preview */}
+                        <div className="mt-4 rounded-2xl bg-gray-50 p-4">
+                            <div className="flex justify-between">
+                                <span className="text-sm text-gray-500">실제 근무시간</span>
+
+                                <span className="font-semibold">
+                                    {calculateHours(startTime, endTime, hasBreak ? Number(breakMinutes) || 0 : 0).toFixed(2)}
+                                    시간
+                                </span>
+                            </div>
+                        </div>
+                        {/* Alarm */}
+                        <div className="mt-5 rounded-2xl bg-gray-50 p-4">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="font-medium">🔔 근무 알림</p>
+
+                                    <p className="mt-1 text-xs text-gray-400">근무 전에 미리 알려드려요.</p>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={async () => {
+                                        if (!alarmEnabled) {
+                                            try {
+                                                await subscribeToPush();
+                                            } catch (error) {
+                                                console.error(error);
+
+                                                alert(error instanceof Error ? error.message : "알림 설정에 실패했어요.");
+
+                                                return;
+                                            }
+                                        }
+
+                                        setAlarmEnabled((prev) => !prev);
+                                    }}
+                                    className={`relative h-7 w-12 rounded-full transition ${
+                                        alarmEnabled ? "bg-black" : "bg-gray-300"
+                                    }`}
+                                >
+                                    <span
+                                        className={`absolute top-1 h-5 w-5 rounded-full bg-white transition ${
+                                            alarmEnabled ? "left-6" : "left-1"
+                                        }`}
+                                    />
+                                </button>
+                            </div>
+
+                            {alarmEnabled && (
+                                <div className="mt-4">
+                                    <p className="mb-2 text-sm text-gray-500">몇 분 전에 알려드릴까요?</p>
+
+                                    <select
+                                        value={alarmMinutesBefore}
+                                        onChange={(e) => setAlarmMinutesBefore(Number(e.target.value))}
+                                        className="w-full rounded-2xl bg-white px-4 py-4 outline-none"
+                                    >
+                                        <option value={15}>15분 전</option>
+
+                                        <option value={30}>30분 전</option>
+
+                                        <option value={60}>1시간 전</option>
+
+                                        <option value={120}>2시간 전</option>
+
+                                        <option value={1440}>하루 전</option>
+                                    </select>
+                                </div>
+                            )}
+                        </div>
+                        {/* Buttons */}
+                        <button
+                            onClick={handleSaveSchedule}
+                            className="mt-5 w-full rounded-2xl bg-black py-4 font-semibold text-white"
+                        >
+                            {editingSchedule ? "근무 수정" : "근무 등록"}
+                        </button>
+                        {editingSchedule && (
+                            <button
+                                onClick={handleDeleteSchedule}
+                                className="mt-3 w-full rounded-2xl bg-red-50 py-4 font-semibold text-red-500"
+                            >
+                                근무 삭제
+                            </button>
+                        )}
+                        <button
+                            onClick={() => {
+                                setIsAddModalOpen(false);
+                                setEditingSchedule(null);
+                            }}
+                            className="mt-3 w-full py-3 text-sm text-gray-400"
+                        >
+                            취소
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Handle Break Modal */}
+            {isDefaultBreakConfirmOpen && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-5">
+                    <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-xl">
+                        <p className="text-lg font-bold">휴게시간 설정이 변경됐어요.</p>
+
+                        <p className="mt-2 text-sm leading-6 text-gray-500">
+                            이번 근무에만 적용할까요, 아니면 앞으로 기본값으로 사용할까요?
+                        </p>
+
+                        <div className="mt-6 grid grid-cols-2 gap-3">
+                            <button
+                                type="button"
+                                onClick={useBreakOnce}
+                                className="rounded-2xl bg-gray-100 py-4 text-sm font-semibold"
+                            >
+                                이번 근무만
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={saveAsDefaultBreak}
+                                className="rounded-2xl bg-black py-4 text-sm font-semibold text-white"
+                            >
+                                기본값으로 변경
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Pay Period Tips */}
+
+            {currentPayPeriod && salarySettings?.hasTips && (
+                <section className="mt-5 rounded-3xl bg-white p-6 shadow-sm">
+                    <div>
+                        <h2 className="text-lg font-semibold">이번 급여 기간 팁</h2>
+
+                        <p className="mt-1 text-sm text-gray-400">
+                            {formatDisplayDate(currentPayPeriod.startDate)}
+                            {" ~ "}
+                            {formatDisplayDate(currentPayPeriod.endDate)}
+                        </p>
+                    </div>
+
+                    {salarySettings.tipType === "cash" && (
+                        <div className="mt-4">
+                            <p className="mb-2 text-sm text-gray-500">현금으로 받은 팁</p>
+
+                            <div className="flex items-center rounded-2xl bg-gray-100 px-4">
+                                <span className="text-gray-500">$</span>
+
+                                <input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={cashTips}
+                                    onChange={(e) => {
+                                        const value = e.target.value;
+
+                                        if (value === "") {
+                                            setCashTips("");
+                                            return;
+                                        }
+
+                                        setCashTips(value.replace(/^0+(?=\d)/, ""));
+                                    }}
+                                    placeholder="0"
+                                    className="w-full bg-transparent px-2 py-4 outline-none"
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    {salarySettings.tipType === "paycheque" && (
+                        <div className="mt-4">
+                            <p className="mb-2 text-sm text-gray-500">급여에 포함되는 팁</p>
+
+                            <div className="flex items-center rounded-2xl bg-gray-100 px-4">
+                                <span className="text-gray-500">$</span>
+
+                                <input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={paychequeTips}
+                                    onChange={(e) => {
+                                        const value = e.target.value;
+
+                                        if (value === "") {
+                                            setPaychequeTips("");
+                                            return;
+                                        }
+
+                                        setPaychequeTips(value.replace(/^0+(?=\d)/, ""));
+                                    }}
+                                    placeholder="0"
+                                    className="w-full bg-transparent px-2 py-4 outline-none"
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    {salarySettings.tipType === "both" && (
+                        <div className="mt-4 space-y-4">
+                            <div>
                                 <p className="mb-2 text-sm text-gray-500">급여에 포함되는 팁</p>
 
                                 <div className="flex items-center rounded-2xl bg-gray-100 px-4">
@@ -1477,278 +1504,244 @@ export default function SchedulePage() {
                                     />
                                 </div>
                             </div>
-                        )}
 
-                        {salarySettings.tipType === "both" && (
-                            <div className="mt-4 space-y-4">
-                                <div>
-                                    <p className="mb-2 text-sm text-gray-500">급여에 포함되는 팁</p>
+                            <div>
+                                <p className="mb-2 text-sm text-gray-500">현금으로 받은 팁</p>
 
-                                    <div className="flex items-center rounded-2xl bg-gray-100 px-4">
-                                        <span className="text-gray-500">$</span>
+                                <div className="flex items-center rounded-2xl bg-gray-100 px-4">
+                                    <span className="text-gray-500">$</span>
 
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            step="0.01"
-                                            value={paychequeTips}
-                                            onChange={(e) => {
-                                                const value = e.target.value;
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        value={cashTips}
+                                        onChange={(e) => {
+                                            const value = e.target.value;
 
-                                                if (value === "") {
-                                                    setPaychequeTips("");
-                                                    return;
-                                                }
+                                            if (value === "") {
+                                                setCashTips("");
+                                                return;
+                                            }
 
-                                                setPaychequeTips(value.replace(/^0+(?=\d)/, ""));
-                                            }}
-                                            placeholder="0"
-                                            className="w-full bg-transparent px-2 py-4 outline-none"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <p className="mb-2 text-sm text-gray-500">현금으로 받은 팁</p>
-
-                                    <div className="flex items-center rounded-2xl bg-gray-100 px-4">
-                                        <span className="text-gray-500">$</span>
-
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            step="0.01"
-                                            value={cashTips}
-                                            onChange={(e) => {
-                                                const value = e.target.value;
-
-                                                if (value === "") {
-                                                    setCashTips("");
-                                                    return;
-                                                }
-
-                                                setCashTips(value.replace(/^0+(?=\d)/, ""));
-                                            }}
-                                            placeholder="0"
-                                            className="w-full bg-transparent px-2 py-4 outline-none"
-                                        />
-                                    </div>
+                                            setCashTips(value.replace(/^0+(?=\d)/, ""));
+                                        }}
+                                        placeholder="0"
+                                        className="w-full bg-transparent px-2 py-4 outline-none"
+                                    />
                                 </div>
                             </div>
-                        )}
+                        </div>
+                    )}
 
-                        <button
-                            type="button"
-                            onClick={async () => {
-                                if (!currentPayPeriod) {
-                                    return;
+                    <button
+                        type="button"
+                        onClick={async () => {
+                            if (!currentPayPeriod) {
+                                return;
+                            }
+
+                            const newTips: PayPeriodTips = {
+                                payPeriodStart: currentPayPeriod.startDate,
+                                payPeriodEnd: currentPayPeriod.endDate,
+                                cashTips: Math.max(0, Number(cashTips) || 0),
+                                paychequeTips: Math.max(0, Number(paychequeTips) || 0),
+                            };
+
+                            try {
+                                const response = await fetch("/api/pay-period-tips", {
+                                    method: "PUT",
+                                    headers: {
+                                        "Content-Type": "application/json",
+                                    },
+                                    body: JSON.stringify(newTips),
+                                });
+
+                                if (!response.ok) {
+                                    throw new Error("팁 저장 실패");
                                 }
 
-                                const newTips: PayPeriodTips = {
-                                    payPeriodStart: currentPayPeriod.startDate,
-                                    payPeriodEnd: currentPayPeriod.endDate,
-                                    cashTips: Math.max(0, Number(cashTips) || 0),
-                                    paychequeTips: Math.max(0, Number(paychequeTips) || 0),
-                                };
+                                const saved: PayPeriodTips = await response.json();
 
-                                try {
-                                    const response = await fetch("/api/pay-period-tips", {
-                                        method: "PUT",
-                                        headers: {
-                                            "Content-Type": "application/json",
-                                        },
-                                        body: JSON.stringify(newTips),
-                                    });
+                                setSavedTips(saved);
 
-                                    if (!response.ok) {
-                                        throw new Error("팁 저장 실패");
-                                    }
+                                setCashTips(saved.cashTips > 0 ? String(saved.cashTips) : "");
 
-                                    const saved: PayPeriodTips = await response.json();
+                                setPaychequeTips(saved.paychequeTips > 0 ? String(saved.paychequeTips) : "");
 
-                                    setSavedTips(saved);
+                                alert("팁이 저장됐어요!");
+                            } catch (error) {
+                                console.error(error);
+                                alert("팁 저장에 실패했어요.");
+                            }
+                        }}
+                        className="mt-4 w-full rounded-2xl bg-black py-4 text-sm font-semibold text-white"
+                    >
+                        팁 저장
+                    </button>
+                </section>
+            )}
 
-                                    setCashTips(saved.cashTips > 0 ? String(saved.cashTips) : "");
+            {/* Expected Salary */}
 
-                                    setPaychequeTips(saved.paychequeTips > 0 ? String(saved.paychequeTips) : "");
+            <section className="mt-6 rounded-3xl bg-black p-6 text-white shadow-sm">
+                <p className="text-sm text-gray-400">예상 급여</p>
 
-                                    alert("팁이 저장됐어요!");
-                                } catch (error) {
-                                    console.error(error);
-                                    alert("팁 저장에 실패했어요.");
-                                }
-                            }}
-                            className="mt-4 w-full rounded-2xl bg-black py-4 text-sm font-semibold text-white"
-                        >
-                            팁 저장
-                        </button>
-                    </section>
-                )}
+                <div className="mt-2 flex items-start gap-2">
+                    <p className="text-4xl font-bold">${estimatedNetPay.toFixed(2)}</p>
 
-                {/* Expected Salary */}
-
-                <section className="mt-6 rounded-3xl bg-black p-6 text-white shadow-sm">
-                    <p className="text-sm text-gray-400">예상 급여</p>
-
-                    <div className="mt-2 flex items-start gap-2">
-                        <p className="text-4xl font-bold">${estimatedNetPay.toFixed(2)}</p>
-
-                        {payDifference !== null && payChangePercent !== null && (
-                            <div className={`mb-1 text-xs font-medium ${payDifference >= 0 ? "text-green-400" : "text-red-400"}`}>
-                                {payDifference >= 0 ? "↑" : "↓"} {Math.abs(payChangePercent).toFixed(1)}%
-                                <span className="ml-1">
-                                    {payDifference >= 0 ? "+" : "-"}${Math.abs(payDifference).toFixed(2)}
-                                </span>
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="mt-6 space-y-3 text-sm">
-                        {/* 근무시간 */}
-                        <div className="flex justify-between">
-                            <span className="text-gray-400">근무시간</span>
-
-                            <span>{periodHours.toFixed(2)}시간</span>
-                        </div>
-
-                        {/* 기본 급여 */}
-                        <div className="flex justify-between">
-                            <span className="text-gray-400">기본 급여</span>
-
-                            <span>${estimatedBasePay.toFixed(2)}</span>
-                        </div>
-
-                        {/* 급여 포함 팁 */}
-                        {salarySettings?.hasTips &&
-                            (salarySettings.tipType === "paycheque" || salarySettings.tipType === "both") && (
-                                <div className="flex justify-between">
-                                    <span className="text-gray-400">급여 포함 팁</span>
-
-                                    <span>${periodPaychequeTips.toFixed(2)}</span>
-                                </div>
-                            )}
-
-                        {/* Holiday Pay */}
-                        {holidaySchedules.length > 0 && (
-                            <div className="flex justify-between">
-                                <span className="text-gray-400">Holiday Pay</span>
-
-                                <span>${holidayPay.toFixed(2)}</span>
-                            </div>
-                        )}
-
-                        {/* Vacation Pay */}
-                        <div className="flex justify-between">
-                            <span className="text-gray-400">Vacation Pay ({vacationPayRate}%)</span>
-
-                            <span>${estimatedVacationPay.toFixed(2)}</span>
-                        </div>
-
-                        {/* 세전 급여 */}
-                        <div className="mt-4 border-t border-gray-800 pt-4">
-                            <div className="flex justify-between">
-                                <span className="text-gray-300">세전 급여</span>
-
-                                <span className="font-semibold">${taxableGrossPay.toFixed(2)}</span>
-                            </div>
-                        </div>
-
-                        {/* 예상 공제 */}
-                        <div className="flex justify-between">
-                            <span className="text-gray-400">예상 공제</span>
-
-                            <span>-${payrollDeductions.totalDeductions.toFixed(2)}</span>
-                        </div>
-
-                        {/* 실수령 급여 */}
-                        <div className="flex justify-between">
-                            <span className="text-gray-300">실수령 급여</span>
-
-                            <span className="font-semibold">${estimatedNetPay.toFixed(2)}</span>
-                        </div>
-
-                        {/* 현금 팁 */}
-                        {hasCashTips && (
-                            <div className="mt-4 border-t border-gray-800 pt-4">
-                                <div className="flex justify-between">
-                                    <span className="text-gray-400">현금 팁</span>
-
-                                    <span>${periodCashTips.toFixed(2)}</span>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* 최종 총액 */}
-                        <div className="flex items-center justify-between rounded-2xl bg-white p-3 my-6 text-black">
-                            <span className="text-sm font-medium">{hasCashTips ? "예상 총 수령액" : "예상 실수령액"}</span>
-
-                            <span className="text-xl font-bold">
-                                ${(hasCashTips ? finalEstimatedIncome : estimatedNetPay).toFixed(2)}
+                    {payDifference !== null && payChangePercent !== null && (
+                        <div className={`mb-1 text-xs font-medium ${payDifference >= 0 ? "text-red-400" : "text-blue-400"}`}>
+                            {payDifference >= 0 ? "↑" : "↓"} {Math.abs(payChangePercent).toFixed(1)}%
+                            <span className="ml-1">
+                                {payDifference >= 0 ? "+" : "-"}${Math.abs(payDifference).toFixed(2)}
                             </span>
                         </div>
+                    )}
+                </div>
+
+                <div className="mt-6 space-y-3 text-sm">
+                    {/* 근무시간 */}
+                    <div className="flex justify-between">
+                        <span className="text-gray-400">근무시간</span>
+
+                        <span>{periodHours.toFixed(2)}시간</span>
                     </div>
 
-                    {/* 공제 상세 */}
-                    <div className="mt-5 rounded-2xl bg-white/5 p-4">
-                        <p className="text-xs font-medium text-gray-300">예상 공제 내역</p>
+                    {/* 기본 급여 */}
+                    <div className="flex justify-between">
+                        <span className="text-gray-400">기본 급여</span>
 
-                        <div className="mt-3 space-y-2 text-xs">
-                            <div className="flex justify-between">
-                                <span className="text-gray-500">CPP</span>
-                                <span className="text-gray-300">-${payrollDeductions.cpp.toFixed(2)}</span>
-                            </div>
+                        <span>${estimatedBasePay.toFixed(2)}</span>
+                    </div>
 
-                            <div className="flex justify-between">
-                                <span className="text-gray-500">CPP2</span>
-                                <span className="text-gray-300">-${payrollDeductions.cpp2.toFixed(2)}</span>
-                            </div>
+                    {/* 급여 포함 팁 */}
+                    {salarySettings?.hasTips && (salarySettings.tipType === "paycheque" || salarySettings.tipType === "both") && (
+                        <div className="flex justify-between">
+                            <span className="text-gray-400">급여 포함 팁</span>
 
-                            <div className="flex justify-between">
-                                <span className="text-gray-500">EI</span>
-                                <span className="text-gray-300">-${payrollDeductions.ei.toFixed(2)}</span>
-                            </div>
+                            <span>${periodPaychequeTips.toFixed(2)}</span>
+                        </div>
+                    )}
 
-                            <div className="flex justify-between">
-                                <span className="text-gray-500">연방 소득세</span>
-                                <span className="text-gray-300">-${payrollDeductions.federalTax.toFixed(2)}</span>
-                            </div>
+                    {/* Holiday Pay */}
+                    {holidaySchedules.length > 0 && (
+                        <div className="flex justify-between">
+                            <span className="text-gray-400">Holiday Pay</span>
 
-                            <div className="flex justify-between">
-                                <span className="text-gray-500">{taxes.provinceName} 소득세</span>
+                            <span>${holidayPay.toFixed(2)}</span>
+                        </div>
+                    )}
 
-                                <span className="text-gray-300">-${payrollDeductions.provincialTax.toFixed(2)}</span>
-                            </div>
+                    {/* Vacation Pay */}
+                    <div className="flex justify-between">
+                        <span className="text-gray-400">Vacation Pay ({vacationPayRate}%)</span>
 
-                            <div className="mt-3 border-t border-white/10 pt-3">
-                                <div className="flex justify-between">
-                                    <span className="text-gray-300">총 공제</span>
+                        <span>${estimatedVacationPay.toFixed(2)}</span>
+                    </div>
 
-                                    <span className="font-medium text-white">
-                                        -${payrollDeductions.totalDeductions.toFixed(2)}
-                                    </span>
-                                </div>
-                            </div>
+                    {/* 세전 급여 */}
+                    <div className="mt-4 border-t border-gray-800 pt-4">
+                        <div className="flex justify-between">
+                            <span className="text-gray-300">세전 급여</span>
+
+                            <span className="font-semibold">${taxableGrossPay.toFixed(2)}</span>
                         </div>
                     </div>
 
-                    {salarySettings?.payType === "hourly" && (
-                        <p className="mt-5 text-xs text-gray-400">${hourlyWage.toFixed(2)} / 시간 기준</p>
+                    {/* 예상 공제 */}
+                    <div className="flex justify-between">
+                        <span className="text-gray-400">예상 공제</span>
+
+                        <span>-${payrollDeductions.totalDeductions.toFixed(2)}</span>
+                    </div>
+
+                    {/* 실수령 급여 */}
+                    <div className="flex justify-between">
+                        <span className="text-gray-300">실수령 급여</span>
+
+                        <span className="font-semibold">${estimatedNetPay.toFixed(2)}</span>
+                    </div>
+
+                    {/* 현금 팁 */}
+                    {hasCashTips && (
+                        <div className="mt-4 border-t border-gray-800 pt-4">
+                            <div className="flex justify-between">
+                                <span className="text-gray-400">현금 팁</span>
+
+                                <span>${periodCashTips.toFixed(2)}</span>
+                            </div>
+                        </div>
                     )}
 
-                    {salarySettings?.payType === "salary" && (
-                        <p className="mt-5 text-xs text-gray-400">
-                            설정된 월급 ${Number(salarySettings.monthlySalary ?? 0).toFixed(2)}
-                        </p>
-                    )}
+                    {/* 최종 총액 */}
+                    <div className="flex items-center justify-between rounded-2xl bg-white p-3 my-6 text-black">
+                        <span className="text-sm font-medium">{hasCashTips ? "예상 총 수령액" : "예상 실수령액"}</span>
 
-                    <Link
-                        href="/salary/pay-history"
-                        className="mt-3 block w-full text-right text-xs text-gray-400 transition hover:text-gray-600"
-                    >
-                        급여 기록을 확인해보세요 →
-                    </Link>
-                </section>
-            </div>
-        </main>
+                        <span className="text-xl font-bold">
+                            ${(hasCashTips ? finalEstimatedIncome : estimatedNetPay).toFixed(2)}
+                        </span>
+                    </div>
+                </div>
+
+                {/* 공제 상세 */}
+                <div className="mt-5 rounded-2xl bg-white/5 p-4">
+                    <p className="text-xs font-medium text-gray-300">예상 공제 내역</p>
+
+                    <div className="mt-3 space-y-2 text-xs">
+                        <div className="flex justify-between">
+                            <span className="text-gray-500">CPP</span>
+                            <span className="text-gray-300">-${payrollDeductions.cpp.toFixed(2)}</span>
+                        </div>
+
+                        <div className="flex justify-between">
+                            <span className="text-gray-500">CPP2</span>
+                            <span className="text-gray-300">-${payrollDeductions.cpp2.toFixed(2)}</span>
+                        </div>
+
+                        <div className="flex justify-between">
+                            <span className="text-gray-500">EI</span>
+                            <span className="text-gray-300">-${payrollDeductions.ei.toFixed(2)}</span>
+                        </div>
+
+                        <div className="flex justify-between">
+                            <span className="text-gray-500">연방 소득세</span>
+                            <span className="text-gray-300">-${payrollDeductions.federalTax.toFixed(2)}</span>
+                        </div>
+
+                        <div className="flex justify-between">
+                            <span className="text-gray-500">{taxes.provinceName} 소득세</span>
+
+                            <span className="text-gray-300">-${payrollDeductions.provincialTax.toFixed(2)}</span>
+                        </div>
+
+                        <div className="mt-3 border-t border-white/10 pt-3">
+                            <div className="flex justify-between">
+                                <span className="text-gray-300">총 공제</span>
+
+                                <span className="font-medium text-white">-${payrollDeductions.totalDeductions.toFixed(2)}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {salarySettings?.payType === "hourly" && (
+                    <p className="mt-5 text-xs text-gray-400">${hourlyWage.toFixed(2)} / 시간 기준</p>
+                )}
+
+                {salarySettings?.payType === "salary" && (
+                    <p className="mt-5 text-xs text-gray-400">
+                        설정된 월급 ${Number(salarySettings.monthlySalary ?? 0).toFixed(2)}
+                    </p>
+                )}
+
+                <Link
+                    href="/salary/pay-history"
+                    className="mt-3 block w-full text-right text-xs text-gray-400 transition hover:text-gray-600"
+                >
+                    급여 기록을 확인해보세요 →
+                </Link>
+            </section>
+        </div>
     );
 }

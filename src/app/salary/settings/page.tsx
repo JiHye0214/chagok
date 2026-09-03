@@ -129,340 +129,336 @@ export default function SalaryPage() {
     // Loading...
     if (isLoading) {
         return (
-            <main className="min-h-screen bg-gray-50 px-5 py-8">
-                <div className="mx-auto max-w-md">
-                    <p className="text-sm text-gray-400">급여 정보를 불러오는 중...</p>
-                </div>
-            </main>
+            <div className="mx-auto max-w-md">
+                <p className="text-sm text-gray-400">급여 정보를 불러오는 중...</p>
+            </div>
         );
     }
 
     return (
-        <main className="min-h-screen bg-gray-50 px-5 py-8">
-            <div className="mx-auto max-w-md pb-20">
-                {/* Header */}
+        <div className="mx-auto max-w-md">
+            {/* Header */}
 
-                <header>
-                    <button type="button" onClick={() => window.history.back()} className="text-sm text-gray-400">
-                        ← 근무 관리
+            <header>
+                <button type="button" onClick={() => window.history.back()} className="text-sm text-gray-400">
+                    ← 근무 관리
+                </button>
+
+                <h1 className="mt-2 text-3xl font-bold">급여 관리</h1>
+
+                <p className="mt-2 text-sm text-gray-500">급여와 근무 정보를 설정해주세요.</p>
+            </header>
+
+            {/* Pay Type */}
+
+            <section className="mt-6 rounded-3xl bg-white p-6 shadow-sm">
+                <h2 className="text-lg font-semibold">급여 받는 방식</h2>
+
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                    <button
+                        type="button"
+                        onClick={() => setPayType("hourly")}
+                        className={`rounded-2xl p-4 text-sm font-medium ${
+                            payType === "hourly" ? "bg-black text-white" : "bg-gray-100"
+                        }`}
+                    >
+                        시급
                     </button>
 
-                    <h1 className="mt-2 text-3xl font-bold">급여 관리</h1>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setPayType("salary");
+                            setPayFrequency("monthly");
+                        }}
+                        className={`rounded-2xl p-4 text-sm font-medium ${
+                            payType === "salary" ? "bg-black text-white" : "bg-gray-100"
+                        }`}
+                    >
+                        월급
+                    </button>
 
-                    <p className="mt-2 text-sm text-gray-500">급여와 근무 정보를 설정해주세요.</p>
-                </header>
+                    <button
+                        type="button"
+                        onClick={() => setPayType("commission")}
+                        className={`rounded-2xl p-4 text-sm font-medium ${
+                            payType === "commission" ? "bg-black text-white" : "bg-gray-100"
+                        }`}
+                    >
+                        커미션
+                    </button>
 
-                {/* Pay Type */}
+                    <button
+                        type="button"
+                        onClick={() => setPayType("other")}
+                        className={`rounded-2xl p-4 text-sm font-medium ${
+                            payType === "other" ? "bg-black text-white" : "bg-gray-100"
+                        }`}
+                    >
+                        기타
+                    </button>
+                </div>
+            </section>
 
-                <section className="mt-6 rounded-3xl bg-white p-6 shadow-sm">
-                    <h2 className="text-lg font-semibold">급여 받는 방식</h2>
+            {/* Pay Frequency */}
 
-                    <div className="mt-4 grid grid-cols-2 gap-2">
-                        <button
-                            type="button"
-                            onClick={() => setPayType("hourly")}
-                            className={`rounded-2xl p-4 text-sm font-medium ${
-                                payType === "hourly" ? "bg-black text-white" : "bg-gray-100"
-                            }`}
-                        >
-                            시급
-                        </button>
-
-                        <button
-                            type="button"
-                            onClick={() => {
-                                setPayType("salary");
-                                setPayFrequency("monthly");
-                            }}
-                            className={`rounded-2xl p-4 text-sm font-medium ${
-                                payType === "salary" ? "bg-black text-white" : "bg-gray-100"
-                            }`}
-                        >
-                            월급
-                        </button>
-
-                        <button
-                            type="button"
-                            onClick={() => setPayType("commission")}
-                            className={`rounded-2xl p-4 text-sm font-medium ${
-                                payType === "commission" ? "bg-black text-white" : "bg-gray-100"
-                            }`}
-                        >
-                            커미션
-                        </button>
-
-                        <button
-                            type="button"
-                            onClick={() => setPayType("other")}
-                            className={`rounded-2xl p-4 text-sm font-medium ${
-                                payType === "other" ? "bg-black text-white" : "bg-gray-100"
-                            }`}
-                        >
-                            기타
-                        </button>
-                    </div>
-                </section>
-
-                {/* Pay Frequency */}
-
-                {payType !== "salary" && (
-                    <section className="mt-5 rounded-3xl bg-white p-6 shadow-sm">
-                        <h2 className="text-lg font-semibold">급여 받는 주기</h2>
-
-                        <div className="mt-4 space-y-2">
-                            {[
-                                ["weekly", "매주"],
-                                ["biweekly", "격주"],
-                                ["semi-monthly", "월 2회"],
-                                ["monthly", "매월"],
-                                ["custom", "직접 설정"],
-                            ].map(([value, label]) => (
-                                <button
-                                    type="button"
-                                    key={value}
-                                    onClick={() => setPayFrequency(value as PayFrequency)}
-                                    className={`w-full rounded-2xl p-4 text-left text-sm font-medium ${
-                                        payFrequency === value ? "bg-black text-white" : "bg-gray-100"
-                                    }`}
-                                >
-                                    {label}
-                                </button>
-                            ))}
-                        </div>
-
-                        {payFrequency === "semi-monthly" && (
-                            <div className="mt-4 space-y-2">
-                                <p className="text-sm text-gray-500">급여 기간 규칙을 선택해주세요.</p>
-
-                                <button
-                                    type="button"
-                                    onClick={() => setSemiMonthlyType("first-fifteenth")}
-                                    className={`w-full rounded-2xl p-4 text-left text-sm ${
-                                        semiMonthlyType === "first-fifteenth" ? "bg-black text-white" : "bg-gray-100"
-                                    }`}
-                                >
-                                    1일 ~ 15일 / 16일 ~ 말일
-                                </button>
-
-                                <button
-                                    type="button"
-                                    onClick={() => setSemiMonthlyType("fifteenth-end")}
-                                    className={`w-full rounded-2xl p-4 text-left text-sm ${
-                                        semiMonthlyType === "fifteenth-end" ? "bg-black text-white" : "bg-gray-100"
-                                    }`}
-                                >
-                                    16일 ~ 다음달 15일
-                                </button>
-                            </div>
-                        )}
-
-                        {payFrequency === "custom" && (
-                            <div className="mt-4">
-                                <p className="mb-2 text-sm text-gray-500">며칠마다 급여를 받나요?</p>
-
-                                <div className="flex items-center gap-3">
-                                    <input
-                                        type="number"
-                                        min="1"
-                                        value={customPayDays}
-                                        onChange={(e) => setCustomPayDays(Math.max(1, Number(e.target.value) || 1))}
-                                        className="w-full rounded-2xl bg-gray-100 px-4 py-4 outline-none"
-                                    />
-
-                                    <span className="shrink-0 text-sm text-gray-500">일마다</span>
-                                </div>
-                            </div>
-                        )}
-                    </section>
-                )}
-
-                {/* Hourly Wage */}
-
-                {payType === "hourly" && (
-                    <section className="mt-5 rounded-3xl bg-white p-6 shadow-sm">
-                        <h2 className="text-lg font-semibold">시급</h2>
-
-                        <div className="mt-4 flex items-center rounded-2xl bg-gray-100 px-4">
-                            <span className="text-gray-500">$</span>
-
-                            <input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={hourlyWage}
-                                onChange={(e) => {
-                                    const value = Number(e.target.value);
-
-                                    setHourlyWage(value < 0 ? "0" : e.target.value);
-                                }}
-                                placeholder="17.60"
-                                className="w-full bg-transparent px-2 py-4 outline-none"
-                            />
-                        </div>
-                    </section>
-                )}
-
-                {/* Monthly Salary */}
-
-                {payType === "salary" && (
-                    <section className="mt-5 rounded-3xl bg-white p-6 shadow-sm">
-                        <h2 className="text-lg font-semibold">월급</h2>
-
-                        <div className="mt-4 flex items-center rounded-2xl bg-gray-100 px-4">
-                            <span className="text-gray-500">$</span>
-
-                            <input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={monthlySalary}
-                                onChange={(e) => {
-                                    const value = Number(e.target.value);
-
-                                    setMonthlySalary(value < 0 ? "0" : e.target.value);
-                                }}
-                                placeholder="3000"
-                                className="w-full bg-transparent px-2 py-4 outline-none"
-                            />
-                        </div>
-                    </section>
-                )}
-
-                {/* Tips */}
-
+            {payType !== "salary" && (
                 <section className="mt-5 rounded-3xl bg-white p-6 shadow-sm">
-                    <h2 className="text-lg font-semibold">팁을 받나요?</h2>
-
-                    <div className="mt-4 grid grid-cols-2 gap-2">
-                        <button
-                            type="button"
-                            onClick={() => setHasTips(true)}
-                            className={`rounded-2xl p-4 text-sm font-medium ${hasTips ? "bg-black text-white" : "bg-gray-100"}`}
-                        >
-                            예
-                        </button>
-
-                        <button
-                            type="button"
-                            onClick={() => setHasTips(false)}
-                            className={`rounded-2xl p-4 text-sm font-medium ${!hasTips ? "bg-black text-white" : "bg-gray-100"}`}
-                        >
-                            아니오
-                        </button>
-                    </div>
-
-                    {hasTips && (
-                        <div className="mt-4 space-y-2">
-                            <p className="text-sm text-gray-500">팁 지급 방식</p>
-
-                            {[
-                                ["cash", "현금"],
-                                ["paycheque", "급여에 포함"],
-                                ["both", "둘 다"],
-                            ].map(([value, label]) => (
-                                <button
-                                    type="button"
-                                    key={value}
-                                    onClick={() => setTipType(value as TipType)}
-                                    className={`w-full rounded-2xl p-3 text-left text-sm ${
-                                        tipType === value ? "bg-black text-white" : "bg-gray-100"
-                                    }`}
-                                >
-                                    {label}
-                                </button>
-                            ))}
-                        </div>
-                    )}
-                </section>
-
-                {/* Pay Period */}
-
-                <section className="mt-5 rounded-3xl bg-white p-6 shadow-sm">
-                    <h2 className="text-lg font-semibold">급여 기간</h2>
-
-                    <p className="mt-2 text-sm text-gray-400">최근 실제 근무 기간의 시작일과 급여일을 설정해주세요.</p>
-
-                    <div className="mt-4 space-y-4">
-                        {/* Start Date */}
-
-                        <div>
-                            <p className="mb-2 text-sm text-gray-500">급여 기간 시작일</p>
-
-                            <input
-                                type="date"
-                                value={payPeriodStartDate}
-                                onChange={(e) => setPayPeriodStartDate(e.target.value)}
-                                className="w-full rounded-2xl bg-gray-100 px-4 py-4 outline-none"
-                            />
-                        </div>
-
-                        {/* Auto End Date */}
-
-                        <div className="rounded-2xl bg-gray-50 p-4">
-                            <p className="text-sm text-gray-500">급여 기간 종료일</p>
-
-                            <p className="mt-1 font-semibold">{calculatedEndDate || "시작일과 주기를 먼저 설정해주세요"}</p>
-
-                            <p className="mt-1 text-xs text-gray-400">급여 주기에 따라 자동으로 계산돼요.</p>
-                        </div>
-
-                        {/* Pay Date */}
-
-                        <div>
-                            <p className="mb-2 text-sm text-gray-500">급여일</p>
-
-                            <input
-                                type="date"
-                                value={payDate}
-                                onChange={(e) => setPayDate(e.target.value)}
-                                className="w-full rounded-2xl bg-gray-100 px-4 py-4 outline-none"
-                            />
-                        </div>
-                    </div>
-                </section>
-
-                {/* Province */}
-
-                <section className="mt-5 rounded-3xl bg-white p-6 shadow-sm">
-                    <h2 className="text-lg font-semibold">근무 지역</h2>
-
-                    <p className="mt-2 text-sm text-gray-400">근무하는 주를 선택해주세요.</p>
+                    <h2 className="text-lg font-semibold">급여 받는 주기</h2>
 
                     <div className="mt-4 space-y-2">
                         {[
-                            ["ON", "Ontario"],
-                            ["BC", "British Columbia"],
-                            ["AB", "Alberta"],
-                            ["SK", "Saskatchewan"],
-                            ["MB", "Manitoba"],
-                            ["QC", "Quebec"],
+                            ["weekly", "매주"],
+                            ["biweekly", "격주"],
+                            ["semi-monthly", "월 2회"],
+                            ["monthly", "매월"],
+                            ["custom", "직접 설정"],
                         ].map(([value, label]) => (
                             <button
                                 type="button"
                                 key={value}
-                                onClick={() => setProvince(value as Province)}
+                                onClick={() => setPayFrequency(value as PayFrequency)}
                                 className={`w-full rounded-2xl p-4 text-left text-sm font-medium ${
-                                    province === value ? "bg-black text-white" : "bg-gray-100"
+                                    payFrequency === value ? "bg-black text-white" : "bg-gray-100"
                                 }`}
                             >
-                                🇨🇦 {label}
+                                {label}
                             </button>
                         ))}
                     </div>
 
-                    <p className="mt-4 text-xs text-gray-400">선택한 지역을 기준으로 급여 계산을 적용할 예정이에요.</p>
+                    {payFrequency === "semi-monthly" && (
+                        <div className="mt-4 space-y-2">
+                            <p className="text-sm text-gray-500">급여 기간 규칙을 선택해주세요.</p>
+
+                            <button
+                                type="button"
+                                onClick={() => setSemiMonthlyType("first-fifteenth")}
+                                className={`w-full rounded-2xl p-4 text-left text-sm ${
+                                    semiMonthlyType === "first-fifteenth" ? "bg-black text-white" : "bg-gray-100"
+                                }`}
+                            >
+                                1일 ~ 15일 / 16일 ~ 말일
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => setSemiMonthlyType("fifteenth-end")}
+                                className={`w-full rounded-2xl p-4 text-left text-sm ${
+                                    semiMonthlyType === "fifteenth-end" ? "bg-black text-white" : "bg-gray-100"
+                                }`}
+                            >
+                                16일 ~ 다음달 15일
+                            </button>
+                        </div>
+                    )}
+
+                    {payFrequency === "custom" && (
+                        <div className="mt-4">
+                            <p className="mb-2 text-sm text-gray-500">며칠마다 급여를 받나요?</p>
+
+                            <div className="flex items-center gap-3">
+                                <input
+                                    type="number"
+                                    min="1"
+                                    value={customPayDays}
+                                    onChange={(e) => setCustomPayDays(Math.max(1, Number(e.target.value) || 1))}
+                                    className="w-full rounded-2xl bg-gray-100 px-4 py-4 outline-none"
+                                />
+
+                                <span className="shrink-0 text-sm text-gray-500">일마다</span>
+                            </div>
+                        </div>
+                    )}
                 </section>
+            )}
 
-                {/* Save */}
+            {/* Hourly Wage */}
 
-                <button
-                    type="button"
-                    onClick={handleSave}
-                    className="mt-6 w-full rounded-2xl bg-black py-4 text-sm font-semibold text-white"
-                >
-                    급여 설정 저장
-                </button>
-            </div>
-        </main>
+            {payType === "hourly" && (
+                <section className="mt-5 rounded-3xl bg-white p-6 shadow-sm">
+                    <h2 className="text-lg font-semibold">시급</h2>
+
+                    <div className="mt-4 flex items-center rounded-2xl bg-gray-100 px-4">
+                        <span className="text-gray-500">$</span>
+
+                        <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={hourlyWage}
+                            onChange={(e) => {
+                                const value = Number(e.target.value);
+
+                                setHourlyWage(value < 0 ? "0" : e.target.value);
+                            }}
+                            placeholder="17.60"
+                            className="w-full bg-transparent px-2 py-4 outline-none"
+                        />
+                    </div>
+                </section>
+            )}
+
+            {/* Monthly Salary */}
+
+            {payType === "salary" && (
+                <section className="mt-5 rounded-3xl bg-white p-6 shadow-sm">
+                    <h2 className="text-lg font-semibold">월급</h2>
+
+                    <div className="mt-4 flex items-center rounded-2xl bg-gray-100 px-4">
+                        <span className="text-gray-500">$</span>
+
+                        <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={monthlySalary}
+                            onChange={(e) => {
+                                const value = Number(e.target.value);
+
+                                setMonthlySalary(value < 0 ? "0" : e.target.value);
+                            }}
+                            placeholder="3000"
+                            className="w-full bg-transparent px-2 py-4 outline-none"
+                        />
+                    </div>
+                </section>
+            )}
+
+            {/* Tips */}
+
+            <section className="mt-5 rounded-3xl bg-white p-6 shadow-sm">
+                <h2 className="text-lg font-semibold">팁을 받나요?</h2>
+
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                    <button
+                        type="button"
+                        onClick={() => setHasTips(true)}
+                        className={`rounded-2xl p-4 text-sm font-medium ${hasTips ? "bg-black text-white" : "bg-gray-100"}`}
+                    >
+                        예
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => setHasTips(false)}
+                        className={`rounded-2xl p-4 text-sm font-medium ${!hasTips ? "bg-black text-white" : "bg-gray-100"}`}
+                    >
+                        아니오
+                    </button>
+                </div>
+
+                {hasTips && (
+                    <div className="mt-4 space-y-2">
+                        <p className="text-sm text-gray-500">팁 지급 방식</p>
+
+                        {[
+                            ["cash", "현금"],
+                            ["paycheque", "급여에 포함"],
+                            ["both", "둘 다"],
+                        ].map(([value, label]) => (
+                            <button
+                                type="button"
+                                key={value}
+                                onClick={() => setTipType(value as TipType)}
+                                className={`w-full rounded-2xl p-3 text-left text-sm ${
+                                    tipType === value ? "bg-black text-white" : "bg-gray-100"
+                                }`}
+                            >
+                                {label}
+                            </button>
+                        ))}
+                    </div>
+                )}
+            </section>
+
+            {/* Pay Period */}
+
+            <section className="mt-5 rounded-3xl bg-white p-6 shadow-sm">
+                <h2 className="text-lg font-semibold">급여 기간</h2>
+
+                <p className="mt-2 text-sm text-gray-400">최근 실제 근무 기간의 시작일과 급여일을 설정해주세요.</p>
+
+                <div className="mt-4 space-y-4">
+                    {/* Start Date */}
+
+                    <div>
+                        <p className="mb-2 text-sm text-gray-500">급여 기간 시작일</p>
+
+                        <input
+                            type="date"
+                            value={payPeriodStartDate}
+                            onChange={(e) => setPayPeriodStartDate(e.target.value)}
+                            className="w-full rounded-2xl bg-gray-100 px-4 py-4 outline-none"
+                        />
+                    </div>
+
+                    {/* Auto End Date */}
+
+                    <div className="rounded-2xl bg-gray-50 p-4">
+                        <p className="text-sm text-gray-500">급여 기간 종료일</p>
+
+                        <p className="mt-1 font-semibold">{calculatedEndDate || "시작일과 주기를 먼저 설정해주세요"}</p>
+
+                        <p className="mt-1 text-xs text-gray-400">급여 주기에 따라 자동으로 계산돼요.</p>
+                    </div>
+
+                    {/* Pay Date */}
+
+                    <div>
+                        <p className="mb-2 text-sm text-gray-500">급여일</p>
+
+                        <input
+                            type="date"
+                            value={payDate}
+                            onChange={(e) => setPayDate(e.target.value)}
+                            className="w-full rounded-2xl bg-gray-100 px-4 py-4 outline-none"
+                        />
+                    </div>
+                </div>
+            </section>
+
+            {/* Province */}
+
+            <section className="mt-5 rounded-3xl bg-white p-6 shadow-sm">
+                <h2 className="text-lg font-semibold">근무 지역</h2>
+
+                <p className="mt-2 text-sm text-gray-400">근무하는 주를 선택해주세요.</p>
+
+                <div className="mt-4 space-y-2">
+                    {[
+                        ["ON", "Ontario"],
+                        ["BC", "British Columbia"],
+                        ["AB", "Alberta"],
+                        ["SK", "Saskatchewan"],
+                        ["MB", "Manitoba"],
+                        ["QC", "Quebec"],
+                    ].map(([value, label]) => (
+                        <button
+                            type="button"
+                            key={value}
+                            onClick={() => setProvince(value as Province)}
+                            className={`w-full rounded-2xl p-4 text-left text-sm font-medium ${
+                                province === value ? "bg-black text-white" : "bg-gray-100"
+                            }`}
+                        >
+                            🇨🇦 {label}
+                        </button>
+                    ))}
+                </div>
+
+                <p className="mt-4 text-xs text-gray-400">선택한 지역을 기준으로 급여 계산을 적용할 예정이에요.</p>
+            </section>
+
+            {/* Save */}
+
+            <button
+                type="button"
+                onClick={handleSave}
+                className="mt-6 w-full rounded-2xl bg-black py-4 text-sm font-semibold text-white"
+            >
+                급여 설정 저장
+            </button>
+        </div>
     );
 }

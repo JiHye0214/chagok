@@ -269,17 +269,15 @@ export default function PayHistoryPage() {
 
     if (isLoading) {
         return (
-            <main className="min-h-screen bg-gray-50 px-5 py-8">
-                <div className="mx-auto max-w-md">
-                    <p className="text-sm text-gray-400">급여 기록을 불러오는 중...</p>
-                </div>
-            </main>
+            <div className="mx-auto max-w-md">
+                <p className="text-sm text-gray-400">급여 기록을 불러오는 중...</p>
+            </div>
         );
     }
 
     return (
-        <main className="min-h-screen bg-gray-50 px-5 py-8">
-            <div className="mx-auto max-w-md pb-24">
+        <>
+            <div className="mx-auto max-w-md">
                 <header>
                     <button type="button" onClick={() => window.history.back()} className="text-sm text-gray-400">
                         ← 근무 관리
@@ -374,7 +372,7 @@ export default function PayHistoryPage() {
             {/* 상세 모달 */}
             {selectedHistory && !isEditOpen && (
                 <div
-                    className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center"
+                    className="fixed inset-0 z-80 flex items-end justify-center bg-black/40 p-4 sm:items-center"
                     onClick={closeDetail}
                 >
                     <div
@@ -682,6 +680,6 @@ export default function PayHistoryPage() {
                     </div>
                 </div>
             )}
-        </main>
+        </>
     );
 }
