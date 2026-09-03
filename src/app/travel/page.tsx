@@ -2,51 +2,14 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
-import { Plane, CheckCircle2, Star, StarHalf } from "lucide-react";
-
-const upcomingTrips = [
-    {
-        id: 1,
-        country: "🇯🇵",
-        city: "Tokyo",
-        startDate: "2026.10.12",
-        endDate: "2026.10.16",
-        nights: 4,
-        people: 2,
-        budget: 1500,
-    },
-];
-
-const trips = [
-    {
-        id: 1,
-        country: "🇺🇸",
-        city: "New York",
-        startDate: "2026.08.12",
-        endDate: "2026.08.15",
-        nights: 3,
-        people: 2,
-        status: "여행 완료",
-        rating: 92,
-    },
-    {
-        id: 2,
-        country: "🇺🇸",
-        city: "Boston",
-        startDate: "2026.07.13",
-        endDate: "2026.07.14",
-        nights: 1,
-        people: 1,
-        status: "여행 완료",
-        rating: 100,
-    },
-];
+import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
+import { Plane, CheckCircle2, Star } from "lucide-react";
+import { formatDate } from "@/lib/payPeriod";
 
 type SavedTrip = {
     id: number;
     tripType: "upcoming" | "completed";
-    title: string;
+    title: string | null;
     city: string;
     country: string;
     countryCode: string;
@@ -61,14 +24,6 @@ type SavedTrip = {
 type CitySearchResult = {
     name: string;
     countryCode: string;
-};
-
-const countryCodeToFlag = (countryCode: string) => {
-    return countryCode
-        .toUpperCase()
-        .split("")
-        .map((char) => String.fromCodePoint(127397 + char.charCodeAt(0)))
-        .join("");
 };
 
 const getCountryName = (countryCode: string) => {
@@ -148,6 +103,10 @@ export default function TravelPage() {
     const [isCitySearching, setIsCitySearching] = useState(false);
     const [showCityResults, setShowCityResults] = useState(false);
 
+    // 여행 저장
+    const [trips, setTrips] = useState<SavedTrip[]>([]);
+    const [isTripsLoading, setIsTripsLoading] = useState(true);
+
     // 위치 검색 API
     useEffect(() => {
         const keyword = city.trim();
@@ -186,6 +145,29 @@ export default function TravelPage() {
             window.clearTimeout(timer);
         };
     }, [city]);
+
+    useEffect(() => {
+        const fetchTrips = async () => {
+            try {
+                const response = await fetch("/api/trips");
+
+                if (!response.ok) {
+                    throw new Error("여행 목록 조회 실패");
+                }
+
+                const data: SavedTrip[] = await response.json();
+
+                setTrips(data);
+            } catch (error) {
+                console.error("여행 목록 조회 실패:", error);
+                setTrips([]);
+            } finally {
+                setIsTripsLoading(false);
+            }
+        };
+
+        fetchTrips();
+    }, []);
 
     // 국가 코드로 국가 정보 가져오기
     const getCountryInfo = async (code: string) => {
@@ -242,6 +224,17 @@ export default function TravelPage() {
         setShowCityResults(false);
     };
 
+    // 있을 때만
+    const upcomingTrips = trips.filter((trip) => trip.tripType === "upcoming");
+    const completedTrips = trips.filter((trip) => trip.tripType === "completed");
+
+    const getNights = (startDate: string, endDate: string) => {
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+
+        return Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+    };
+
     return (
         <div className="mx-auto max-w-md">
             {" "}
@@ -288,43 +281,49 @@ export default function TravelPage() {
                 </div>
             </section>
             {/* Coming Soon */}
-            <section className="mt-10">
-                <div className="flex items-center justify-between">
-                    <h2 className="text-lg font-semibold">Coming Soon</h2>
+            {upcomingTrips.length > 0 && (
+                <section className="mt-10">
+                    <div className="flex items-center justify-between">
+                        <h2 className="text-lg font-semibold">Coming Soon</h2>
 
-                    <Link href="/travel/list" className="text-sm text-gray-400">
-                        전체 보기
-                    </Link>
-                </div>
-
-                <div className="mt-4 space-y-3">
-                    {upcomingTrips.map((trip) => (
-                        <Link
-                            key={trip.id}
-                            href={`/travel/${trip.id}`}
-                            className="block rounded-3xl bg-white p-5 shadow-sm transition active:scale-[0.99]"
-                        >
-                            <div className="flex items-start justify-between">
-                                <div>
-                                    <p className="text-lg font-semibold">
-                                        {trip.country} {trip.city}
-                                    </p>
-
-                                    <p className="mt-2 text-sm text-gray-500">
-                                        {trip.startDate} — {trip.endDate}
-                                    </p>
-
-                                    <p className="mt-1 text-sm text-gray-400">
-                                        {trip.nights}박 {trip.nights + 1}일 · {trip.people}명
-                                    </p>
-                                </div>
-
-                                <span className="rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-500">예정</span>
-                            </div>
+                        <Link href="/travel/list" className="text-sm text-gray-400">
+                            전체 보기
                         </Link>
-                    ))}
-                </div>
-            </section>
+                    </div>
+
+                    <div className="mt-4 space-y-3">
+                        {upcomingTrips.map((trip) => {
+                            const nights = getNights(trip.startDate, trip.endDate);
+
+                            return (
+                                <Link
+                                    key={trip.id}
+                                    href={`/travel/${trip.id}`}
+                                    className="block rounded-3xl bg-white p-5 shadow-sm transition active:scale-[0.99]"
+                                >
+                                    <div className="flex items-start justify-between">
+                                        <div>
+                                            <p className="text-lg font-semibold">
+                                                {trip.country} {trip.city}
+                                            </p>
+
+                                            <p className="mt-2 text-sm text-gray-500">
+                                                {trip.startDate} ~ {trip.endDate}
+                                            </p>
+
+                                            <p className="mt-1 text-sm text-gray-400">
+                                                {nights}박 {nights + 1}일 · {trip.people}명
+                                            </p>
+                                        </div>
+
+                                        <span className="rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-500">예정</span>
+                                    </div>
+                                </Link>
+                            );
+                        })}
+                    </div>
+                </section>
+            )}
             {/* Travel Statistics */}
             <section className="mt-10">
                 <h2 className="text-lg font-semibold">여행 통계</h2>
@@ -469,38 +468,67 @@ export default function TravelPage() {
                     </Link>
                 </div>
 
-                <div className="mt-4 space-y-3">
-                    {trips.map((trip) => (
-                        <Link
-                            key={trip.id}
-                            href={`/travel/${trip.id}`}
-                            className="block rounded-3xl bg-white p-5 shadow-sm transition active:scale-[0.99]"
+                {completedTrips.length > 0 ? (
+                    <div className="mt-4 space-y-3">
+                        {completedTrips.map((trip) => {
+                            const nights = getNights(trip.startDate, trip.endDate);
+
+                            return (
+                                <Link
+                                    key={trip.id}
+                                    href={`/travel/${trip.id}`}
+                                    className="block rounded-3xl bg-white p-5 shadow-sm transition active:scale-[0.99]"
+                                >
+                                    <div className="flex items-start justify-between">
+                                        <div>
+                                            <p className="text-xs text-gray-400">
+                                                {trip.countryCode} · {trip.rating > 0 ? "COMPLETED" : "NOT REVIEWED"}
+                                            </p>
+
+                                            <p className="mt-1 text-lg font-semibold">{trip.title || trip.city}</p>
+
+                                            {trip.title && <p className="mt-1 text-sm text-gray-400">{trip.city}</p>}
+
+                                            <p className="mt-2 text-sm text-gray-500">
+                                                {formatDate(new Date(trip.startDate))} ~ {formatDate(new Date(trip.endDate))}
+                                            </p>
+
+                                            <p className="mt-1 text-sm text-gray-400">
+                                                {nights === 0
+                                                    ? `당일치기 · ${trip.people}명`
+                                                    : `${nights}박 ${nights + 1}일 · ${trip.people}명`}
+                                            </p>
+                                        </div>
+
+                                        <p className="text-sm tracking-tight">
+                                            {"★".repeat(Math.round(trip.rating))}
+                                            <span className="text-gray-300">{"★".repeat(5 - Math.round(trip.rating))}</span>
+                                        </p>
+                                    </div>
+                                </Link>
+                            );
+                        })}
+                    </div>
+                ) : (
+                    <div className="mt-4 rounded-3xl bg-white px-5 py-8 text-center shadow-sm">
+                        <p className="text-sm font-medium text-gray-900">아직 다녀온 여행이 없어요</p>
+
+                        <p className="mt-1 text-xs text-gray-400">여행을 추가하고 나만의 여행 기록을 남겨보세요</p>
+
+                        <button
+                            type="button"
+                            onClick={() => {
+                                resetTripForm();
+                                setTripType("upcoming");
+                                setAddStep("type");
+                                setIsAddModalOpen(true);
+                            }}
+                            className="mt-5 rounded-full bg-gray-900 px-5 py-2.5 text-sm font-medium text-white"
                         >
-                            <div className="flex items-start justify-between">
-                                <div>
-                                    <p className="text-xs text-gray-400">
-                                        {trip.country} · {trip.status}
-                                    </p>
-
-                                    <p className="mt-1 text-lg font-semibold">{trip.city}</p>
-
-                                    <p className="mt-2 text-sm text-gray-500">
-                                        {trip.startDate} — {trip.endDate}
-                                    </p>
-
-                                    <p className="mt-1 text-sm text-gray-400">
-                                        {trip.nights}박 {trip.nights + 1}일 · {trip.people}명
-                                    </p>
-                                </div>
-
-                                <p className="text-sm tracking-tight">
-                                    {"★".repeat(Math.round(trip.rating / 20))}
-                                    <span className="text-gray-300">{"★".repeat(5 - Math.round(trip.rating / 20))}</span>
-                                </p>
-                            </div>
-                        </Link>
-                    ))}
-                </div>
+                            여행 추가하기
+                        </button>
+                    </div>
+                )}
             </section>
             {/* Add Travel */}
             <section className="mt-6">
@@ -980,7 +1008,7 @@ export default function TravelPage() {
 
                                         <button
                                             type="button"
-                                            onClick={() => {
+                                            onClick={async () => {
                                                 if (!city || !country || !countryCode || !startDate || !endDate) {
                                                     alert("위치와 여행 정보를 모두 입력해주세요.");
                                                     return;
@@ -991,8 +1019,7 @@ export default function TravelPage() {
                                                     return;
                                                 }
 
-                                                const newTrip: SavedTrip = {
-                                                    id: Date.now(),
+                                                const newTrip = {
                                                     tripType,
                                                     title,
                                                     city,
@@ -1001,26 +1028,39 @@ export default function TravelPage() {
                                                     startDate,
                                                     endDate,
                                                     people: Number(people) || 1,
-                                                    ...(tripType === "upcoming" ? { budget: Number(budget) || 0 } : {}), // 예정된 여행만 budget을 저장하고, 다녀온 여행에는 budget: 0이 억지로 들어가지 않
+                                                    ...(tripType === "upcoming" ? { budget: Number(budget) || 0 } : {}),
                                                     rating: tripType === "completed" ? rating : 0,
                                                 };
 
-                                                const existingTrips: SavedTrip[] = JSON.parse(
-                                                    localStorage.getItem("chagok-trips") || "[]",
-                                                );
+                                                try {
+                                                    const response = await fetch("/api/trips", {
+                                                        method: "POST",
+                                                        headers: {
+                                                            "Content-Type": "application/json",
+                                                        },
+                                                        body: JSON.stringify(newTrip),
+                                                    });
 
-                                                const updatedTrips = [...existingTrips, newTrip];
+                                                    if (!response.ok) {
+                                                        throw new Error("여행 저장에 실패했습니다.");
+                                                    }
 
-                                                localStorage.setItem("chagok-trips", JSON.stringify(updatedTrips));
+                                                    const savedTrip: SavedTrip = await response.json();
 
-                                                resetTripForm();
-                                                setAddStep("type");
-                                                setSavedTrip(newTrip);
-                                                setIsAddModalOpen(false);
+                                                    setTrips((prev) => [...prev, savedTrip]);
+
+                                                    resetTripForm();
+                                                    setAddStep("type");
+                                                    setSavedTrip(savedTrip);
+                                                    setIsAddModalOpen(false);
+                                                } catch (error) {
+                                                    console.error(error);
+                                                    alert("여행을 저장하지 못했어요.");
+                                                }
                                             }}
                                             className="flex-1 rounded-2xl bg-black py-4 text-sm font-medium text-white"
                                         >
-                                            저장
+                                            저장하기
                                         </button>
                                     </div>
                                 </div>

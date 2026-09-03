@@ -72,20 +72,6 @@ type Holiday = {
 
 const WEEK_DAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
-const formatDisplayDate = (dateString: string) => {
-    if (!dateString) {
-        return "";
-    }
-
-    const [year, month, day] = dateString.slice(0, 10).split("-").map(Number);
-
-    if (!year || !month || !day) {
-        return dateString;
-    }
-
-    return `${year}. ${month}. ${day}.`;
-};
-
 const calculateHours = (startTime: string, endTime: string, breakMinutes: number = 0) => {
     if (!startTime || !endTime) {
         return 0;
@@ -901,16 +887,16 @@ export default function SchedulePage() {
                             <p className="text-xs text-gray-400">현재 급여 기간</p>
 
                             <p className="mt-1 text-sm font-semibold">
-                                {formatDisplayDate(currentPayPeriod.startDate)}
+                                {formatDate(new Date(currentPayPeriod.startDate))}
                                 {" ~ "}
-                                {formatDisplayDate(currentPayPeriod.endDate)}
+                                {formatDate(new Date(currentPayPeriod.endDate))}
                             </p>
                         </div>
 
                         <div className="text-right">
                             <p className="text-xs text-gray-400">급여일</p>
 
-                            <p className="mt-1 text-sm font-semibold">{formatDisplayDate(currentPayPeriod.payDate)}</p>
+                            <p className="mt-1 text-sm font-semibold">{formatDate(new Date(currentPayPeriod.payDate))}</p>
                         </div>
                     </div>
                 </section>
@@ -1065,7 +1051,7 @@ export default function SchedulePage() {
                                                 <div>
                                                     <div className="flex items-center gap-2">
                                                         <p className={`font-semibold ${holiday ? "text-red-500" : ""}`}>
-                                                            {formatDisplayDate(schedule.date)}
+                                                            {formatDate(new Date(schedule.date))}
                                                         </p>
 
                                                         {holiday && (
@@ -1157,7 +1143,7 @@ export default function SchedulePage() {
                                                 : "text-gray-400"
                                         }`}
                                     >
-                                        {selectedDate && formatDisplayDate(selectedDate)}
+                                        {selectedDate && formatDate(new Date(selectedDate))}
                                     </p>
 
                                     {/* Holiday Notice */}
@@ -1412,9 +1398,9 @@ export default function SchedulePage() {
                         <h2 className="text-lg font-semibold">이번 급여 기간 팁</h2>
 
                         <p className="mt-1 text-sm text-gray-400">
-                            {formatDisplayDate(currentPayPeriod.startDate)}
+                            {formatDate(new Date(currentPayPeriod.startDate))}
                             {" ~ "}
-                            {formatDisplayDate(currentPayPeriod.endDate)}
+                            {formatDate(new Date(currentPayPeriod.endDate))}
                         </p>
                     </div>
 

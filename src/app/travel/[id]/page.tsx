@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { Star } from "lucide-react";
+import { Star, Plane, Hotel, Utensils, TrainFront, ShoppingBag, MoreHorizontal } from "lucide-react";
 
 type SavedTrip = {
     id: number;
@@ -95,27 +95,27 @@ const getStatus = (trip: SavedTrip) => {
 const categoryList = [
     {
         name: "항공",
-        emoji: "✈️",
+        icon: Plane,
     },
     {
         name: "숙소",
-        emoji: "🏨",
+        icon: Hotel,
     },
     {
         name: "식비",
-        emoji: "🍽️",
+        icon: Utensils,
     },
     {
         name: "교통",
-        emoji: "🚇",
+        icon: TrainFront,
     },
     {
         name: "쇼핑",
-        emoji: "🛍️",
+        icon: ShoppingBag,
     },
     {
         name: "기타",
-        emoji: "＋",
+        icon: MoreHorizontal,
     },
 ];
 
@@ -283,7 +283,7 @@ export default function TravelDetailPage() {
             )}
 
             {/* Expenses */}
-            <section className="mt-10">
+            <section className="mt-8">
                 <div className="flex items-end justify-between">
                     <div>
                         <h2 className="text-lg font-semibold text-gray-900">여행 지출</h2>
@@ -298,14 +298,14 @@ export default function TravelDetailPage() {
                         <button
                             key={category.name}
                             type="button"
-                            className="flex h-[104px] flex-col justify-between rounded-3xl bg-white p-5 text-left shadow-sm transition active:scale-[0.98]"
+                            className="flex h-[110px] flex-col justify-end gap-2 rounded-3xl bg-white p-5 text-left shadow-sm transition active:scale-[0.98]"
                         >
-                            <span className="text-lg">{category.emoji}</span>
+                            <category.icon size={20} strokeWidth={1.8} className="text-gray-500" />
 
-                            <div>
+                            <div className="flex items-center justify-between">
                                 <p className="text-sm font-medium text-gray-700">{category.name}</p>
 
-                                <p className="mt-0.5 text-sm font-semibold text-gray-900">$0</p>
+                                <p className="text-sm font-semibold text-gray-900">$0</p>
                             </div>
                         </button>
                     ))}
