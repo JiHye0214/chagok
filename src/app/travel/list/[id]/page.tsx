@@ -1,0 +1,1115 @@
+"use client";
+
+import Link from "next/link";
+import { useParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import {
+    Star,
+    Plane,
+    Hotel,
+    Utensils,
+    TrainFront,
+    ShoppingBag,
+    MoreHorizontal,
+    ArrowLeft,
+    Plus,
+    GripVertical,
+    Pencil,
+    Trash2,
+    Check,
+    X,
+} from "lucide-react";
+import { formatDate } from "@/lib/payPeriod";
+
+type SavedTrip = {
+    id: number;
+    tripType: "upcoming" | "completed";
+    title?: string | null;
+    city: string;
+    country: string;
+    countryCode: string;
+    startDate: string;
+    endDate: string;
+    people: number;
+    budget?: number;
+    currency?: string;
+    rating: number;
+};
+
+type ExpenseCategory = {
+    id: number;
+    trip_id: number;
+    name: string;
+    sort_order: number;
+};
+
+const getNights = (startDate: string, endDate: string) => {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
+    return Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+};
+
+const getStatus = (trip: SavedTrip) => {
+    if (trip.tripType === "upcoming") {
+        return "COMING SOON";
+    }
+
+    if (!trip.rating || trip.rating === 0) {
+        return "NOT REVIEWED";
+    }
+
+    return "COMPLETED";
+};
+
+const getDateKey = (date: Date) => {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+};
+
+const calculateExpression = (value: string) => {
+    if (!value.trim()) {
+        return 0;
+    }
+
+    try {
+        const safeExpression = value
+            .replace(/×/g, "*")
+            .replace(/÷/g, "/")
+            .replace(/,/g, "")
+            .replace(/[^0-9+\-*/().\s]/g, "");
+
+        if (!safeExpression.trim()) {
+            return 0;
+        }
+
+        const result = Function(`"use strict"; return (${safeExpression})`)();
+
+        if (typeof result !== "number" || !Number.isFinite(result)) {
+            return 0;
+        }
+
+        return Math.max(0, Number(result.toFixed(2)));
+    } catch {
+        return 0;
+    }
+};
+
+export default function TravelDetailPage() {
+    const params = useParams();
+
+    const [trip, setTrip] = useState<SavedTrip | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+
+    const [expenseCells, setExpenseCells] = useState<Record<string, string>>({});
+    const [selectedCell, setSelectedCell] = useState<string | null>(null);
+
+    const [categories, setCategories] = useState<ExpenseCategory[]>([]);
+    const [isCategoryLoading, setIsCategoryLoading] = useState(false);
+
+    // 카테고리 추가
+    const [isAddingCategory, setIsAddingCategory] = useState(false);
+    const [newCategoryName, setNewCategoryName] = useState("");
+
+    // 카테고리 수정
+    const [editingCategoryId, setEditingCategoryId] = useState<number | null>(null);
+    const [editingCategoryName, setEditingCategoryName] = useState("");
+
+    // 카테고리 드래그앤드랍
+    const [draggedCategoryId, setDraggedCategoryId] = useState<number | null>(null);
+    const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
+    const [newCategoryId, setNewCategoryId] = useState<number | null>(null);
+
+    useEffect(() => {
+        const fetchTrip = async () => {
+            if (!params.id) {
+                setIsLoading(false);
+                return;
+            }
+
+            try {
+                const response = await fetch("/api/trips");
+
+                if (!response.ok) {
+                    throw new Error("여행 목록 조회 실패");
+                }
+
+                const allTrips: SavedTrip[] = await response.json();
+
+                const foundTrip = allTrips.find((trip) => String(trip.id) === String(params.id));
+
+                setTrip(foundTrip ?? null);
+            } catch (error) {
+                console.error("여행 데이터를 불러오지 못했습니다.", error);
+                setTrip(null);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchTrip();
+    }, [params.id]);
+
+    useEffect(() => {
+        const loadExpenses = async () => {
+            if (!trip?.id) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/trips/${trip.id}/expenses`);
+
+                if (!response.ok) {
+                    throw new Error("여행 경비 조회 실패");
+                }
+
+                const expenses = await response.json();
+
+                const cells: Record<string, string> = {};
+
+                expenses.forEach((expense: { expense_date: string; category_id: number; expression: string }) => {
+                    const key = `${expense.category_id}_${expense.expense_date.slice(0, 10)}`;
+
+                    cells[key] = expense.expression;
+                });
+
+                setExpenseCells(cells);
+            } catch (error) {
+                console.error("여행 경비를 불러오지 못했습니다.", error);
+            }
+        };
+
+        loadExpenses();
+    }, [trip?.id]);
+
+    useEffect(() => {
+        const loadCategories = async () => {
+            if (!trip?.id) return;
+
+            setIsCategoryLoading(true);
+
+            try {
+                const response = await fetch(`/api/trips/${trip.id}/expense-categories`);
+
+                if (!response.ok) {
+                    throw new Error("카테고리 조회 실패");
+                }
+
+                const data: ExpenseCategory[] = await response.json();
+
+                // 기존 카테고리가 하나도 없는 여행이면 기본 카테고리 생성
+                if (data.length === 0) {
+                    const defaultCategories = ["항공", "숙소", "식비", "교통", "쇼핑", "기타"];
+
+                    const createdCategories: ExpenseCategory[] = [];
+
+                    for (const [index, name] of defaultCategories.entries()) {
+                        const createResponse = await fetch(`/api/trips/${trip.id}/expense-categories`, {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify({
+                                name,
+                            }),
+                        });
+
+                        if (!createResponse.ok) {
+                            throw new Error("기본 카테고리 생성 실패");
+                        }
+
+                        const category: ExpenseCategory = await createResponse.json();
+
+                        createdCategories.push({
+                            ...category,
+                            sort_order: index,
+                        });
+                    }
+
+                    setCategories(createdCategories);
+                } else {
+                    setCategories(data);
+                }
+            } catch (error) {
+                console.error("여행 경비 카테고리를 불러오지 못했습니다.", error);
+            } finally {
+                setIsCategoryLoading(false);
+            }
+        };
+
+        loadCategories();
+    }, [trip?.id]);
+
+    const categoryIcons = {
+        항공: Plane,
+        숙소: Hotel,
+        식비: Utensils,
+        교통: TrainFront,
+        쇼핑: ShoppingBag,
+        기타: MoreHorizontal,
+    };
+
+    const tripDates = (() => {
+        const dates: Date[] = [];
+
+        const start = new Date(trip?.startDate ?? "");
+        const end = new Date(trip?.endDate ?? "");
+
+        if (!trip || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+            return dates;
+        }
+
+        const current = new Date(start);
+
+        while (current <= end) {
+            dates.push(new Date(current));
+            current.setDate(current.getDate() + 1);
+        }
+
+        return dates;
+    })();
+
+    if (isLoading) {
+        return (
+            <div className="flex h-[calc(100vh-152px)] items-center justify-center">
+                <p className="text-sm text-gray-400">여행 기록을 불러오는 중...</p>
+            </div>
+        );
+    }
+
+    if (!trip) {
+        return (
+            <div className="mx-auto max-w-md">
+                <Link href="/travel/list" className="text-sm text-gray-500">
+                    ← 여행 목록
+                </Link>
+
+                <div className="flex min-h-[70vh] flex-col items-center justify-center text-center">
+                    <p className="text-base font-semibold text-gray-900">여행을 찾을 수 없어요</p>
+
+                    <p className="mt-2 text-sm leading-6 text-gray-400">
+                        존재하지 않는 여행이거나
+                        <br />
+                        삭제된 여행일 수 있어요.
+                    </p>
+
+                    <Link
+                        href="/travel/list"
+                        className="mt-6 rounded-2xl bg-white px-5 py-3 text-sm font-medium text-gray-700 shadow-sm"
+                    >
+                        여행 목록으로
+                    </Link>
+                </div>
+            </div>
+        );
+    }
+
+    const status = getStatus(trip);
+    const nights = getNights(trip.startDate, trip.endDate);
+
+    const displayTitle = trip.title?.trim() || trip.city;
+
+    const getCellKey = (categoryId: number, date: Date) => {
+        return `${categoryId}_${getDateKey(date)}`;
+    };
+
+    const getCellAmount = (categoryId: number, date: Date) => {
+        const key = getCellKey(categoryId, date);
+
+        return calculateExpression(expenseCells[key] ?? "");
+    };
+
+    const getCategoryTotal = (categoryId: number) => {
+        return tripDates.reduce((total, date) => {
+            return total + getCellAmount(categoryId, date);
+        }, 0);
+    };
+
+    const getDateTotal = (date: Date) => {
+        return categories.reduce((total, category) => {
+            return total + getCellAmount(category.id, date);
+        }, 0);
+    };
+
+    const totalExpense = tripDates.reduce((total, date) => {
+        return total + getDateTotal(date);
+    }, 0);
+
+    const handleCellChange = (categoryId: number, date: Date, value: string) => {
+        const key = getCellKey(categoryId, date);
+
+        setExpenseCells((prev) => ({
+            ...prev,
+            [key]: value,
+        }));
+    };
+
+    const handleCellKeyDown = async (event: React.KeyboardEvent<HTMLInputElement>, categoryId: number, date: Date) => {
+        if (event.key !== "Enter") return;
+
+        event.preventDefault();
+
+        const input = event.currentTarget;
+
+        const key = getCellKey(categoryId, date);
+        const currentValue = expenseCells[key] ?? "";
+
+        if (!currentValue.trim()) {
+            input.blur();
+            setSelectedCell(null);
+
+            try {
+                await fetch(`/api/trips/${trip.id}/expenses`, {
+                    method: "PUT",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        expenseDate: getDateKey(date),
+                        categoryId,
+                        expression: "",
+                        amount: 0,
+                    }),
+                });
+            } catch (error) {
+                console.error("여행 경비 삭제 실패:", error);
+            }
+
+            return;
+        }
+
+        try {
+            const safeExpression = currentValue
+                .replace(/×/g, "*")
+                .replace(/÷/g, "/")
+                .replace(/,/g, "")
+                .replace(/[^0-9+\-*/().\s]/g, "");
+
+            if (!safeExpression.trim()) return;
+
+            const result = Function(`"use strict"; return (${safeExpression})`)();
+
+            if (typeof result !== "number" || !Number.isFinite(result) || result < 0) {
+                return;
+            }
+
+            const calculatedAmount = Number(Number(result).toFixed(2));
+
+            const formattedAmount =
+                calculatedAmount === 0
+                    ? ""
+                    : Number.isInteger(calculatedAmount)
+                      ? String(calculatedAmount)
+                      : calculatedAmount.toFixed(2);
+
+            setExpenseCells((prev) => ({
+                ...prev,
+                [key]: formattedAmount,
+            }));
+
+            const response = await fetch(`/api/trips/${trip.id}/expenses`, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    expenseDate: getDateKey(date),
+                    categoryId,
+                    expression: currentValue,
+                    amount: calculatedAmount,
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error("여행 경비 저장 실패");
+            }
+
+            input.blur();
+            setSelectedCell(null);
+        } catch (error) {
+            console.error("여행 경비 저장 실패:", error);
+        }
+    };
+
+    // ==============================
+    // 카테고리 추가
+    // ==============================
+
+    const handleAddCategory = async () => {
+        if (!trip?.id) return;
+
+        try {
+            const response = await fetch(`/api/trips/${trip.id}/expense-categories`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    name: "새 카테고리",
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error("카테고리 추가 실패");
+            }
+
+            const category: ExpenseCategory = await response.json();
+
+            setCategories((prev) => [...prev, category]);
+            setNewCategoryId(category.id);
+            setSelectedCategoryId(category.id);
+        } catch (error) {
+            console.error("카테고리 추가 실패:", error);
+        }
+    };
+
+    // ==============================
+    // 카테고리 이름 수정
+    // ==============================
+
+    const handleCategoryNameChange = (categoryId: number, name: string) => {
+        setCategories((prev) =>
+            prev.map((category) =>
+                category.id === categoryId
+                    ? {
+                          ...category,
+                          name,
+                      }
+                    : category,
+            ),
+        );
+    };
+
+    const handleCategoryNameSave = async (categoryId: number) => {
+        if (!trip?.id) return;
+
+        const category = categories.find((item) => item.id === categoryId);
+
+        if (!category) return;
+
+        const name = category.name.trim();
+
+        if (!name) {
+            setCategories((prev) =>
+                prev.map((item) =>
+                    item.id === categoryId
+                        ? {
+                              ...item,
+                              name: "새 카테고리",
+                          }
+                        : item,
+                ),
+            );
+
+            setNewCategoryId(null);
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/trips/${trip.id}/expense-categories`, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    categoryId,
+                    name,
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error("카테고리 이름 저장 실패");
+            }
+
+            const updatedCategory: ExpenseCategory = await response.json();
+
+            setCategories((prev) => prev.map((item) => (item.id === categoryId ? updatedCategory : item)));
+
+            setNewCategoryId(null);
+        } catch (error) {
+            console.error("카테고리 이름 저장 실패:", error);
+        }
+    };
+
+    const handleStartEditCategory = (category: ExpenseCategory) => {
+        setEditingCategoryId(category.id);
+        setEditingCategoryName(category.name);
+    };
+
+    const handleCancelEditCategory = () => {
+        setEditingCategoryId(null);
+        setEditingCategoryName("");
+    };
+
+    const handleSaveCategoryName = async (categoryId: number) => {
+        const name = editingCategoryName.trim();
+
+        if (!name || !trip?.id) return;
+
+        if (
+            categories.some((category) => category.id !== categoryId && category.name.trim().toLowerCase() === name.toLowerCase())
+        ) {
+            alert("이미 존재하는 카테고리입니다.");
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/trips/${trip.id}/expense-categories`, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    categoryId,
+                    name,
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error("카테고리 수정 실패");
+            }
+
+            const updatedCategory: ExpenseCategory = await response.json();
+
+            setCategories((prev) => prev.map((category) => (category.id === categoryId ? updatedCategory : category)));
+
+            handleCancelEditCategory();
+        } catch (error) {
+            console.error("카테고리 수정 실패:", error);
+            alert("카테고리 이름을 수정하지 못했어요.");
+        }
+    };
+
+    // ==============================
+    // 카테고리 삭제
+    // ==============================
+
+    const handleDeleteCategory = async (categoryId: number) => {
+        if (!trip?.id) return;
+
+        const category = categories.find((item) => item.id === categoryId);
+
+        if (!category) return;
+
+        const confirmed = window.confirm(
+            `"${category.name}" 카테고리를 삭제할까요?\n이 카테고리에 입력된 경비도 함께 삭제됩니다.`,
+        );
+
+        if (!confirmed) return;
+
+        try {
+            const response = await fetch(`/api/trips/${trip.id}/expense-categories?categoryId=${categoryId}`, {
+                method: "DELETE",
+            });
+
+            if (!response.ok) {
+                throw new Error("카테고리 삭제 실패");
+            }
+
+            setCategories((prev) => prev.filter((item) => item.id !== categoryId));
+
+            setExpenseCells((prev) => {
+                const next = { ...prev };
+
+                Object.keys(next).forEach((key) => {
+                    if (key.startsWith(`${categoryId}_`)) {
+                        delete next[key];
+                    }
+                });
+
+                return next;
+            });
+
+            setSelectedCategoryId(null);
+        } catch (error) {
+            console.error("카테고리 삭제 실패:", error);
+        }
+    };
+
+    // ==============================
+    // 카테고리 드래그앤드랍
+    // ==============================
+
+    const handleCategoryDragStart = (categoryId: number) => {
+        setDraggedCategoryId(categoryId);
+    };
+
+    const handleCategoryDragEnd = () => {
+        setDraggedCategoryId(null);
+    };
+
+    const handleCategoryDragOver = (event: React.DragEvent<HTMLTableRowElement>) => {
+        event.preventDefault();
+    };
+
+    const handleCategoryDrop = async (targetCategoryId: number) => {
+        if (draggedCategoryId === null || draggedCategoryId === targetCategoryId || !trip?.id) {
+            return;
+        }
+
+        const reordered = [...categories];
+
+        const draggedIndex = reordered.findIndex((category) => category.id === draggedCategoryId);
+
+        const targetIndex = reordered.findIndex((category) => category.id === targetCategoryId);
+
+        if (draggedIndex === -1 || targetIndex === -1) {
+            setDraggedCategoryId(null);
+            return;
+        }
+
+        const [draggedCategory] = reordered.splice(draggedIndex, 1);
+
+        reordered.splice(targetIndex, 0, draggedCategory);
+
+        const updatedCategories = reordered.map((category, index) => ({
+            ...category,
+            sort_order: index,
+        }));
+
+        setCategories(updatedCategories);
+        setDraggedCategoryId(null);
+
+        try {
+            await Promise.all(
+                updatedCategories.map((category) =>
+                    fetch(`/api/trips/${trip.id}/expense-categories`, {
+                        method: "PUT",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({
+                            categoryId: category.id,
+                            sortOrder: category.sort_order,
+                        }),
+                    }).then((response) => {
+                        if (!response.ok) {
+                            throw new Error("카테고리 순서 저장 실패");
+                        }
+                    }),
+                ),
+            );
+        } catch (error) {
+            console.error("카테고리 순서 저장 실패:", error);
+
+            const response = await fetch(`/api/trips/${trip.id}/expense-categories`);
+
+            if (response.ok) {
+                const data: ExpenseCategory[] = await response.json();
+
+                setCategories(data);
+            }
+        }
+    };
+
+    return (
+        <div className="mx-auto max-w-md">
+            <Link
+                href="/travel/list"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-gray-500 shadow-sm"
+                aria-label="여행리스트로 돌아가기"
+            >
+                <ArrowLeft size={19} strokeWidth={1.8} />
+            </Link>
+
+            {/* Trip Header */}
+            <section>
+                <div className="mt-8 rounded-3xl bg-white p-6 shadow-sm">
+                    <div className="flex items-center gap-3">
+                        {/* Flag */}
+                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white shadow-sm">
+                            <img
+                                src={`https://flagcdn.com/w40/${trip.countryCode.toLowerCase()}.png`}
+                                alt={trip.country}
+                                className="h-3 object-cover"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Location */}
+                    <p className="mt-6 text-sm text-gray-500">
+                        {trip.city} · {trip.countryCode}
+                    </p>
+
+                    {/* Title */}
+                    <h1 className="mt-2 text-3xl font-bold tracking-tight text-gray-950">{displayTitle}</h1>
+
+                    {/* Date / Duration */}
+                    <div className="mt-5">
+                        <p className="text-sm text-gray-500">
+                            {formatDate(new Date(trip.startDate))} ~ {formatDate(new Date(trip.endDate))}
+                        </p>
+
+                        <p className="mt-1 text-sm text-gray-400">
+                            {nights === 0 ? `당일치기 · ${trip.people}명` : `${nights}박 ${nights + 1}일 · ${trip.people}명`}
+                        </p>
+                    </div>
+
+                    {/* Status */}
+                    {trip.rating > 0 ? (
+                        <div className="mt-5 flex items-center gap-2">
+                            <div className="flex gap-0.5">
+                                {Array.from({
+                                    length: 5,
+                                }).map((_, index) => (
+                                    <Star
+                                        key={index}
+                                        size={18}
+                                        strokeWidth={1.8}
+                                        className={trip.rating >= index + 1 ? "fill-gray-900 text-gray-900" : "text-gray-200"}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    ) : (
+                        <>
+                            <span className="mt-5 inline-flex rounded-full bg-white px-3 py-1.5 text-[11px] font-semibold tracking-wide text-gray-500 shadow-sm">
+                                D-
+                                {Math.max(
+                                    0,
+                                    Math.ceil((new Date(trip.startDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)),
+                                )}
+                            </span>
+                        </>
+                    )}
+                </div>
+            </section>
+
+            {/* Coming Soon */}
+            {trip.tripType === "upcoming" && (
+                <section className=" mt-8">
+                    <div className="rounded-3xl bg-white p-6 shadow-sm">
+                        <p className="text-sm text-gray-400">여행 예산</p>
+
+                        <p className="mt-1 text-3xl font-bold tracking-tight text-gray-950">
+                            ${Number(trip.budget ?? 0).toLocaleString()}
+                        </p>
+
+                        <p className="mt-4 text-sm text-gray-400">
+                            지금까지{" "}
+                            <span className="font-bold text-gray-900">
+                                {trip.budget && Number(trip.budget) > 0
+                                    ? `${((totalExpense / Number(trip.budget)) * 100).toFixed(1)}%`
+                                    : "0%"}
+                            </span>
+                            을 썼어요
+                            <span className="ml-1">
+                                ($
+                                {totalExpense.toLocaleString(undefined, {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                })}
+                                )
+                            </span>
+                        </p>
+                    </div>
+                </section>
+            )}
+
+            {/* Completed Expense Summary */}
+            {trip.tripType === "completed" && (
+                <section className="mt-8">
+                    <div className="rounded-3xl bg-white p-6 shadow-sm">
+                        <p className="text-sm text-gray-400">총 지출</p>
+
+                        <p className="mt-1 text-3xl font-bold tracking-tight text-gray-950">${totalExpense.toLocaleString()}</p>
+
+                        {nights > 0 && (
+                            <p className="mt-4 text-sm text-gray-400">
+                                1박당 평균{" "}
+                                <span className="font-bold text-gray-900">${(totalExpense / (nights + 1)).toFixed(2)}</span>을
+                                썼어요
+                            </p>
+                        )}
+                    </div>
+                </section>
+            )}
+
+            {/* Review */}
+            {trip.tripType === "completed" && (
+                <section className="mt-8">
+                    <div className="rounded-3xl bg-white p-6 shadow-sm">
+                        <p className="text-base font-semibold text-gray-900">여행은 어땠나요?</p>
+
+                        {trip.rating > 0 ? (
+                            <div className="mt-5 flex items-center gap-2">
+                                <div className="flex gap-0.5">
+                                    {Array.from({
+                                        length: 5,
+                                    }).map((_, index) => (
+                                        <Star
+                                            key={index}
+                                            size={18}
+                                            strokeWidth={1.8}
+                                            className={trip.rating >= index + 1 ? "fill-gray-900 text-gray-900" : "text-gray-200"}
+                                        />
+                                    ))}
+                                </div>
+
+                                <span className="text-sm font-medium text-gray-500">{Number(trip.rating).toFixed(1)}</span>
+                            </div>
+                        ) : (
+                            <>
+                                <p className="mt-2 text-sm leading-6 text-gray-400">
+                                    아직 이 여행에 별점을
+                                    <br />
+                                    남기지 않았어요.
+                                </p>
+
+                                <button
+                                    type="button"
+                                    className="mt-5 w-full rounded-2xl bg-gray-900 py-4 text-sm font-medium text-white"
+                                >
+                                    별점 남기기
+                                </button>
+                            </>
+                        )}
+                    </div>
+                </section>
+            )}
+
+            {/* Expenses */}
+            <section className="mt-8">
+                <div className="flex items-end justify-between">
+                    <div>
+                        <h2 className="text-lg font-semibold text-gray-900">여행 경비</h2>
+
+                        <p className="mt-1 text-sm text-gray-400">날짜별로 경비를 기록해보세요.</p>
+                    </div>
+                </div>
+
+                {/* Expense Table */}
+                <div className="mt-4 rounded-3xl bg-white p-6 shadow-sm">
+                    <div className="overflow-x-auto scrollbar-hide">
+                        <table className="w-max min-w-full border-collapse text-sm">
+                            <thead>
+                                <tr className="border-b border-gray-100">
+                                    {/* 드래그 */}
+                                    <th className="sticky left-0 z-20 w-[32px] min-w-[32px] max-w-[32px] bg-white px-0 pb-4 text-center text-xs font-medium text-gray-400">
+                                        {""}
+                                    </th>
+
+                                    {/* 구분 */}
+                                    <th className="sticky left-[32px] z-20 w-[100px] min-w-[100px] max-w-[100px] bg-white px-3 pb-4 text-left text-xs font-medium text-gray-400">
+                                        구분
+                                    </th>
+
+                                    {tripDates.map((date) => (
+                                        <th
+                                            key={date.toISOString()}
+                                            className="w-[100px] min-w-[100px] max-w-[100px] px-3 pb-4 text-center text-xs font-medium text-gray-400"
+                                        >
+                                            {`${String(date.getFullYear()).slice(2)}/${String(date.getMonth() + 1).padStart(
+                                                2,
+                                                "0",
+                                            )}/${String(date.getDate()).padStart(2, "0")}`}
+                                        </th>
+                                    ))}
+
+                                    {/* 합계 */}
+                                    <th className="w-[78px] min-w-[78px] max-w-[78px] bg-white pb-4 pl-3 text-center text-xs font-medium text-gray-400">
+                                        합계
+                                    </th>
+                                </tr>
+                            </thead>
+
+                            <tbody>
+                                {categories.map((category) => {
+                                    const Icon = categoryIcons[category.name as keyof typeof categoryIcons] ?? MoreHorizontal;
+
+                                    const categoryTotal = getCategoryTotal(category.id);
+
+                                    const isSelected = selectedCategoryId === category.id;
+                                    const isDragging = draggedCategoryId === category.id;
+
+                                    return (
+                                        <tr
+                                            key={category.id}
+                                            draggable={false}
+                                            onDragOver={handleCategoryDragOver}
+                                            onDrop={() => handleCategoryDrop(category.id)}
+                                            onClick={(event) => {
+                                                if ((event.target as HTMLElement).closest("input")) {
+                                                    return;
+                                                }
+
+                                                setSelectedCategoryId(isSelected ? null : category.id);
+                                            }}
+                                            className={`border-b border-gray-50 last:border-b-0 transition ${
+                                                isDragging ? "opacity-40" : ""
+                                            }`}
+                                        >
+                                            {/* 드래그 / 삭제 */}
+                                            <td
+                                                className={`sticky left-0 z-20 w-[32px] min-w-[32px] max-w-[32px] bg-white py-2 ${
+                                                    isSelected ? "bg-gray-50" : ""
+                                                }`}
+                                                onClick={(event) => event.stopPropagation()}
+                                            >
+                                                {isSelected ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleDeleteCategory(category.id)}
+                                                        className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:text-gray-700"
+                                                        aria-label="카테고리 삭제"
+                                                    >
+                                                        <Trash2 size={15} strokeWidth={1.8} />
+                                                    </button>
+                                                ) : (
+                                                    <div
+                                                        draggable
+                                                        onDragStart={() => handleCategoryDragStart(category.id)}
+                                                        onDragEnd={handleCategoryDragEnd}
+                                                        className="flex h-8 w-8 cursor-grab items-center justify-center rounded-lg text-gray-300 active:cursor-grabbing"
+                                                        aria-label="카테고리 순서 변경"
+                                                    >
+                                                        ⋮⋮
+                                                    </div>
+                                                )}
+                                            </td>
+
+                                            {/* 카테고리 */}
+                                            <th
+                                                className={`sticky left-[32px] z-20 w-[100px] min-w-[100px] max-w-[100px] bg-white py-2 px-3 text-left ${
+                                                    isSelected ? "bg-gray-50" : ""
+                                                }`}
+                                            >
+                                                <div className="flex w-[76px] items-center gap-2">
+                                                    <Icon size={15} strokeWidth={1.8} className="shrink-0 text-gray-400" />
+
+                                                    <input
+                                                        type="text"
+                                                        value={category.name}
+                                                        autoFocus={newCategoryId === category.id}
+                                                        onChange={(event) =>
+                                                            handleCategoryNameChange(category.id, event.target.value)
+                                                        }
+                                                        onFocus={() => setSelectedCategoryId(category.id)}
+                                                        onBlur={() => handleCategoryNameSave(category.id)}
+                                                        onKeyDown={(event) => {
+                                                            if (event.key === "Enter") {
+                                                                event.currentTarget.blur();
+                                                            }
+
+                                                            if (event.key === "Escape") {
+                                                                event.currentTarget.blur();
+                                                                setSelectedCategoryId(null);
+                                                            }
+                                                        }}
+                                                        onClick={(event) => event.stopPropagation()}
+                                                        className="w-[55px] min-w-0 bg-transparent text-xs font-medium text-gray-600 outline-none cursor-pointer"
+                                                    />
+                                                </div>
+                                            </th>
+
+                                            {/* 날짜별 비용 */}
+                                            {tripDates.map((date) => {
+                                                const key = getCellKey(category.id, date);
+
+                                                return (
+                                                    <td
+                                                        key={key}
+                                                        className={`w-[100px] min-w-[100px] max-w-[100px] px-2 py-2 text-center ${
+                                                            isSelected ? "bg-gray-50" : ""
+                                                        }`}
+                                                        onClick={(event) => event.stopPropagation()}
+                                                    >
+                                                        <input
+                                                            type="text"
+                                                            inputMode="decimal"
+                                                            value={
+                                                                expenseCells[key] === "0.00" || expenseCells[key] === "0"
+                                                                    ? ""
+                                                                    : (expenseCells[key] ?? "")
+                                                            }
+                                                            onFocus={() => {
+                                                                setSelectedCell(key);
+                                                            }}
+                                                            onChange={(event) => {
+                                                                handleCellChange(category.id, date, event.target.value);
+                                                            }}
+                                                            onKeyDown={(event) => {
+                                                                handleCellKeyDown(event, category.id, date);
+                                                            }}
+                                                            onBlur={() => {
+                                                                setSelectedCell(null);
+                                                            }}
+                                                            placeholder="-"
+                                                            className={`min-h-[48px] w-full rounded-xl bg-transparent px-2 text-center text-xs text-gray-700 outline-none transition cursor-pointer ${
+                                                                selectedCell === key ? "ring-1 ring-gray-300 cursor-text" : ""
+                                                            }`}
+                                                        />
+                                                    </td>
+                                                );
+                                            })}
+
+                                            {/* 카테고리 합계 */}
+                                            <td
+                                                className={`w-[78px] min-w-[78px] max-w-[78px] py-4 pl-3 text-center text-xs font-medium text-gray-900 ${
+                                                    isSelected ? "bg-gray-50" : ""
+                                                }`}
+                                            >
+                                                $
+                                                {categoryTotal.toLocaleString(undefined, {
+                                                    minimumFractionDigits: 2,
+                                                    maximumFractionDigits: 2,
+                                                })}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+
+                                {/* 카테고리 추가 */}
+                                <tr className="border-b border-gray-100">
+                                    {/* 드래그 영역 */}
+                                    <td className="sticky left-0 z-20 w-[32px] min-w-[32px] max-w-[32px] bg-white">{""}</td>
+
+                                    {/* 카테고리 영역 */}
+                                    <td
+                                        onClick={handleAddCategory}
+                                        className="sticky left-[32px] z-20 w-[100px] min-w-[100px] max-w-[100px] cursor-pointer bg-white py-4 px-3"
+                                    >
+                                        <div className="flex w-[76px] items-center gap-2 text-xs font-medium text-gray-400">
+                                            <Plus size={15} strokeWidth={1.8} />
+                                            <span>추가</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+
+                            <tfoot>
+                                <tr className="border-t border-gray-100">
+                                    {/* 드래그 자리 */}
+                                    <th className="sticky left-0 z-20 w-[32px] min-w-[32px] max-w-[32px] bg-white pt-4 px-0 text-left text-xs font-semibold text-gray-700">
+                                        {""}
+                                    </th>
+
+                                    {/* 일별 합계 */}
+                                    <th className="sticky left-[32px] z-20 w-[100px] min-w-[100px] max-w-[100px] bg-white pt-4 px-3 text-left text-xs font-semibold text-gray-700">
+                                        {""}
+                                    </th>
+
+                                    {tripDates.map((date) => (
+                                        <td
+                                            key={date.toISOString()}
+                                            className="w-[100px] min-w-[100px] max-w-[100px] px-2 pt-4 text-center text-xs font-semibold text-gray-900"
+                                        >
+                                            ${getDateTotal(date).toFixed(2)}
+                                        </td>
+                                    ))}
+
+                                    <td className="w-[78px] min-w-[78px] max-w-[78px] pt-4 pl-3 text-center text-sm font-semibold text-gray-900">
+                                        $
+                                        {totalExpense.toLocaleString(undefined, {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2,
+                                        })}
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </div>
+    );
+}

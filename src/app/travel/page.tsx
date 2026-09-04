@@ -235,6 +235,14 @@ export default function TravelPage() {
         return Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
     };
 
+    if (isTripsLoading) {
+        return (
+            <div className="flex h-[calc(100vh-152px)] items-center justify-center">
+                <p className="text-sm text-gray-400">여행 기록을 불러오는 중...</p>
+            </div>
+        );
+    }
+
     return (
         <div className="mx-auto max-w-md">
             {" "}
@@ -298,25 +306,59 @@ export default function TravelPage() {
                             return (
                                 <Link
                                     key={trip.id}
-                                    href={`/travel/${trip.id}`}
-                                    className="block rounded-3xl bg-white p-5 shadow-sm transition active:scale-[0.99]"
+                                    href={`/travel/list/${trip.id}`}
+                                    className="block rounded-3xl bg-white p-6 shadow-sm transition active:scale-[0.99]"
                                 >
-                                    <div className="flex items-start justify-between">
-                                        <div>
-                                            <p className="text-lg font-semibold">
-                                                {trip.country} {trip.city}
+                                    <div className="flex items-start justify-between gap-4">
+                                        <div className="min-w-0">
+                                            {trip.title ? (
+                                                <>
+                                                    <p className="truncate text-lg font-semibold text-gray-900">{trip.title}</p>
+
+                                                    <div className="mt-1 flex items-center gap-1.5">
+                                                        <img
+                                                            src={`https://flagcdn.com/w40/${trip.countryCode.toLowerCase()}.png`}
+                                                            alt={trip.country}
+                                                            className="h-3 w-auto object-cover"
+                                                        />
+
+                                                        <p className="truncate text-sm text-gray-400">
+                                                            {trip.city} · {trip.countryCode}
+                                                        </p>
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <div className="flex items-center gap-2">
+                                                    <img
+                                                        src={`https://flagcdn.com/w40/${trip.countryCode.toLowerCase()}.png`}
+                                                        alt={trip.country}
+                                                        className="h-3 w-auto object-cover"
+                                                    />
+
+                                                    <p className="truncate text-lg font-semibold text-gray-900">{trip.city}</p>
+                                                </div>
+                                            )}
+
+                                            <p className="mt-4 text-xs text-gray-500">
+                                                {formatDate(new Date(trip.startDate))} ~ {formatDate(new Date(trip.endDate))}
                                             </p>
 
-                                            <p className="mt-2 text-sm text-gray-500">
-                                                {trip.startDate} ~ {trip.endDate}
-                                            </p>
-
-                                            <p className="mt-1 text-sm text-gray-400">
-                                                {nights}박 {nights + 1}일 · {trip.people}명
+                                            <p className="mt-1 text-xs text-gray-400">
+                                                {nights === 0
+                                                    ? `당일치기 · ${trip.people}명`
+                                                    : `${nights}박 ${nights + 1}일 · ${trip.people}명`}
                                             </p>
                                         </div>
 
-                                        <span className="rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-500">예정</span>
+                                        <span className="shrink-0 rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-500">
+                                            D-
+                                            {Math.max(
+                                                0,
+                                                Math.ceil(
+                                                    (new Date(trip.startDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
+                                                ),
+                                            )}
+                                        </span>
                                     </div>
                                 </Link>
                             );
@@ -476,34 +518,56 @@ export default function TravelPage() {
                             return (
                                 <Link
                                     key={trip.id}
-                                    href={`/travel/${trip.id}`}
-                                    className="block rounded-3xl bg-white p-5 shadow-sm transition active:scale-[0.99]"
+                                    href={`/travel/list/${trip.id}`}
+                                    className="block rounded-3xl bg-white p-6 shadow-sm transition active:scale-[0.99]"
                                 >
-                                    <div className="flex items-start justify-between">
-                                        <div>
-                                            <p className="text-xs text-gray-400">
-                                                {trip.countryCode} · {trip.rating > 0 ? "COMPLETED" : "NOT REVIEWED"}
-                                            </p>
+                                    <div className="flex items-start justify-between gap-4">
+                                        <div className="min-w-0 flex-1">
+                                            <div className="flex items-center justify-between gap-3">
+                                                <p className="truncate text-lg font-semibold text-gray-900">
+                                                    {trip.title || trip.city}
+                                                </p>
 
-                                            <p className="mt-1 text-lg font-semibold">{trip.title || trip.city}</p>
+                                                {trip.rating > 0 && (
+                                                    <div className="flex shrink-0 items-center">
+                                                        {[1, 2, 3, 4, 5].map((star) => (
+                                                            <Star
+                                                                key={star}
+                                                                size={13}
+                                                                strokeWidth={1.7}
+                                                                className={
+                                                                    star <= trip.rating
+                                                                        ? "fill-gray-900 text-gray-900"
+                                                                        : "text-gray-200"
+                                                                }
+                                                            />
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
 
-                                            {trip.title && <p className="mt-1 text-sm text-gray-400">{trip.city}</p>}
+                                            <div className="mt-1 flex items-center gap-1.5">
+                                                <img
+                                                    src={`https://flagcdn.com/w40/${trip.countryCode.toLowerCase()}.png`}
+                                                    alt={trip.country}
+                                                    className="h-3 w-auto object-cover"
+                                                />
 
-                                            <p className="mt-2 text-sm text-gray-500">
+                                                <p className="truncate text-sm text-gray-400">
+                                                    {trip.city} · {trip.countryCode}
+                                                </p>
+                                            </div>
+
+                                            <p className="mt-4 text-xs text-gray-500">
                                                 {formatDate(new Date(trip.startDate))} ~ {formatDate(new Date(trip.endDate))}
                                             </p>
 
-                                            <p className="mt-1 text-sm text-gray-400">
+                                            <p className="mt-1 text-xs text-gray-400">
                                                 {nights === 0
                                                     ? `당일치기 · ${trip.people}명`
                                                     : `${nights}박 ${nights + 1}일 · ${trip.people}명`}
                                             </p>
                                         </div>
-
-                                        <p className="text-sm tracking-tight">
-                                            {"★".repeat(Math.round(trip.rating))}
-                                            <span className="text-gray-300">{"★".repeat(5 - Math.round(trip.rating))}</span>
-                                        </p>
                                     </div>
                                 </Link>
                             );

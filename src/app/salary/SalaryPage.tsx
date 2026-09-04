@@ -827,7 +827,7 @@ export default function SchedulePage() {
 
     if (isSchedulesLoading) {
         return (
-            <div className="mx-auto max-w-md">
+            <div className="flex h-[calc(100vh-152px)] items-center justify-center">
                 <p className="text-sm text-gray-400">근무 기록을 불러오는 중...</p>
             </div>
         );
