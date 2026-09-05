@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
-import { Plane, CheckCircle2, Star } from "lucide-react";
+import { Plane, CheckCircle2, Star, StarHalf } from "lucide-react";
 import { formatDate } from "@/lib/payPeriod";
+import TravelGlobe from "./TravelGlobe";
 
 type SavedTrip = {
     id: number;
@@ -19,11 +20,26 @@ type SavedTrip = {
     budget?: number;
     currency?: string;
     rating: number;
+    totalExpense?: number;
+
+    // 🌍 지도용 좌표
+    latitude: number;
+    longitude: number;
 };
 
+// 도시 검색
 type CitySearchResult = {
     name: string;
     countryCode: string;
+    latitude: number;
+    longitude: number;
+};
+
+// 카테고리 통계
+type ExpenseCategoryStat = {
+    category: string;
+    amount: number;
+    percentage: number;
 };
 
 const getCountryName = (countryCode: string) => {
@@ -38,26 +54,14 @@ const getCountryName = (countryCode: string) => {
     }
 };
 
-const countries = [
-    {
-        country: "🇺🇸",
-        name: "미국",
-        cities: ["New York", "Boston"],
-        count: 3,
-    },
-    {
-        country: "🇨🇦",
-        name: "캐나다",
-        cities: ["Toronto", "Niagara Falls"],
-        count: 4,
-    },
-    {
-        country: "🇯🇵",
-        name: "일본",
-        cities: ["Tokyo"],
-        count: 1,
-    },
-];
+const formatCityName = (value: string) => {
+    return value
+        .trim()
+        .toLowerCase()
+        .split(/\s+/)
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(" ");
+};
 
 const categoryData = [
     { name: "항공", value: 30, amount: 300 },
@@ -79,6 +83,9 @@ export default function TravelPage() {
 
     const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+
+    const [isAddCityModalOpen, setIsAddCityModalOpen] = useState(false);
+    const [newCityCountryCode, setNewCityCountryCode] = useState("");
 
     const [tripType, setTripType] = useState<"upcoming" | "completed">("upcoming");
 
@@ -106,6 +113,19 @@ export default function TravelPage() {
     // 여행 저장
     const [trips, setTrips] = useState<SavedTrip[]>([]);
     const [isTripsLoading, setIsTripsLoading] = useState(true);
+
+    // 지구본
+    const [latitude, setLatitude] = useState<number | null>(null);
+    const [longitude, setLongitude] = useState<number | null>(null);
+
+    // 카테고리 통계
+    const [categoryData, setCategoryData] = useState<
+        {
+            name: string;
+            value: number;
+            amount: number;
+        }[]
+    >([]);
 
     // 위치 검색 API
     useEffect(() => {
@@ -169,6 +189,32 @@ export default function TravelPage() {
         fetchTrips();
     }, []);
 
+    useEffect(() => {
+        const fetchCategoryStats = async () => {
+            try {
+                const response = await fetch("/api/trips/stats/expense-categories");
+
+                if (!response.ok) {
+                    throw new Error("카테고리별 소비 통계를 불러오지 못했습니다.");
+                }
+
+                const data: ExpenseCategoryStat[] = await response.json();
+
+                setCategoryData(
+                    data.map((item) => ({
+                        name: item.category,
+                        value: item.percentage,
+                        amount: item.amount,
+                    })),
+                );
+            } catch (error) {
+                console.error("카테고리별 소비 통계 조회 실패:", error);
+            }
+        };
+
+        fetchCategoryStats();
+    }, []);
+
     // 국가 코드로 국가 정보 가져오기
     const getCountryInfo = async (code: string) => {
         try {
@@ -200,12 +246,16 @@ export default function TravelPage() {
 
         setCity(result.name);
         setCountryCode(result.countryCode);
+
+        setLatitude(result.latitude);
+        setLongitude(result.longitude);
+
         setShowCityResults(false);
         setCitySearchResults([]);
 
         const countryInfo = await getCountryInfo(result.countryCode);
 
-        setCountry(countryInfo.name);
+        setCountry(result.countryCode === "US" ? "United States" : countryInfo.name);
     };
 
     // 인풋 초기화
@@ -219,14 +269,60 @@ export default function TravelPage() {
         setPeople("1");
         setBudget("");
         setRating(0);
+        setLatitude(null);
+        setLongitude(null);
 
         setCitySearchResults([]);
         setShowCityResults(false);
     };
 
-    // 있을 때만
-    const upcomingTrips = trips.filter((trip) => trip.tripType === "upcoming");
+    // 여행 유형
+    const upcomingTrips = trips
+        .filter((trip) => trip.tripType === "upcoming")
+        .sort((a, b) => {
+            return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
+        });
     const completedTrips = trips.filter((trip) => trip.tripType === "completed");
+
+    const travelCountries = Array.from(
+        completedTrips
+            .reduce(
+                (map, trip) => {
+                    const existing = map.get(trip.countryCode);
+
+                    if (existing) {
+                        existing.count += 1;
+
+                        if (!existing.cities.includes(trip.city)) {
+                            existing.cities.push(trip.city);
+                        }
+                    } else {
+                        map.set(trip.countryCode, {
+                            countryCode: trip.countryCode,
+                            name: trip.countryCode === "US" ? "United States" : trip.country,
+                            cities: [trip.city],
+                            count: 1,
+                        });
+                    }
+
+                    return map;
+                },
+                new Map<
+                    string,
+                    {
+                        countryCode: string;
+                        name: string;
+                        cities: string[];
+                        count: number;
+                    }
+                >(),
+            )
+            .values(),
+    );
+
+    const traveledCountryCount = travelCountries.length;
+
+    const worldTravelPercent = Math.round((traveledCountryCount / 195) * 100);
 
     const getNights = (startDate: string, endDate: string) => {
         const start = new Date(startDate);
@@ -234,6 +330,18 @@ export default function TravelPage() {
 
         return Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
     };
+
+    // 카테고리 통계
+    const totalCompletedExpense = completedTrips.reduce((sum, trip) => sum + Number(trip.totalExpense ?? 0), 0);
+
+    const averageTripExpense = completedTrips.length > 0 ? totalCompletedExpense / completedTrips.length : 0;
+
+    // 최근 여행
+    const recentCompletedTrips = [...completedTrips]
+        .sort((a, b) => {
+            return new Date(b.endDate).getTime() - new Date(a.endDate).getTime();
+        })
+        .slice(0, 3);
 
     if (isTripsLoading) {
         return (
@@ -266,7 +374,7 @@ export default function TravelPage() {
             </header>
             {/* Travel Budget */}
             <section className="mt-8">
-                <div className="rounded-3xl bg-white p-6 shadow-sm">
+                <div className="rounded-3xl bg-white p-5 shadow-sm">
                     <p className="text-sm text-gray-500">✈️ 다음 여행까지</p>
 
                     <div className="mt-4 flex items-end justify-between">
@@ -307,7 +415,7 @@ export default function TravelPage() {
                                 <Link
                                     key={trip.id}
                                     href={`/travel/list/${trip.id}`}
-                                    className="block rounded-3xl bg-white p-6 shadow-sm transition active:scale-[0.99]"
+                                    className="block rounded-3xl bg-white p-5 shadow-sm transition active:scale-[0.99]"
                                 >
                                     <div className="flex items-start justify-between gap-4">
                                         <div className="min-w-0">
@@ -370,44 +478,26 @@ export default function TravelPage() {
             <section className="mt-10">
                 <h2 className="text-lg font-semibold">여행 통계</h2>
 
-                {/* Countries */}
+                {/* Travel Globe */}
                 <div className="mt-4">
-                    <div className="flex items-end justify-between">
-                        <div>
-                            <p className="text-sm text-gray-500">🌎 여행한 나라</p>
-                            <p className="mt-1 text-2xl font-bold">{countries.length}개국</p>
-                        </div>
-
-                        <p className="text-sm text-gray-400">세계일주 18% 완성</p>
-                    </div>
-
-                    <div className="mt-4 flex gap-3 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                        {" "}
-                        {countries.map((country) => (
-                            <div key={country.name} className="min-w-[150px] rounded-3xl bg-white p-5 shadow-sm">
-                                <p className="text-2xl">{country.country}</p>
-
-                                <p className="mt-3 font-semibold">{country.name}</p>
-
-                                <p className="mt-1 text-xs text-gray-400">{country.count}회 여행</p>
-
-                                <div className="mt-3 space-y-1">
-                                    {country.cities.map((city) => (
-                                        <p key={city} className="truncate text-xs text-gray-500">
-                                            {city}
-                                        </p>
-                                    ))}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
+                    <TravelGlobe
+                        trips={completedTrips
+                            .filter((trip) => trip.latitude !== undefined && trip.longitude !== undefined)
+                            .map((trip) => ({
+                                city: trip.city,
+                                country: trip.country,
+                                countryCode: trip.countryCode,
+                                latitude: trip.latitude as number,
+                                longitude: trip.longitude as number,
+                            }))}
+                    />
                 </div>
 
                 {/* Category Statistics */}
-                <div className="mt-8 rounded-3xl bg-white p-6 shadow-sm">
+                {/* <div className="mt-8 rounded-3xl bg-white p-5 shadow-sm">
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-sm text-gray-500">평균 여행 지출</p>
+                            <p className="text-sm text-gray-500">전체 여행 지출</p>{" "}
                             <p className="mt-1 text-lg font-semibold">카테고리별 소비</p>
                         </div>
 
@@ -428,7 +518,7 @@ export default function TravelPage() {
                                     paddingAngle={2}
                                     isAnimationActive={false}
                                     onClick={(_, index) => {
-                                        setSelectedIndex(index);
+                                        setSelectedIndex(selectedIndex === index ? null : index);
                                     }}
                                     label={({ name, value, cx, cy, midAngle }) => {
                                         const RADIAN = Math.PI / 180;
@@ -451,15 +541,9 @@ export default function TravelPage() {
                                                 dominantBaseline="central"
                                                 fontSize={11}
                                             >
-                                                <tspan x={x} dy={isSelected ? "-5" : "0"}>
-                                                    {name} {value}%
+                                                <tspan x={x}>
+                                                    {name}
                                                 </tspan>
-
-                                                {isSelected && (
-                                                    <tspan x={x} dy="16" fontWeight="600">
-                                                        ${categoryData[index].amount}
-                                                    </tspan>
-                                                )}
                                             </text>
                                         );
                                     }}
@@ -475,18 +559,29 @@ export default function TravelPage() {
                             </PieChart>
                         </ResponsiveContainer>
 
-                        <div className="-mt-41 pointer-events-none text-center">
-                            <p className="text-xs text-gray-400">여행 1회당</p>
-                            <p className="mt-1 text-lg font-bold">평균 $667</p>
+                        <div className="-mt-40 pointer-events-none text-center">
+                            {selectedIndex === null ? (
+                                <>
+                                    <p className="text-xs text-gray-400">카테고리를</p>
+                                    <p className="text-lg font-bold">눌러보세요</p>
+                                </>
+                            ) : (
+                                <>
+                                    <p className="text-xs text-gray-400">{categoryData[selectedIndex].name}</p>
+                                    <p className="mt-1 text-lg font-bold">
+                                        ${categoryData[selectedIndex].amount.toLocaleString()}
+                                    </p>
+                                </>
+                            )}
                         </div>
                     </div>
 
                     <p className="mt-5 text-center text-xs text-gray-400">그래프를 누르면 카테고리별 평균 지출을 볼 수 있어요.</p>
-                </div>
+                </div> */}
             </section>
             {/* Country Insight */}
             <section className="mt-8">
-                <div className="rounded-3xl bg-gray-900 p-6 text-white">
+                <div className="rounded-3xl bg-gray-900 p-5 text-white">
                     <p className="text-sm text-gray-400">🇺🇸 미국 여행 소비 분석</p>
 
                     <p className="mt-4 text-xl font-semibold leading-relaxed">
@@ -503,7 +598,7 @@ export default function TravelPage() {
             {/* My Trips */}
             <section className="mt-10">
                 <div className="flex items-center justify-between">
-                    <h2 className="text-lg font-semibold">내 여행</h2>
+                    <h2 className="text-lg font-semibold">최근 내 여행</h2>
 
                     <Link href="/travel/list" className="text-sm text-gray-400">
                         전체 보기 →
@@ -512,14 +607,14 @@ export default function TravelPage() {
 
                 {completedTrips.length > 0 ? (
                     <div className="mt-4 space-y-3">
-                        {completedTrips.map((trip) => {
+                        {recentCompletedTrips.map((trip) => {
                             const nights = getNights(trip.startDate, trip.endDate);
 
                             return (
                                 <Link
                                     key={trip.id}
                                     href={`/travel/list/${trip.id}`}
-                                    className="block rounded-3xl bg-white p-6 shadow-sm transition active:scale-[0.99]"
+                                    className="block rounded-3xl bg-white p-5 shadow-sm transition active:scale-[0.99]"
                                 >
                                     <div className="flex items-start justify-between gap-4">
                                         <div className="min-w-0 flex-1">
@@ -527,20 +622,34 @@ export default function TravelPage() {
                                                 <p className="truncate text-lg font-semibold text-gray-900">
                                                     {trip.title || trip.city}
                                                 </p>
-
                                                 {trip.rating > 0 && (
                                                     <div className="flex shrink-0 items-center">
                                                         {[1, 2, 3, 4, 5].map((star) => (
-                                                            <Star
-                                                                key={star}
-                                                                size={13}
-                                                                strokeWidth={1.7}
-                                                                className={
-                                                                    star <= trip.rating
-                                                                        ? "fill-gray-900 text-gray-900"
-                                                                        : "text-gray-200"
-                                                                }
-                                                            />
+                                                            <div key={star} className="relative h-[13px] w-[13px]">
+                                                                <Star
+                                                                    size={13}
+                                                                    strokeWidth={1.7}
+                                                                    className="absolute inset-0 text-gray-200"
+                                                                />
+
+                                                                {trip.rating >= star && (
+                                                                    <Star
+                                                                        size={13}
+                                                                        strokeWidth={1.7}
+                                                                        className="absolute inset-0 fill-gray-900 text-gray-900"
+                                                                    />
+                                                                )}
+
+                                                                {trip.rating >= star - 0.5 && trip.rating < star && (
+                                                                    <div className="absolute inset-y-0 left-0 w-1/2 overflow-hidden">
+                                                                        <Star
+                                                                            size={13}
+                                                                            strokeWidth={1.7}
+                                                                            className="fill-gray-900 text-gray-900"
+                                                                        />
+                                                                    </div>
+                                                                )}
+                                                            </div>
                                                         ))}
                                                     </div>
                                                 )}
@@ -562,11 +671,19 @@ export default function TravelPage() {
                                                 {formatDate(new Date(trip.startDate))} ~ {formatDate(new Date(trip.endDate))}
                                             </p>
 
-                                            <p className="mt-1 text-xs text-gray-400">
-                                                {nights === 0
-                                                    ? `당일치기 · ${trip.people}명`
-                                                    : `${nights}박 ${nights + 1}일 · ${trip.people}명`}
-                                            </p>
+                                            <div className="mt-1 flex items-end justify-between">
+                                                <p className="text-xs text-gray-400">
+                                                    {nights === 0
+                                                        ? `당일치기 · ${trip.people}명`
+                                                        : `${nights}박 ${nights + 1}일 · ${trip.people}명`}
+                                                </p>
+
+                                                {trip.tripType === "completed" && (
+                                                    <p className="text-xs text-gray-400">
+                                                        ${Number(trip.totalExpense ?? 0).toLocaleString()}
+                                                    </p>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                 </Link>
@@ -612,7 +729,7 @@ export default function TravelPage() {
             {/* Trip Saved Popup */}
             {savedTrip && (
                 <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/30 px-5">
-                    <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-xl">
+                    <div className="w-full max-w-md rounded-3xl bg-white p-5 shadow-xl">
                         <p className="text-lg font-bold">여행이 추가됐어요 ✈️</p>
 
                         {savedTrip.title ? (
@@ -667,7 +784,7 @@ export default function TravelPage() {
             {/* Add Travel Modal */}
             {isAddModalOpen && (
                 <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/30 px-4 pb-4 modal-overlay">
-                    <div className="modal-content w-full max-w-md overflow-hidden rounded-3xl bg-white p-6 shadow-xl">
+                    <div className="modal-content w-full max-w-md overflow-hidden rounded-3xl bg-white p-5 shadow-xl">
                         {/* 헤더 */}
                         <div className="flex items-center justify-between">
                             <h2 className="text-xl font-bold">여행 추가</h2>
@@ -891,8 +1008,19 @@ export default function TravelPage() {
                                                         ))}
                                                     </div>
                                                 ) : (
-                                                    <div className="px-4 py-4 text-sm text-gray-400">
-                                                        일치하는 도시를 찾지 못했어요.
+                                                    <div className="px-4 py-4">
+                                                        <p className="text-sm text-gray-400">일치하는 도시를 찾지 못했어요.</p>
+
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setNewCityCountryCode("");
+                                                                setIsAddCityModalOpen(true);
+                                                            }}
+                                                            className="mt-3 w-full rounded-2xl bg-gray-50 px-4 py-3 text-sm font-medium text-gray-700 transition active:bg-gray-100"
+                                                        >
+                                                            ＋ 이 도시 추가하기
+                                                        </button>
                                                     </div>
                                                 )}
                                             </div>
@@ -1089,6 +1217,11 @@ export default function TravelPage() {
                                                     city,
                                                     country,
                                                     countryCode,
+
+                                                    // 🌍 지도 좌표
+                                                    latitude,
+                                                    longitude,
+
                                                     startDate,
                                                     endDate,
                                                     people: Number(people) || 1,
@@ -1129,6 +1262,82 @@ export default function TravelPage() {
                                     </div>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Add City Modal */}
+            {isAddCityModalOpen && (
+                <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/30 px-5">
+                    <div className="w-full max-w-md rounded-3xl bg-white p-5 shadow-xl">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-xl font-bold">도시 추가</h2>
+
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setIsAddCityModalOpen(false);
+                                }}
+                                className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-500"
+                            >
+                                ×
+                            </button>
+                        </div>
+
+                        <div className="mt-6">
+                            <p className="text-sm font-medium text-gray-700">도시</p>
+
+                            <div className="mt-2 rounded-2xl bg-gray-100 px-4 py-4 text-sm text-gray-700">{city}</div>
+                        </div>
+
+                        <div className="mt-5">
+                            <p className="text-sm font-medium text-gray-700">국가</p>
+
+                            <select
+                                value={newCityCountryCode}
+                                onChange={(e) => {
+                                    setNewCityCountryCode(e.target.value);
+                                }}
+                                className="mt-2 h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
+                            >
+                                <option value="">국가를 선택해주세요</option>
+                                <option value="CA">🇨🇦 Canada</option>
+                                <option value="US">🇺🇸 United States</option>
+                                <option value="KR">🇰🇷 South Korea</option>
+                                <option value="JP">🇯🇵 Japan</option>
+                            </select>
+                        </div>
+
+                        <div className="mt-6 flex gap-3">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setIsAddCityModalOpen(false);
+                                }}
+                                className="flex-1 rounded-2xl border border-gray-200 py-4 text-sm font-medium text-gray-700"
+                            >
+                                취소
+                            </button>
+
+                            <button
+                                type="button"
+                                disabled={!newCityCountryCode}
+                                onClick={async () => {
+                                    const countryInfo = await getCountryInfo(newCityCountryCode);
+
+                                    isSelectingCityRef.current = true;
+
+                                    setCity(formatCityName(city));
+                                    setCountryCode(newCityCountryCode);
+                                    setCountry(countryInfo.name);
+                                    setShowCityResults(false);
+                                    setCitySearchResults([]);
+                                    setIsAddCityModalOpen(false);
+                                }}
+                                className="flex-1 rounded-2xl bg-black py-4 text-sm font-medium text-white disabled:opacity-30"
+                            >
+                                선택하기
+                            </button>
                         </div>
                     </div>
                 </div>

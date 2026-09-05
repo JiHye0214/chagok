@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
+import BackButtonHeader from "@/components/BackButtonHeader";
 
 type PayHistory = {
     startDate: string;
@@ -278,15 +281,11 @@ export default function PayHistoryPage() {
     return (
         <>
             <div className="mx-auto max-w-md">
-                <header>
-                    <button type="button" onClick={() => window.history.back()} className="text-sm text-gray-400">
-                        ← 근무 관리
-                    </button>
-
-                    <h1 className="mt-4 text-3xl font-bold">급여 기록</h1>
-
-                    <p className="mt-2 text-sm text-gray-500">지난 급여 기간과 실제 수령 금액을 확인해보세요.</p>
-                </header>
+                <BackButtonHeader
+                    href="/salary"
+                    title="급여 기록"
+                    description="지난 급여 기간과 실제 수령 금액을 확인해보세요.."
+                />
 
                 {payHistory.length === 0 ? (
                     <section className="mt-6 rounded-3xl bg-white p-6 shadow-sm">
@@ -303,9 +302,8 @@ export default function PayHistoryPage() {
                             >
                                 <div className="flex items-center justify-between">
                                     <div>
-                                        <p className="text-xs text-gray-400">
-                                            {index === 0 ? "최근 급여" : `${index}번째 이전 급여`}
-                                        </p>
+                                        {/* 아 트루펄스는 && */}
+                                        {index === 0 && <p className="text-xs text-gray-400">최근 급여</p>}
 
                                         <p className="mt-1 font-semibold">
                                             {formatDisplayDate(history.startDate)}
@@ -382,8 +380,6 @@ export default function PayHistoryPage() {
                         <section className="rounded-3xl bg-black p-6 text-white shadow-sm">
                             <div className="flex items-start justify-between">
                                 <div>
-                                    <p className="text-sm text-gray-300">급여</p>
-
                                     <p className="mt-2 text-xs text-gray-500">
                                         {formatDisplayDate(selectedHistory.startDate)}
                                         {" ~ "}

@@ -865,7 +865,7 @@ export default function SchedulePage() {
                 <button
                     type="button"
                     onClick={() => router.push("/salary/pay-history")}
-                    className="mt-5 flex w-full items-center justify-between rounded-2xl bg-black px-4 py-4 text-left text-white shadow-sm transition hover:shadow-md"
+                    className="mt-5 flex w-full items-center justify-between rounded-3xl bg-black p-5 text-left text-white shadow-sm transition hover:shadow-md"
                 >
                     <div>
                         <p className="text-xs text-gray-400">급여 확인</p>
@@ -881,7 +881,7 @@ export default function SchedulePage() {
 
             {/* Pay Period Notice */}
             {currentPayPeriod && (
-                <section className="mt-5 rounded-3xl bg-white px-5 py-4 shadow-sm">
+                <section className="mt-5 rounded-3xl bg-white p-5 shadow-sm">
                     <div className="flex items-center justify-between">
                         <div>
                             <p className="text-xs text-gray-400">현재 급여 기간</p>
@@ -1010,7 +1010,7 @@ export default function SchedulePage() {
 
             {/* This Month Schedule List */}
 
-            <section className="mt-5 rounded-3xl bg-white p-6 shadow-sm">
+            <section className="mt-5 rounded-3xl bg-white p-5 shadow-sm">
                 <div className="flex items-center justify-between">
                     <h2 className="text-lg font-semibold">이번 달 근무</h2>
 
@@ -1129,7 +1129,7 @@ export default function SchedulePage() {
 
             {isAddModalOpen && (
                 <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40 p-5">
-                    <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl bg-white p-6 scrollbar-hide">
+                    <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl bg-white p-5 scrollbar-hide">
                         {/* Modal Header */}
                         <div className="flex items-start justify-between">
                             <div className="relative">
@@ -1362,7 +1362,7 @@ export default function SchedulePage() {
             {/* Handle Break Modal */}
             {isDefaultBreakConfirmOpen && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-5">
-                    <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-xl">
+                    <div className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-xl">
                         <p className="text-lg font-bold">휴게시간 설정이 변경됐어요.</p>
 
                         <p className="mt-2 text-sm leading-6 text-gray-500">
@@ -1393,7 +1393,7 @@ export default function SchedulePage() {
             {/* Pay Period Tips */}
 
             {currentPayPeriod && salarySettings?.hasTips && (
-                <section className="mt-5 rounded-3xl bg-white p-6 shadow-sm">
+                <section className="mt-5 rounded-3xl bg-white p-5 shadow-sm">
                     <div>
                         <h2 className="text-lg font-semibold">이번 급여 기간 팁</h2>
 

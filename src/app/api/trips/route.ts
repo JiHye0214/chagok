@@ -11,6 +11,8 @@ export async function GET() {
                 t.city,
                 t.country,
                 t.country_code AS "countryCode",
+                t.latitude,
+                t.longitude,
                 t.start_date AS "startDate",
                 t.end_date AS "endDate",
                 t.people,
@@ -41,7 +43,21 @@ export async function POST(request: Request) {
     try {
         const body = await request.json();
 
-        const { tripType, title, city, country, countryCode, startDate, endDate, people, budget, currency, rating } = body;
+        const {
+            tripType,
+            title,
+            city,
+            country,
+            countryCode,
+            latitude,
+            longitude,
+            startDate,
+            endDate,
+            people,
+            budget,
+            currency,
+            rating,
+        } = body;
 
         const [trip] = await sql`
             INSERT INTO trips (
@@ -50,6 +66,8 @@ export async function POST(request: Request) {
                 city,
                 country,
                 country_code,
+                latitude,
+                longitude,
                 start_date,
                 end_date,
                 people,
@@ -63,6 +81,8 @@ export async function POST(request: Request) {
                 ${city},
                 ${country},
                 ${countryCode},
+                ${latitude},
+                ${longitude},
                 ${startDate},
                 ${endDate},
                 ${Number(people) || 1},
@@ -77,6 +97,8 @@ export async function POST(request: Request) {
                 city,
                 country,
                 country_code AS "countryCode",
+                latitude,
+                longitude,
                 start_date AS "startDate",
                 end_date AS "endDate",
                 people,

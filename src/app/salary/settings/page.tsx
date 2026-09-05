@@ -1,7 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getPayPeriodEndDate } from "@/lib/payPeriod";
+import { ArrowLeft } from "lucide-react";
+import BackButtonHeader from "@/components/BackButtonHeader";
 
 type PayType = "hourly" | "salary" | "commission" | "other";
 
@@ -138,16 +141,7 @@ export default function SalaryPage() {
     return (
         <div className="mx-auto max-w-md">
             {/* Header */}
-
-            <header>
-                <button type="button" onClick={() => window.history.back()} className="text-sm text-gray-400">
-                    ← 근무 관리
-                </button>
-
-                <h1 className="mt-2 text-3xl font-bold">급여 관리</h1>
-
-                <p className="mt-2 text-sm text-gray-500">급여와 근무 정보를 설정해주세요.</p>
-            </header>
+            <BackButtonHeader href="/salary" title="급여 관리" description="급여와 근무 정보를 설정해주세요." />
 
             {/* Pay Type */}
 

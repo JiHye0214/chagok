@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ArrowLeft, Star } from "lucide-react";
 import { formatDate } from "@/lib/payPeriod";
+import BackButtonHeader from "@/components/BackButtonHeader";
 
 type SavedTrip = {
     id: number;
@@ -75,25 +76,11 @@ export default function TravelListPage() {
     return (
         <div className="mx-auto max-w-md">
             {/* Header */}
-            <header>
-                <div className="flex flex-col gap-8">
-                    <Link
-                        href="/travel"
-                        className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-gray-500 shadow-sm"
-                        aria-label="여행으로 돌아가기"
-                    >
-                        <ArrowLeft size={19} strokeWidth={1.8} />
-                    </Link>
-
-                    <div>
-                        <p className="text-xs text-gray-400">차곡</p>
-
-                        <h1 className="mt-0.5 text-2xl font-bold">내 여행</h1>
-                    </div>
-                </div>
-
-                <p className="mt-3 text-sm text-gray-500">내가 다녀온 여행과 앞으로의 여행을 한곳에서 확인해보세요.</p>
-            </header>
+            <BackButtonHeader
+                href="/travel"
+                title="내 여행"
+                description="내가 다녀온 여행과 앞으로의 여행을 한곳에서 확인해보세요."
+            />
 
             {trips.length === 0 ? (
                 /* No Trips */
@@ -128,7 +115,7 @@ export default function TravelListPage() {
                                         <Link
                                             key={trip.id}
                                             href={`/travel/list/${trip.id}`}
-                                            className="block rounded-3xl bg-white p-6 shadow-sm transition active:scale-[0.99]"
+                                            className="block rounded-3xl bg-white p-5 shadow-sm transition active:scale-[0.99]"
                                         >
                                             <div className="flex items-start justify-between gap-4">
                                                 <div className="min-w-0">
@@ -209,13 +196,11 @@ export default function TravelListPage() {
                                 {completedTrips.map((trip) => {
                                     const nights = getNights(trip.startDate, trip.endDate);
 
-                                    const filledStars = Math.round(trip.rating);
-
                                     return (
                                         <Link
                                             key={trip.id}
                                             href={`/travel/list/${trip.id}`}
-                                            className="block rounded-3xl bg-white p-6 shadow-sm transition active:scale-[0.99]"
+                                            className="block rounded-3xl bg-white p-5 shadow-sm transition active:scale-[0.99]"
                                         >
                                             <div className="flex items-start justify-between gap-4">
                                                 <div className="min-w-0 flex-1">
@@ -227,16 +212,31 @@ export default function TravelListPage() {
                                                         {trip.rating > 0 && (
                                                             <div className="flex shrink-0 items-center">
                                                                 {[1, 2, 3, 4, 5].map((star) => (
-                                                                    <Star
-                                                                        key={star}
-                                                                        size={13}
-                                                                        strokeWidth={1.7}
-                                                                        className={
-                                                                            star <= filledStars
-                                                                                ? "fill-gray-900 text-gray-900"
-                                                                                : "text-gray-200"
-                                                                        }
-                                                                    />
+                                                                    <div key={star} className="relative h-[13px] w-[13px]">
+                                                                        <Star
+                                                                            size={13}
+                                                                            strokeWidth={1.7}
+                                                                            className="absolute inset-0 text-gray-200"
+                                                                        />
+
+                                                                        {trip.rating >= star && (
+                                                                            <Star
+                                                                                size={13}
+                                                                                strokeWidth={1.7}
+                                                                                className="absolute inset-0 fill-gray-900 text-gray-900"
+                                                                            />
+                                                                        )}
+
+                                                                        {trip.rating >= star - 0.5 && trip.rating < star && (
+                                                                            <div className="absolute inset-y-0 left-0 w-1/2 overflow-hidden">
+                                                                                <Star
+                                                                                    size={13}
+                                                                                    strokeWidth={1.7}
+                                                                                    className="fill-gray-900 text-gray-900"
+                                                                                />
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
                                                                 ))}
                                                             </div>
                                                         )}

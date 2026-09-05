@@ -106,18 +106,15 @@ export default function TravelDetailPage() {
     const [categories, setCategories] = useState<ExpenseCategory[]>([]);
     const [isCategoryLoading, setIsCategoryLoading] = useState(false);
 
-    // 카테고리 추가
-    const [isAddingCategory, setIsAddingCategory] = useState(false);
-    const [newCategoryName, setNewCategoryName] = useState("");
-
-    // 카테고리 수정
-    const [editingCategoryId, setEditingCategoryId] = useState<number | null>(null);
-    const [editingCategoryName, setEditingCategoryName] = useState("");
-
     // 카테고리 드래그앤드랍
     const [draggedCategoryId, setDraggedCategoryId] = useState<number | null>(null);
     const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
     const [newCategoryId, setNewCategoryId] = useState<number | null>(null);
+
+    // 통계 모션
+    const [displayCategoryIndex, setDisplayCategoryIndex] = useState(0);
+    const [animatedAmount, setAnimatedAmount] = useState(0);
+    const [animatedPercentage, setAnimatedPercentage] = useState(0);
 
     useEffect(() => {
         const fetchTrip = async () => {
@@ -239,6 +236,16 @@ export default function TravelDetailPage() {
         loadCategories();
     }, [trip?.id]);
 
+    useEffect(() => {
+        if (categories.length <= 1) return;
+
+        const interval = setInterval(() => {
+            setDisplayCategoryIndex((prev) => (prev + 1) % categories.length);
+        }, 3000);
+
+        return () => clearInterval(interval);
+    }, [categories.length]);
+
     const categoryIcons = {
         항공: Plane,
         숙소: Hotel,
@@ -267,6 +274,73 @@ export default function TravelDetailPage() {
 
         return dates;
     })();
+
+    const getCellKey = (categoryId: number, date: Date) => {
+        return `${categoryId}_${getDateKey(date)}`;
+    };
+
+    const getCellAmount = (categoryId: number, date: Date) => {
+        const key = getCellKey(categoryId, date);
+
+        return calculateExpression(expenseCells[key] ?? "");
+    };
+
+    const getCategoryTotal = (categoryId: number) => {
+        return tripDates.reduce((total, date) => {
+            return total + getCellAmount(categoryId, date);
+        }, 0);
+    };
+
+    const getDateTotal = (date: Date) => {
+        return categories.reduce((total, category) => {
+            return total + getCellAmount(category.id, date);
+        }, 0);
+    };
+
+    const totalExpense = tripDates.reduce((total, date) => {
+        return total + getDateTotal(date);
+    }, 0);
+
+    const sortedCategories = [...categories].sort((a, b) => getCategoryTotal(b.id) - getCategoryTotal(a.id));
+
+    const displayCategory = sortedCategories[displayCategoryIndex];
+
+    const displayCategoryAmount = displayCategory ? getCategoryTotal(displayCategory.id) : 0;
+
+    const displayCategoryPercentage = totalExpense > 0 ? (displayCategoryAmount / totalExpense) * 100 : 0;
+
+    useEffect(() => {
+        const startAmount = animatedAmount;
+        const startPercentage = animatedPercentage;
+
+        const targetAmount = displayCategoryAmount;
+        const targetPercentage = displayCategoryPercentage;
+
+        const duration = 650;
+        const startTime = performance.now();
+
+        let animationFrame: number;
+
+        const animate = (currentTime: number) => {
+            const progress = Math.min((currentTime - startTime) / duration, 1);
+
+            const eased = 1 - Math.pow(1 - progress, 3);
+
+            setAnimatedAmount(startAmount + (targetAmount - startAmount) * eased);
+
+            setAnimatedPercentage(startPercentage + (targetPercentage - startPercentage) * eased);
+
+            if (progress < 1) {
+                animationFrame = requestAnimationFrame(animate);
+            }
+        };
+
+        animationFrame = requestAnimationFrame(animate);
+
+        return () => {
+            cancelAnimationFrame(animationFrame);
+        };
+    }, [displayCategoryIndex, displayCategoryAmount, displayCategoryPercentage]);
 
     if (isLoading) {
         return (
@@ -303,36 +377,9 @@ export default function TravelDetailPage() {
         );
     }
 
-    const status = getStatus(trip);
     const nights = getNights(trip.startDate, trip.endDate);
 
     const displayTitle = trip.title?.trim() || trip.city;
-
-    const getCellKey = (categoryId: number, date: Date) => {
-        return `${categoryId}_${getDateKey(date)}`;
-    };
-
-    const getCellAmount = (categoryId: number, date: Date) => {
-        const key = getCellKey(categoryId, date);
-
-        return calculateExpression(expenseCells[key] ?? "");
-    };
-
-    const getCategoryTotal = (categoryId: number) => {
-        return tripDates.reduce((total, date) => {
-            return total + getCellAmount(categoryId, date);
-        }, 0);
-    };
-
-    const getDateTotal = (date: Date) => {
-        return categories.reduce((total, category) => {
-            return total + getCellAmount(category.id, date);
-        }, 0);
-    };
-
-    const totalExpense = tripDates.reduce((total, date) => {
-        return total + getDateTotal(date);
-    }, 0);
 
     const handleCellChange = (categoryId: number, date: Date, value: string) => {
         const key = getCellKey(categoryId, date);
@@ -530,55 +577,6 @@ export default function TravelDetailPage() {
         }
     };
 
-    const handleStartEditCategory = (category: ExpenseCategory) => {
-        setEditingCategoryId(category.id);
-        setEditingCategoryName(category.name);
-    };
-
-    const handleCancelEditCategory = () => {
-        setEditingCategoryId(null);
-        setEditingCategoryName("");
-    };
-
-    const handleSaveCategoryName = async (categoryId: number) => {
-        const name = editingCategoryName.trim();
-
-        if (!name || !trip?.id) return;
-
-        if (
-            categories.some((category) => category.id !== categoryId && category.name.trim().toLowerCase() === name.toLowerCase())
-        ) {
-            alert("이미 존재하는 카테고리입니다.");
-            return;
-        }
-
-        try {
-            const response = await fetch(`/api/trips/${trip.id}/expense-categories`, {
-                method: "PUT",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    categoryId,
-                    name,
-                }),
-            });
-
-            if (!response.ok) {
-                throw new Error("카테고리 수정 실패");
-            }
-
-            const updatedCategory: ExpenseCategory = await response.json();
-
-            setCategories((prev) => prev.map((category) => (category.id === categoryId ? updatedCategory : category)));
-
-            handleCancelEditCategory();
-        } catch (error) {
-            console.error("카테고리 수정 실패:", error);
-            alert("카테고리 이름을 수정하지 못했어요.");
-        }
-    };
-
     // ==============================
     // 카테고리 삭제
     // ==============================
@@ -713,7 +711,7 @@ export default function TravelDetailPage() {
 
             {/* Trip Header */}
             <section>
-                <div className="mt-8 rounded-3xl bg-white p-6 shadow-sm">
+                <div className="mt-8 rounded-3xl bg-white p-5 shadow-sm">
                     <div className="flex items-center gap-3">
                         {/* Flag */}
                         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white shadow-sm">
@@ -745,31 +743,45 @@ export default function TravelDetailPage() {
                     </div>
 
                     {/* Status */}
-                    {trip.rating > 0 ? (
-                        <div className="mt-5 flex items-center gap-2">
-                            <div className="flex gap-0.5">
-                                {Array.from({
-                                    length: 5,
-                                }).map((_, index) => (
-                                    <Star
-                                        key={index}
-                                        size={18}
-                                        strokeWidth={1.8}
-                                        className={trip.rating >= index + 1 ? "fill-gray-900 text-gray-900" : "text-gray-200"}
-                                    />
-                                ))}
-                            </div>
+                    {trip.tripType === "completed" ? (
+                        <div>
+                            {trip.rating > 0 ? (
+                                <div className="mt-5 py-1 flex items-center">
+                                    <div className="flex gap-0.5">
+                                        {Array.from({ length: 5 }).map((_, index) => (
+                                            <Star
+                                                key={index}
+                                                size={18}
+                                                strokeWidth={1.8}
+                                                className={
+                                                    trip.rating >= index + 1 ? "fill-gray-900 text-gray-900" : "text-gray-200"
+                                                }
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="rounded-3xl p-5 mt-5 shadow-sm">
+                                    <p className="text-sm leading-6 text-gray-400">
+                                        아직 이 여행에 별점을
+                                        <br />
+                                        남기지 않았어요.
+                                    </p>
+
+                                    <button
+                                        type="button"
+                                        className="mt-5 w-full rounded-2xl bg-gray-900 py-4 text-sm font-medium text-white"
+                                    >
+                                        별점 남기기
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     ) : (
-                        <>
-                            <span className="mt-5 inline-flex rounded-full bg-white px-3 py-1.5 text-[11px] font-semibold tracking-wide text-gray-500 shadow-sm">
-                                D-
-                                {Math.max(
-                                    0,
-                                    Math.ceil((new Date(trip.startDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)),
-                                )}
-                            </span>
-                        </>
+                        <span className="mt-5 inline-flex rounded-full bg-white px-3 py-1.5 text-[11px] font-semibold tracking-wide text-gray-500 shadow-sm">
+                            D-
+                            {Math.max(0, Math.ceil((new Date(trip.startDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))}
+                        </span>
                     )}
                 </div>
             </section>
@@ -777,7 +789,7 @@ export default function TravelDetailPage() {
             {/* Coming Soon */}
             {trip.tripType === "upcoming" && (
                 <section className=" mt-8">
-                    <div className="rounded-3xl bg-white p-6 shadow-sm">
+                    <div className="rounded-3xl bg-white p-5 shadow-sm">
                         <p className="text-sm text-gray-400">여행 예산</p>
 
                         <p className="mt-1 text-3xl font-bold tracking-tight text-gray-950">
@@ -808,7 +820,7 @@ export default function TravelDetailPage() {
             {/* Completed Expense Summary */}
             {trip.tripType === "completed" && (
                 <section className="mt-8">
-                    <div className="rounded-3xl bg-white p-6 shadow-sm">
+                    <div className="rounded-3xl bg-white p-5 shadow-sm">
                         <p className="text-sm text-gray-400">총 지출</p>
 
                         <p className="mt-1 text-3xl font-bold tracking-tight text-gray-950">${totalExpense.toLocaleString()}</p>
@@ -824,47 +836,63 @@ export default function TravelDetailPage() {
                 </section>
             )}
 
-            {/* Review */}
-            {trip.tripType === "completed" && (
-                <section className="mt-8">
-                    <div className="rounded-3xl bg-white p-6 shadow-sm">
-                        <p className="text-base font-semibold text-gray-900">여행은 어땠나요?</p>
+            {/* Category Spending */}
+            {trip.tripType === "completed" && categories.length > 0 && (
+                <div className="mt-5 overflow-hidden rounded-3xl bg-gray-900 p-5 text-white shadow-sm">
+                    <p className="text-sm font-medium">
+                        이번 여행에서는 어디에
+                        <br />
+                        돈을 가장 많이 썼을까요?
+                    </p>
 
-                        {trip.rating > 0 ? (
-                            <div className="mt-5 flex items-center gap-2">
-                                <div className="flex gap-0.5">
-                                    {Array.from({
-                                        length: 5,
-                                    }).map((_, index) => (
-                                        <Star
-                                            key={index}
-                                            size={18}
-                                            strokeWidth={1.8}
-                                            className={trip.rating >= index + 1 ? "fill-gray-900 text-gray-900" : "text-gray-200"}
-                                        />
-                                    ))}
+                    <div className="relative mt-5 h-[72px] overflow-hidden">
+                        <div key={displayCategory?.id} className="category-slide-up">
+                            <div className="flex items-end justify-between">
+                                <div>
+                                    <p className="text-xs text-gray-400">{displayCategory?.name}</p>
+
+                                    <p className="mt-1 text-2xl font-semibold tracking-tight tabular-nums">
+                                        $
+                                        {animatedAmount.toLocaleString(undefined, {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2,
+                                        })}
+                                    </p>
                                 </div>
 
-                                <span className="text-sm font-medium text-gray-500">{Number(trip.rating).toFixed(1)}</span>
+                                <span className="text-xs text-gray-400 tabular-nums">{animatedPercentage.toFixed(1)}%</span>
                             </div>
-                        ) : (
-                            <>
-                                <p className="mt-2 text-sm leading-6 text-gray-400">
-                                    아직 이 여행에 별점을
-                                    <br />
-                                    남기지 않았어요.
-                                </p>
-
-                                <button
-                                    type="button"
-                                    className="mt-5 w-full rounded-2xl bg-gray-900 py-4 text-sm font-medium text-white"
-                                >
-                                    별점 남기기
-                                </button>
-                            </>
-                        )}
+                        </div>
                     </div>
-                </section>
+
+                    <div className="flex h-2 overflow-hidden rounded-full bg-gray-700">
+                        {sortedCategories.map((category, index) => {
+                            const categoryAmount = getCategoryTotal(category.id);
+
+                            const percentage = totalExpense > 0 ? (categoryAmount / totalExpense) * 100 : 0;
+
+                            const isActive = category.id === displayCategory?.id;
+
+                            const isTopCategory = index === 0;
+
+                            return (
+                                <div
+                                    key={category.id}
+                                    className={`relative h-full transition-all duration-500 ease-out ${
+                                        index !== 0 ? "border-l border-gray-900" : ""
+                                    }`}
+                                    style={{
+                                        width: `${percentage}%`,
+                                        backgroundColor: "white",
+                                        opacity: isActive ? 1 : 0.2,
+                                        transform: isActive ? `scaleY(${isTopCategory ? 1.5 : 1.3})` : "scaleY(1)",
+                                        transformOrigin: "center",
+                                    }}
+                                />
+                            );
+                        })}
+                    </div>
+                </div>
             )}
 
             {/* Expenses */}
@@ -878,7 +906,7 @@ export default function TravelDetailPage() {
                 </div>
 
                 {/* Expense Table */}
-                <div className="mt-4 rounded-3xl bg-white p-6 shadow-sm">
+                <div className="mt-4 rounded-3xl bg-white p-5 shadow-sm">
                     <div className="overflow-x-auto scrollbar-hide">
                         <table className="w-max min-w-full border-collapse text-sm">
                             <thead>
@@ -1113,3 +1141,21 @@ export default function TravelDetailPage() {
         </div>
     );
 }
+
+<style jsx>{`
+    @keyframes categorySlideUp {
+        0% {
+            opacity: 0;
+            transform: translateY(28px);
+        }
+
+        100% {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .animate-category-slide {
+        animation: categorySlideUp 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+`}</style>;
