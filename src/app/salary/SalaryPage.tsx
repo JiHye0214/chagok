@@ -1,11 +1,9 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { getPayPeriodEndDate, getPeriodsPerYear, formatDate } from "@/lib/payPeriod";
-import { getNotificationTime, subscribeToPush } from "@/lib/notification";
 import { calculateTaxes } from "@/lib/tax";
-import { isHoliday, getHolidaysInPayPeriod } from "@/lib/holiday";
+import { isHoliday } from "@/lib/holiday";
 
 import Link from "next/link";
 
@@ -41,8 +39,6 @@ type WorkSchedule = {
     endTime: string;
     hasBreak: boolean;
     breakMinutes: number;
-    alarmEnabled: boolean;
-    alarmMinutesBefore: number;
 };
 
 type PayPeriod = {
@@ -61,7 +57,25 @@ type PayPeriodTips = {
 type PayHistory = {
     startDate: string;
     endDate: string;
+    hours?: number;
+    basePay?: number;
+    paychequeTips?: number;
+    cashTips?: number;
+    grossPay?: number;
+    deductions?: number;
+    cpp?: number;
+    cpp2?: number;
+    ei?: number;
+    federalTax?: number;
+    provincialTax?: number;
     netPay: number;
+    totalIncome?: number;
+    province?: string;
+    tipType?: TipType | null;
+    hasTips?: boolean;
+    isConfirmed: boolean;
+    vacationPay?: number;
+    actualNetPay?: number | null;
 };
 
 type Holiday = {
@@ -69,8 +83,6 @@ type Holiday = {
     name: string;
     global: boolean;
 };
-
-const WEEK_DAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
 const calculateHours = (startTime: string, endTime: string, breakMinutes: number = 0) => {
     if (!startTime || !endTime) {
@@ -104,6 +116,24 @@ const formatISO = (date: Date) => {
     return `${year}-${month}-${day}`;
 };
 
+const formatMoney = (value: number) => {
+    return `$${value.toFixed(2)}`;
+};
+
+const formatDisplayDate = (value: string) => {
+    return formatDate(new Date(`${value}T00:00:00`));
+};
+
+const getDaysDifference = (targetDate: string) => {
+    const today = new Date();
+
+    const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    const target = new Date(`${targetDate}T00:00:00`);
+
+    return Math.round((target.getTime() - todayOnly.getTime()) / (1000 * 60 * 60 * 24));
+};
+
 const shiftPayPeriod = (
     startDate: string,
     payDate: string,
@@ -115,12 +145,10 @@ const shiftPayPeriod = (
 
     const nextStart = new Date(`${currentEndDate}T00:00:00`);
 
-    // 이전 급여기간 종료일의 다음 날
     nextStart.setDate(nextStart.getDate() + 1);
 
     const nextStartDate = formatISO(nextStart);
 
-    // 급여일도 다음 기간으로 이동
     const nextPayDate = new Date(`${payDate}T00:00:00`);
 
     switch (frequency) {
@@ -161,122 +189,43 @@ const shiftPayPeriod = (
 
     return {
         startDate: nextStartDate,
-
         endDate: getPayPeriodEndDate(nextStartDate, frequency, semiMonthlyType, customPayDays),
-
         payDate: formatISO(nextPayDate),
     };
 };
 
-export default function SchedulePage() {
-    const router = useRouter();
-    /*
-     * --------------------------------------------------
-     * Calendar
-     * --------------------------------------------------
-     */
-
-    const [currentDate, setCurrentDate] = useState(() => new Date());
-
-    const year = currentDate.getFullYear();
-
-    const month = currentDate.getMonth();
-
-    /*
-     * --------------------------------------------------
-     * Schedules
-     * --------------------------------------------------
-     */
-
+export default function SalaryPage() {
     const [schedules, setSchedules] = useState<WorkSchedule[]>([]);
+
     const [isSchedulesLoading, setIsSchedulesLoading] = useState(true);
 
     const [holidays, setHolidays] = useState<Holiday[]>([]);
 
-    /*
-     * --------------------------------------------------
-     * Modal
-     * --------------------------------------------------
-     */
-
-    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-
-    const [editingSchedule, setEditingSchedule] = useState<WorkSchedule | null>(null);
-
-    const [selectedDate, setSelectedDate] = useState<string | null>(null);
-
-    const [startTime, setStartTime] = useState("09:00");
-
-    const [endTime, setEndTime] = useState("17:00");
-
-    const [hasBreak, setHasBreak] = useState(false);
-
-    const [breakMinutes, setBreakMinutes] = useState("0");
-
-    const [alarmEnabled, setAlarmEnabled] = useState(false);
-
-    const [alarmMinutesBefore, setAlarmMinutesBefore] = useState(60);
-
-    const [defaultBreak, setDefaultBreak] = useState<{
-        enabled: boolean;
-        minutes: number;
-    }>(() => {
-        if (typeof window === "undefined") {
-            return {
-                enabled: false,
-                minutes: 0,
-            };
-        }
-
-        try {
-            const saved = localStorage.getItem("chagok-default-break");
-
-            if (!saved) {
-                return {
-                    enabled: false,
-                    minutes: 0,
-                };
-            }
-
-            return JSON.parse(saved);
-        } catch {
-            return {
-                enabled: false,
-                minutes: 0,
-            };
-        }
-    });
-
-    const [isDefaultBreakConfirmOpen, setIsDefaultBreakConfirmOpen] = useState(false);
-
     const [cashTips, setCashTips] = useState("");
-    const [paychequeTips, setPaychequeTips] = useState("");
-    const [savedTips, setSavedTips] = useState<PayPeriodTips | null>(null);
 
-    const [showAllSchedules, setShowAllSchedules] = useState(false);
+    const [paychequeTips, setPaychequeTips] = useState("");
+
+    const [savedTips, setSavedTips] = useState<PayPeriodTips | null>(null);
 
     const [salarySettings, setSalarySettings] = useState<SalarySettings | null>(null);
 
     const [previousPay, setPreviousPay] = useState<number | null>(null);
 
-    const [latestPayHistory, setLatestPayHistory] = useState<{
-        startDate: string;
-        endDate: string;
-        totalIncome: number;
-        isConfirmed: boolean;
-    } | null>(null);
+    const [latestPayHistory, setLatestPayHistory] = useState<PayHistory | null>(null);
 
-    const [showHolidayInfo, setShowHolidayInfo] = useState(false);
+    const [payHistory, setPayHistory] = useState<PayHistory[]>([]);
 
-    /*
-     * --------------------------------------------------
-     * Salary Settings
-     * --------------------------------------------------
-     */
+    const [isPreviousExpectedOpen, setIsPreviousExpectedOpen] = useState(false);
+
+    const [selectedPayHistory, setSelectedPayHistory] = useState<PayHistory | null>(null);
 
     const hourlyWage = salarySettings?.payType === "hourly" ? Number(salarySettings.hourlyWage ?? 0) : 0;
 
-    const monthlySalary = salarySettings?.payType === "salary" ? Number(salarySettings.monthlySalary ?? 0) : 0;
+    /*
+     * --------------------------------------------------
+     * Load Schedules
+     * --------------------------------------------------
+     */
 
     useEffect(() => {
         const loadSchedules = async () => {
@@ -300,6 +249,12 @@ export default function SchedulePage() {
         loadSchedules();
     }, []);
 
+    /*
+     * --------------------------------------------------
+     * Load Salary Settings
+     * --------------------------------------------------
+     */
+
     useEffect(() => {
         const loadSalarySettings = async () => {
             try {
@@ -320,6 +275,12 @@ export default function SchedulePage() {
         loadSalarySettings();
     }, []);
 
+    /*
+     * --------------------------------------------------
+     * Load Holidays
+     * --------------------------------------------------
+     */
+
     useEffect(() => {
         if (!salarySettings?.province) {
             return;
@@ -327,66 +288,293 @@ export default function SchedulePage() {
 
         const loadHolidays = async () => {
             try {
-                const response = await fetch(`/api/holidays?year=${year}&province=${salarySettings.province}`);
+                const years = Array.from(new Set(schedules.map((schedule) => Number(schedule.date.slice(0, 4)))));
 
-                if (!response.ok) {
-                    throw new Error("공휴일 조회 실패");
+                const currentYear = new Date().getFullYear();
+
+                if (!years.includes(currentYear)) {
+                    years.push(currentYear);
                 }
 
-                const data: Holiday[] = await response.json();
+                const results: Holiday[] = [];
 
-                setHolidays(data);
+                for (const year of years) {
+                    const response = await fetch(`/api/holidays?year=${year}&province=${salarySettings.province}`);
+
+                    if (!response.ok) {
+                        continue;
+                    }
+
+                    const data: Holiday[] = await response.json();
+
+                    results.push(...data);
+                }
+
+                setHolidays(results);
             } catch (error) {
                 console.error("공휴일 조회 실패:", error);
+
                 setHolidays([]);
             }
         };
 
         loadHolidays();
-    }, [year, salarySettings?.province]);
+    }, [salarySettings?.province, schedules]);
 
-    const getCurrentPayPeriod = (): PayPeriod | null => {
+    /*
+     * --------------------------------------------------
+     * Current Pay Period
+     * --------------------------------------------------
+     */
+
+    /*
+     * --------------------------------------------------
+     * Pay Period Calculation
+     * --------------------------------------------------
+     */
+
+    const getPayPeriods = (): {
+        previous: PayPeriod | null;
+        current: PayPeriod | null;
+        next: PayPeriod | null;
+    } => {
         if (!salarySettings?.payPeriodStartDate || !salarySettings?.payDate) {
-            return null;
+            return {
+                previous: null,
+                current: null,
+                next: null,
+            };
         }
-
-        let period: PayPeriod = {
-            startDate: salarySettings.payPeriodStartDate,
-            endDate: getPayPeriodEndDate(
-                salarySettings.payPeriodStartDate,
-                salarySettings.payFrequency,
-                salarySettings.semiMonthlyType,
-                salarySettings.customPayDays,
-            ),
-            payDate: salarySettings.payDate,
-        };
 
         const today = new Date();
-
         const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
-        let periodEnd = new Date(`${period.endDate}T00:00:00`);
+        const frequency = salarySettings.payFrequency;
+        const semiMonthlyType = salarySettings.semiMonthlyType;
+        const customPayDays = salarySettings.customPayDays;
 
-        while (periodEnd < todayOnly) {
-            period = shiftPayPeriod(
-                period.startDate,
-                period.payDate,
-                salarySettings.payFrequency,
-                salarySettings.semiMonthlyType,
-                salarySettings.customPayDays,
-            );
+        const createPeriod = (startDate: string, payDate: string): PayPeriod => {
+            return {
+                startDate,
+                endDate: getPayPeriodEndDate(startDate, frequency, semiMonthlyType, customPayDays),
+                payDate,
+            };
+        };
 
-            periodEnd = new Date(`${period.endDate}T00:00:00`);
+        /*
+         * 월 이동을 안전하게 처리
+         */
+        const shiftMonth = (date: Date, amount: number) => {
+            const day = date.getDate();
+
+            const result = new Date(date);
+
+            result.setDate(1);
+            result.setMonth(result.getMonth() + amount);
+
+            const lastDay = new Date(result.getFullYear(), result.getMonth() + 1, 0).getDate();
+
+            result.setDate(Math.min(day, lastDay));
+
+            return result;
+        };
+
+        /*
+         * 급여 기간 시작일을 한 기간 이동
+         */
+        const shiftStartDate = (startDate: string, direction: 1 | -1): string => {
+            const date = new Date(`${startDate}T00:00:00`);
+
+            switch (frequency) {
+                case "weekly":
+                    date.setDate(date.getDate() + 7 * direction);
+                    break;
+
+                case "biweekly":
+                    date.setDate(date.getDate() + 14 * direction);
+                    break;
+
+                case "monthly": {
+                    const shifted = shiftMonth(date, direction);
+                    return formatISO(shifted);
+                }
+
+                case "semi-monthly":
+                    if (date.getDate() === 1) {
+                        if (direction === 1) {
+                            date.setDate(16);
+                        } else {
+                            date.setMonth(date.getMonth() - 1);
+                            date.setDate(16);
+                        }
+                    } else {
+                        if (direction === 1) {
+                            date.setMonth(date.getMonth() + 1);
+                            date.setDate(1);
+                        } else {
+                            date.setDate(1);
+                        }
+                    }
+                    break;
+
+                case "custom":
+                    date.setDate(date.getDate() + (Number(customPayDays) || 14) * direction);
+                    break;
+            }
+
+            return formatISO(date);
+        };
+
+        /*
+         * 급여일을 한 기간 이동
+         */
+        const shiftPayDate = (payDate: string, direction: 1 | -1): string => {
+            const date = new Date(`${payDate}T00:00:00`);
+
+            switch (frequency) {
+                case "weekly":
+                    date.setDate(date.getDate() + 7 * direction);
+                    break;
+
+                case "biweekly":
+                    date.setDate(date.getDate() + 14 * direction);
+                    break;
+
+                case "monthly": {
+                    const shifted = shiftMonth(date, direction);
+                    return formatISO(shifted);
+                }
+
+                case "semi-monthly":
+                    if (semiMonthlyType === "first-fifteenth") {
+                        /*
+                         * 1일 ↔ 16일
+                         */
+                        if (date.getDate() === 1) {
+                            if (direction === 1) {
+                                date.setDate(16);
+                            } else {
+                                date.setMonth(date.getMonth() - 1);
+                                date.setDate(16);
+                            }
+                        } else {
+                            if (direction === 1) {
+                                date.setMonth(date.getMonth() + 1);
+                                date.setDate(1);
+                            } else {
+                                date.setDate(1);
+                            }
+                        }
+                    } else {
+                        /*
+                         * fifteenth-end의 지급일도
+                         * 설정값에 따라 1일 / 16일을 기준으로 이동
+                         */
+                        if (date.getDate() === 1) {
+                            if (direction === 1) {
+                                date.setDate(16);
+                            } else {
+                                date.setMonth(date.getMonth() - 1);
+                                date.setDate(16);
+                            }
+                        } else {
+                            if (direction === 1) {
+                                date.setMonth(date.getMonth() + 1);
+                                date.setDate(1);
+                            } else {
+                                date.setDate(1);
+                            }
+                        }
+                    }
+                    break;
+
+                case "custom":
+                    date.setDate(date.getDate() + (Number(customPayDays) || 14) * direction);
+                    break;
+            }
+
+            return formatISO(date);
+        };
+
+        /*
+         * 설정된 최초 기간
+         */
+        const anchorStartDate = salarySettings.payPeriodStartDate;
+        const anchorPayDate = salarySettings.payDate;
+
+        /*
+         * 현재 날짜가 최초 기간보다 뒤라면
+         * 현재 날짜가 포함되는 기간까지 앞으로 이동
+         */
+        let current = createPeriod(anchorStartDate, anchorPayDate);
+
+        let safety = 0;
+
+        while (new Date(`${current.endDate}T00:00:00`) < todayOnly && safety < 500) {
+            const nextStartDate = shiftStartDate(current.startDate, 1);
+
+            const nextPayDate = shiftPayDate(current.payDate, 1);
+
+            current = createPeriod(nextStartDate, nextPayDate);
+
+            safety++;
         }
 
-        return period;
+        /*
+         * 만약 설정된 시작일이 미래라면
+         * 반대로 현재 날짜가 포함되는 기간까지 뒤로 이동
+         */
+        safety = 0;
+
+        while (new Date(`${current.startDate}T00:00:00`) > todayOnly && safety < 500) {
+            const previousStartDate = shiftStartDate(current.startDate, -1);
+
+            const previousPayDate = shiftPayDate(current.payDate, -1);
+
+            current = createPeriod(previousStartDate, previousPayDate);
+
+            safety++;
+        }
+
+        /*
+         * 현재 기간
+         *
+         * endDate가 오늘보다 같거나 미래인 기간
+         */
+        const currentPayPeriod = current;
+
+        /*
+         * 이전 기간
+         */
+        const previousStartDate = shiftStartDate(currentPayPeriod.startDate, -1);
+
+        const previousPayDate = shiftPayDate(currentPayPeriod.payDate, -1);
+
+        const previousPayPeriod = createPeriod(previousStartDate, previousPayDate);
+
+        /*
+         * 다음 기간
+         */
+        const nextStartDate = shiftStartDate(currentPayPeriod.startDate, 1);
+
+        const nextPayDate = shiftPayDate(currentPayPeriod.payDate, 1);
+
+        const nextPayPeriod = createPeriod(nextStartDate, nextPayDate);
+
+        return {
+            previous: previousPayPeriod,
+            current: currentPayPeriod,
+            next: nextPayPeriod,
+        };
     };
 
-    const currentPayPeriod = getCurrentPayPeriod();
+    const { previous: previousPayPeriod, current: currentPayPeriod, next: nextPayPeriod } = getPayPeriods();
 
-    const holidaysInCurrentPayPeriod = currentPayPeriod
-        ? getHolidaysInPayPeriod(currentPayPeriod.startDate, currentPayPeriod.endDate, holidays)
-        : [];
+    /*
+     * --------------------------------------------------
+     * Load Current Period Tips
+     * --------------------------------------------------
+     */
 
     useEffect(() => {
         if (!currentPayPeriod) {
@@ -424,278 +612,47 @@ export default function SchedulePage() {
         loadTips();
     }, [currentPayPeriod?.startDate, currentPayPeriod?.endDate]);
 
+    /*
+     * --------------------------------------------------
+     * Load Pay History
+     * --------------------------------------------------
+     */
+
     useEffect(() => {
-        const loadLatestPayHistory = async () => {
+        const loadPayHistory = async () => {
             try {
                 const response = await fetch("/api/pay-history");
 
                 if (!response.ok) {
-                    return;
+                    throw new Error("급여 기록 조회 실패");
                 }
 
-                const data = await response.json();
+                const data: PayHistory[] = await response.json();
+
+                setPayHistory(data);
 
                 if (data.length > 0) {
                     setLatestPayHistory(data[0]);
+
+                    setPreviousPay(data[0].actualNetPay ?? data[0].netPay);
                 }
             } catch (error) {
                 console.error("급여 기록 조회 실패:", error);
             }
         };
 
-        loadLatestPayHistory();
+        loadPayHistory();
     }, []);
 
     /*
      * --------------------------------------------------
-     * Calendar Days
-     * --------------------------------------------------
-     */
-
-    const calendarDays = useMemo(() => {
-        const firstDay = new Date(year, month, 1).getDay();
-
-        const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-        const days: (number | null)[] = [];
-
-        for (let i = 0; i < firstDay; i++) {
-            days.push(null);
-        }
-
-        for (let day = 1; day <= daysInMonth; day++) {
-            days.push(day);
-        }
-
-        return days;
-    }, [year, month]);
-
-    /*
-     * --------------------------------------------------
-     * Open Add Modal
-     * --------------------------------------------------
-     */
-
-    const openAddModal = (date: string) => {
-        setEditingSchedule(null);
-
-        setSelectedDate(date);
-
-        setStartTime("09:00");
-        setEndTime("17:00");
-
-        setHasBreak(defaultBreak.enabled);
-        setBreakMinutes(defaultBreak.enabled ? String(defaultBreak.minutes) : "0");
-
-        setAlarmEnabled(false);
-        setAlarmMinutesBefore(60);
-
-        setIsAddModalOpen(true);
-    };
-
-    /*
-     * --------------------------------------------------
-     * Open Edit Modal
-     * --------------------------------------------------
-     */
-
-    const openEditModal = (schedule: WorkSchedule) => {
-        setEditingSchedule(schedule);
-
-        setSelectedDate(schedule.date.slice(0, 10));
-
-        setStartTime(schedule.startTime);
-
-        setEndTime(schedule.endTime);
-
-        setHasBreak(schedule.hasBreak ?? false);
-
-        setBreakMinutes(String(schedule.breakMinutes ?? 0));
-
-        setAlarmEnabled(schedule.alarmEnabled);
-
-        setAlarmMinutesBefore(schedule.alarmMinutesBefore);
-
-        setIsAddModalOpen(true);
-    };
-
-    /*
-     * --------------------------------------------------
-     * Save Schedule
-     * --------------------------------------------------
-     */
-
-    const saveSchedule = async (breakSetting: { enabled: boolean; minutes: number }) => {
-        if (!selectedDate) {
-            return;
-        }
-
-        const schedule = {
-            date: selectedDate,
-            startTime,
-            endTime,
-            hasBreak: breakSetting.enabled,
-            breakMinutes: breakSetting.enabled ? breakSetting.minutes : 0,
-            alarmEnabled,
-            alarmMinutesBefore,
-        };
-
-        if (alarmEnabled) {
-            const notificationTime = getNotificationTime(selectedDate, startTime, alarmMinutesBefore);
-
-            if (notificationTime) {
-                const delay = notificationTime.getTime() - Date.now();
-
-                console.log("알림 예정 시간:", notificationTime);
-                console.log("알림까지 남은 시간:", delay);
-
-                if (delay > 0) {
-                    setTimeout(() => {
-                        new Notification("차곡", {
-                            body: `오늘 ${startTime.slice(0, 5)}에 근무가 있어요.`,
-                        });
-                    }, delay);
-                }
-            }
-        }
-
-        try {
-            const response = await fetch("/api/work-schedules", {
-                method: editingSchedule ? "PUT" : "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify(
-                    editingSchedule
-                        ? {
-                              id: editingSchedule.id,
-                              ...schedule,
-                          }
-                        : schedule,
-                ),
-            });
-
-            if (!response.ok) {
-                throw new Error("근무 저장 실패");
-            }
-
-            const savedSchedule: WorkSchedule = await response.json();
-
-            setSchedules((prev) =>
-                editingSchedule
-                    ? prev.map((item) => (item.id === savedSchedule.id ? savedSchedule : item))
-                    : [...prev, savedSchedule],
-            );
-
-            setIsAddModalOpen(false);
-            setEditingSchedule(null);
-        } catch (error) {
-            console.error(error);
-            alert("근무 저장에 실패했어요.");
-        }
-    };
-
-    const handleSaveSchedule = () => {
-        if (!selectedDate) {
-            return;
-        }
-
-        const currentBreakMinutes = hasBreak ? Math.max(0, Number(breakMinutes) || 0) : 0;
-
-        // 현재 근무의 휴게 설정
-        const currentBreak = {
-            enabled: hasBreak,
-            minutes: currentBreakMinutes,
-        };
-
-        // 기본값과 이번 근무 설정이 다른지 확인
-        const breakChanged =
-            currentBreak.enabled !== defaultBreak.enabled ||
-            (currentBreak.enabled && currentBreak.minutes !== defaultBreak.minutes);
-
-        // 휴게 설정이 기본값과 다르면 확인 팝업
-        if (breakChanged) {
-            setIsDefaultBreakConfirmOpen(true);
-            return;
-        }
-
-        // 변경사항이 없으면 바로 저장
-        saveSchedule(currentBreak);
-    };
-
-    const saveAsDefaultBreak = () => {
-        const currentBreakMinutes = hasBreak ? Math.max(0, Number(breakMinutes) || 0) : 0;
-
-        const newDefaultBreak = {
-            enabled: hasBreak,
-            minutes: currentBreakMinutes,
-        };
-
-        localStorage.setItem("chagok-default-break", JSON.stringify(newDefaultBreak));
-
-        setDefaultBreak(newDefaultBreak);
-
-        setIsDefaultBreakConfirmOpen(false);
-
-        saveSchedule(newDefaultBreak);
-    };
-
-    const useBreakOnce = () => {
-        const currentBreakMinutes = hasBreak ? Math.max(0, Number(breakMinutes) || 0) : 0;
-
-        setIsDefaultBreakConfirmOpen(false);
-
-        saveSchedule({
-            enabled: hasBreak,
-            minutes: currentBreakMinutes,
-        });
-    };
-
-    /*
-     * --------------------------------------------------
-     * Delete Schedule
-     * --------------------------------------------------
-     */
-
-    const handleDeleteSchedule = async () => {
-        if (!editingSchedule) {
-            return;
-        }
-
-        try {
-            const response = await fetch("/api/work-schedules", {
-                method: "DELETE",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    id: editingSchedule.id,
-                }),
-            });
-
-            if (!response.ok) {
-                throw new Error("근무 삭제 실패");
-            }
-
-            setSchedules((prev) => prev.filter((item) => item.id !== editingSchedule.id));
-
-            setIsAddModalOpen(false);
-            setEditingSchedule(null);
-        } catch (error) {
-            console.error(error);
-            alert("근무 삭제에 실패했어요.");
-        }
-    };
-
-    /*
-     * --------------------------------------------------
-     * Pay Period Salary Calculation
+     * Current Period Salary
      * --------------------------------------------------
      */
 
     const periodSchedules = currentPayPeriod
         ? schedules.filter((schedule) => {
-              const scheduleDate = schedule.date;
+              const scheduleDate = schedule.date.slice(0, 10);
 
               return scheduleDate >= currentPayPeriod.startDate && scheduleDate <= currentPayPeriod.endDate;
           })
@@ -706,6 +663,39 @@ export default function SchedulePage() {
             total + calculateHours(schedule.startTime, schedule.endTime, schedule.hasBreak ? schedule.breakMinutes : 0),
         0,
     );
+
+    /*
+     * --------------------------------------------------
+     * Next Period Salary
+     * --------------------------------------------------
+     */
+
+    const nextPeriodSchedules = nextPayPeriod
+        ? schedules.filter((schedule) => {
+              const scheduleDate = schedule.date.slice(0, 10);
+
+              return scheduleDate >= nextPayPeriod.startDate && scheduleDate <= nextPayPeriod.endDate;
+          })
+        : [];
+
+    const nextPeriodHours = nextPeriodSchedules.reduce(
+        (total, schedule) =>
+            total + calculateHours(schedule.startTime, schedule.endTime, schedule.hasBreak ? schedule.breakMinutes : 0),
+        0,
+    );
+
+    const nextBasePay =
+        salarySettings?.payType === "hourly"
+            ? nextPeriodHours * hourlyWage
+            : salarySettings?.payType === "salary"
+              ? Number(salarySettings.monthlySalary ?? 0)
+              : 0;
+
+    /*
+     * --------------------------------------------------
+     * Current Tips
+     * --------------------------------------------------
+     */
 
     const periodPaychequeTips = savedTips?.paychequeTips ?? 0;
 
@@ -718,13 +708,13 @@ export default function SchedulePage() {
               ? Number(salarySettings.monthlySalary ?? 0)
               : 0;
 
-    const periodHolidays = currentPayPeriod
-        ? holidays.filter((holiday) => holiday.date >= currentPayPeriod.startDate && holiday.date <= currentPayPeriod.endDate)
-        : [];
+    /*
+     * --------------------------------------------------
+     * Holiday Pay
+     * --------------------------------------------------
+     */
 
-    const holidaySchedules = periodSchedules.filter((schedule) => {
-        return isHoliday(schedule.date, holidays);
-    });
+    const holidaySchedules = periodSchedules.filter((schedule) => isHoliday(schedule.date.slice(0, 10), holidays));
 
     const holidayHours = holidaySchedules.reduce(
         (total, schedule) =>
@@ -734,17 +724,41 @@ export default function SchedulePage() {
 
     const holidayPay = salarySettings?.payType === "hourly" ? holidayHours * hourlyWage * 0.5 : 0;
 
-    // 급여 포함 팁이 있을 때만 세전 급여에 포함
+    /*
+     * --------------------------------------------------
+     * Tips
+     * --------------------------------------------------
+     */
+
     const hasPaychequeTips =
         salarySettings?.hasTips && (salarySettings.tipType === "paycheque" || salarySettings.tipType === "both");
+
+    const hasCashTips = salarySettings?.hasTips && (salarySettings.tipType === "cash" || salarySettings.tipType === "both");
+
+    /*
+     * --------------------------------------------------
+     * Vacation Pay
+     * --------------------------------------------------
+     */
 
     const vacationPayRate = Number(salarySettings?.vacationPayRate ?? 4.15);
 
     const estimatedVacationPay = estimatedBasePay * (vacationPayRate / 100);
 
+    /*
+     * --------------------------------------------------
+     * Taxable Gross
+     * --------------------------------------------------
+     */
+
     const taxableGrossPay = estimatedBasePay + holidayPay + estimatedVacationPay + (hasPaychequeTips ? periodPaychequeTips : 0);
 
-    // 세금 계산
+    /*
+     * --------------------------------------------------
+     * Taxes
+     * --------------------------------------------------
+     */
+
     const periodsPerYear = getPeriodsPerYear(salarySettings?.payFrequency ?? "biweekly");
 
     const annualGross = taxableGrossPay * periodsPerYear;
@@ -757,10 +771,13 @@ export default function SchedulePage() {
 
     const payrollDeductions = {
         cpp: taxes.cpp / periodsPerYear,
+
         cpp2: taxes.cpp2 / periodsPerYear,
+
         ei: taxes.ei / periodsPerYear,
 
         federalTax: taxes.federalTax / periodsPerYear,
+
         provincialTax: taxes.provincialTax / periodsPerYear,
 
         provinceName: taxes.provinceName,
@@ -772,56 +789,208 @@ export default function SchedulePage() {
 
     const estimatedNetPay = payrollDeductions.netPay;
 
+    /*
+     * --------------------------------------------------
+     * Previous Period Salary
+     * --------------------------------------------------
+     */
+
+    const previousPeriodSchedules = previousPayPeriod
+        ? schedules.filter((schedule) => {
+              const scheduleDate = schedule.date.slice(0, 10);
+
+              return scheduleDate >= previousPayPeriod.startDate && scheduleDate <= previousPayPeriod.endDate;
+          })
+        : [];
+
+    const previousPeriodHours = previousPeriodSchedules.reduce(
+        (total, schedule) =>
+            total + calculateHours(schedule.startTime, schedule.endTime, schedule.hasBreak ? schedule.breakMinutes : 0),
+        0,
+    );
+
+    const previousBasePay =
+        salarySettings?.payType === "hourly"
+            ? previousPeriodHours * hourlyWage
+            : salarySettings?.payType === "salary"
+              ? Number(salarySettings.monthlySalary ?? 0)
+              : 0;
+
+    const previousHolidaySchedules = previousPeriodSchedules.filter((schedule) =>
+        isHoliday(schedule.date.slice(0, 10), holidays),
+    );
+
+    const previousHolidayHours = previousHolidaySchedules.reduce(
+        (total, schedule) =>
+            total + calculateHours(schedule.startTime, schedule.endTime, schedule.hasBreak ? schedule.breakMinutes : 0),
+        0,
+    );
+
+    const previousHolidayPay = salarySettings?.payType === "hourly" ? previousHolidayHours * hourlyWage * 0.5 : 0;
+
+    const previousEstimatedVacationPay = previousBasePay * (vacationPayRate / 100);
+
+    const previousEstimatedGross = previousBasePay + previousHolidayPay + previousEstimatedVacationPay;
+
+    const previousAnnualGross = previousEstimatedGross * periodsPerYear;
+
+    const previousTaxes = calculateTaxes({
+        country: "CA",
+        province: salarySettings?.province ?? "",
+        annualGross: previousAnnualGross,
+    });
+
+    const previousEstimatedNetPay = previousEstimatedGross - previousTaxes.totalDeductions / periodsPerYear;
+
+    console.log(previousEstimatedGross);
+    console.log(previousTaxes.totalDeductions / periodsPerYear);
+    console.log(taxableGrossPay);
+    console.log(previousEstimatedGross);
+
+    /*
+     * --------------------------------------------------
+     * Previous Pay History
+     * --------------------------------------------------
+     */
+
+    const previousPayHistory = previousPayPeriod
+        ? payHistory.find(
+              (history) => history.startDate === previousPayPeriod.startDate && history.endDate === previousPayPeriod.endDate,
+          )
+        : null;
+
+    console.log("+++++++++++++");
+    console.log(previousPayHistory?.grossPay);
+    console.log(previousPayHistory?.deductions);
+    console.log(previousEstimatedNetPay);
+
+    const gross = Number(previousPayHistory?.grossPay) || 0;
+    const deductions = Number(previousPayHistory?.deductions) || 0;
+
+    console.log('*****************')
+    console.log(gross - deductions); // 제대로된 값 
+
+    /*
+     * --------------------------------------------------
+     * Previous Pay Status
+     * --------------------------------------------------
+     */
+
+    const today = new Date();
+
+    const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    const previousPeriodEndDate = previousPayPeriod ? new Date(`${previousPayPeriod.endDate}T00:00:00`) : null;
+
+    const previousPeriodPayDate = previousPayPeriod ? new Date(`${previousPayPeriod.payDate}T00:00:00`) : null;
+
+    /*
+     * 이전 급여 기간이 이미 끝났는지
+     */
+    const isPreviousPeriodEnded = previousPeriodEndDate !== null && previousPeriodEndDate < todayOnly;
+
+    /*
+     * 이전 급여 기간의 지급일이 지났는지
+     */
+    const isPreviousPayDatePassed = previousPeriodPayDate !== null && previousPeriodPayDate <= todayOnly;
+
+    /*
+     * 상태 1
+     *
+     * 기간 종료 O
+     * 지급일 O
+     * DB 기록 X
+     *
+     * → 급여 기록 카드
+     */
+    const shouldGoToPayHistory = isPreviousPeriodEnded && isPreviousPayDatePassed && !previousPayHistory;
+
+    /*
+     * 상태 3
+     *
+     * 기간 종료 O
+     * 지급일 X
+     *
+     * → 지급 예정 카드
+     *
+     * DB 기록 여부와 관계없이 무조건 이 상태
+     */
+    const shouldShowUpcomingPreviousPay = isPreviousPeriodEnded && !isPreviousPayDatePassed;
+    /*
+     * --------------------------------------------------
+     * Expected Salary
+     * --------------------------------------------------
+     */
+
+    const nextExpectedPay = nextBasePay;
+
+    const nextDaysUntil = nextPayPeriod ? getDaysDifference(nextPayPeriod.payDate) : null;
+
+    const salaryStatus = {
+        daysUntil:
+            nextDaysUntil === null
+                ? "-"
+                : nextDaysUntil === 0
+                  ? "오늘"
+                  : nextDaysUntil === 1
+                    ? "내일"
+                    : nextDaysUntil === 2
+                      ? "모레"
+                      : `${nextDaysUntil}일 뒤`,
+        expectedPay: nextExpectedPay,
+        payDate: nextPayPeriod?.payDate ?? "",
+    };
+
+    /*
+     * --------------------------------------------------
+     * Previous Pay Comparison
+     * --------------------------------------------------
+     */
+
     const payDifference = previousPay !== null ? estimatedNetPay - previousPay : null;
 
     const payChangePercent = previousPay !== null && previousPay !== 0 ? (payDifference! / previousPay) * 100 : null;
 
-    // 현금 팁이 있을 때만 세후 금액에 추가
-    const hasCashTips = salarySettings?.hasTips && (salarySettings.tipType === "cash" || salarySettings.tipType === "both");
+    /*
+     * --------------------------------------------------
+     * Actual Net Pay Statistics
+     * --------------------------------------------------
+     */
+
+    const actualPayHistory = payHistory
+        .filter((history) => history.actualNetPay != null)
+        .sort((a, b) => a.endDate.localeCompare(b.endDate));
+
+    const recentActualPayHistory = actualPayHistory.slice(-6);
+
+    const averageActualNetPay =
+        actualPayHistory.length > 0
+            ? actualPayHistory.reduce((total, history) => total + Number(history.actualNetPay ?? 0), 0) / actualPayHistory.length
+            : null;
+
+    const selectedActualNetPay = selectedPayHistory?.actualNetPay != null ? Number(selectedPayHistory.actualNetPay) : null;
+
+    const selectedPayDifference =
+        selectedActualNetPay !== null && averageActualNetPay !== null ? selectedActualNetPay - averageActualNetPay : null;
+
+    const selectedPayChangePercent =
+        selectedPayDifference !== null && averageActualNetPay !== null && averageActualNetPay !== 0
+            ? (selectedPayDifference / averageActualNetPay) * 100
+            : null;
+
+    /*
+     * --------------------------------------------------
+     * Final Income
+     * --------------------------------------------------
+     */
 
     const actualCashTips = hasCashTips ? periodCashTips : 0;
 
     const finalEstimatedIncome = estimatedNetPay + actualCashTips;
 
-    useEffect(() => {
-        const loadPreviousPay = async () => {
-            try {
-                const response = await fetch("/api/pay-history");
-
-                if (!response.ok) {
-                    return;
-                }
-
-                const data: PayHistory[] = await response.json();
-
-                if (data.length > 0) {
-                    setPreviousPay(data[0].netPay);
-                }
-            } catch (error) {
-                console.error(error);
-            }
-        };
-
-        loadPreviousPay();
-    }, []);
-
     /*
      * --------------------------------------------------
-     * This Month Schedules
-     * --------------------------------------------------
-     */
-
-    const currentMonthSchedules = schedules
-        .filter((schedule) => {
-            const [scheduleYear, scheduleMonth] = schedule.date.split("-").map(Number);
-
-            return scheduleYear === year && scheduleMonth === month + 1;
-        })
-        .sort((a, b) => a.date.localeCompare(b.date));
-
-    /*
-     * --------------------------------------------------
-     * Loading...
+     * Loading
      * --------------------------------------------------
      */
 
@@ -841,13 +1010,11 @@ export default function SchedulePage() {
 
     return (
         <div className="mx-auto max-w-md">
-            {/* Header */}
-
             <header>
                 <p className="text-sm text-gray-500">차곡</p>
 
                 <div className="mt-2 flex items-center justify-between">
-                    <h1 className="text-3xl font-bold">근무 관리</h1>
+                    <h1 className="text-3xl font-bold">급여</h1>
 
                     <Link
                         href="/salary/settings"
@@ -858,28 +1025,90 @@ export default function SchedulePage() {
                     </Link>
                 </div>
 
-                <p className="mt-2 text-sm text-gray-500">근무 일정을 등록하고 예상 급여를 확인해보세요.</p>
+                <p className="mt-2 text-sm text-gray-500">예상 급여와 급여 기록을 확인해보세요.</p>
             </header>
 
             {latestPayHistory && !latestPayHistory.isConfirmed && (
-                <button
-                    type="button"
-                    onClick={() => router.push("/salary/pay-history")}
-                    className="mt-5 flex w-full items-center justify-between rounded-3xl bg-black p-5 text-left text-white shadow-sm transition hover:shadow-md"
+                <Link
+                    href="/salary/pay-history"
+                    className="mt-5 flex w-full items-center justify-between rounded-3xl bg-gray-900 p-5 text-left text-white shadow-sm transition hover:shadow-md"
                 >
                     <div>
                         <p className="text-xs text-gray-400">급여 확인</p>
 
                         <p className="mt-1 text-sm font-semibold">지난번에 이만큼 받으셨나요?</p>
 
-                        <p className="mt-1 text-lg font-bold">${latestPayHistory.totalIncome.toFixed(2)}</p>
+                        <p className="mt-1 text-lg font-bold">
+                            ${(latestPayHistory.totalIncome ?? latestPayHistory.netPay).toFixed(2)}
+                        </p>
                     </div>
 
                     <span className="ml-4 shrink-0 text-xs text-gray-400">확인하기 →</span>
-                </button>
+                </Link>
             )}
 
-            {/* Pay Period Notice */}
+            {/* Previous Pay Period */}
+
+            {previousPayPeriod && (
+                <>
+                    {/* 상태 1
+            기간 종료 + 지급일 지남 + DB 기록 없음
+        */}
+                    {shouldGoToPayHistory && (
+                        <Link
+                            href="/salary/pay-history"
+                            className="mt-5 block w-full rounded-3xl bg-gray-900 p-5 text-left shadow-sm transition hover:shadow-md"
+                        >
+                            <p className="text-xs text-gray-400">급여 기록</p>
+
+                            <p className="mt-1 text-lg font-bold text-white">지급일이 지났어요</p>
+
+                            <p className="mt-1 text-sm text-gray-500">아직 기록되지 않은 급여가 있어요.</p>
+
+                            <p className="mt-4 text-xs text-gray-400">
+                                {formatDisplayDate(previousPayPeriod.startDate)}
+                                {" ~ "}
+                                {formatDisplayDate(previousPayPeriod.endDate)}
+                            </p>
+
+                            <p className="mt-3 text-xs font-medium text-gray-500">급여 기록에서 확인하기 →</p>
+                        </Link>
+                    )}
+
+                    {/* 상태 3
+            기간 종료 + 지급일 아직 안 됨
+        */}
+                    {shouldShowUpcomingPreviousPay && (
+                        <button
+                            type="button"
+                            onClick={() => setIsPreviousExpectedOpen(true)}
+                            className="mt-5 block w-full rounded-3xl bg-gray-900 p-5 text-left shadow-sm transition hover:shadow-md"
+                        >
+                            <p className="text-lg font-bold text-white">
+                                {getDaysDifference(previousPayPeriod.payDate) === 0
+                                    ? `오늘 ${formatMoney(previousEstimatedNetPay)}`
+                                    : getDaysDifference(previousPayPeriod.payDate) === 1
+                                      ? `내일 ${formatMoney(previousEstimatedNetPay)}`
+                                      : getDaysDifference(previousPayPeriod.payDate) === 2
+                                        ? `모레 ${formatMoney(previousEstimatedNetPay)}`
+                                        : `${getDaysDifference(previousPayPeriod.payDate)}일 뒤 ${formatMoney(
+                                              previousEstimatedNetPay,
+                                          )}`}{" "}
+                                를 받아요
+                            </p>
+
+                            <p className="mt-2 text-xs text-gray-400">
+                                {formatDisplayDate(previousPayPeriod.startDate)}
+                                {" ~ "}
+                                {formatDisplayDate(previousPayPeriod.endDate)}
+                            </p>
+
+                            <p className="mt-1 text-right text-xs text-gray-400">클릭해서 상세 보기 →</p>
+                        </button>
+                    )}
+                </>
+            )}
+
             {currentPayPeriod && (
                 <section className="mt-5 rounded-3xl bg-white p-5 shadow-sm">
                     <div className="flex items-center justify-between">
@@ -901,496 +1130,6 @@ export default function SchedulePage() {
                     </div>
                 </section>
             )}
-
-            {/* Calendar */}
-
-            <section className="mt-5 rounded-3xl bg-white p-5 shadow-sm">
-                <div className="mb-5 flex items-center justify-between">
-                    <button
-                        onClick={() => setCurrentDate(new Date(year, month - 1, 1))}
-                        className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100"
-                    >
-                        ‹
-                    </button>
-
-                    <h2 className="text-lg font-semibold">
-                        {year}년 {month + 1}월
-                    </h2>
-
-                    <button
-                        onClick={() => setCurrentDate(new Date(year, month + 1, 1))}
-                        className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100"
-                    >
-                        ›
-                    </button>
-                </div>
-
-                <div className="mb-2 grid grid-cols-7 text-center text-xs text-gray-400">
-                    {WEEK_DAYS.map((day) => (
-                        <div key={day}>{day}</div>
-                    ))}
-                </div>
-
-                <div className="grid grid-cols-7 gap-y-2">
-                    {calendarDays.map((day, index) => {
-                        if (day === null) {
-                            return <div key={index} />;
-                        }
-
-                        const date = formatDate(new Date(year, month, day));
-
-                        const holiday = holidays.find((item) => item.date === date);
-
-                        const daySchedules = schedules.filter((schedule) => {
-                            return schedule.date.slice(0, 10) === date;
-                        });
-
-                        const hasSchedule = daySchedules.length > 0;
-
-                        const isPayPeriodDay = currentPayPeriod
-                            ? date >= currentPayPeriod.startDate && date <= currentPayPeriod.endDate
-                            : false;
-
-                        const isPayDate = currentPayPeriod ? date === currentPayPeriod.payDate : false;
-
-                        return (
-                            <div
-                                key={date}
-                                className={`relative flex h-16 flex-col items-center ${
-                                    isPayPeriodDay ? "rounded-xl bg-gray-100" : ""
-                                }`}
-                            >
-                                <button
-                                    onClick={() => (hasSchedule ? openEditModal(daySchedules[0]) : openAddModal(date))}
-                                    className="flex h-12 w-full flex-col items-center justify-center rounded-xl"
-                                >
-                                    <span
-                                        className={
-                                            hasSchedule
-                                                ? "flex h-8 w-8 items-center justify-center rounded-full bg-black text-sm font-medium text-white"
-                                                : holiday
-                                                  ? "text-sm font-semibold text-red-500"
-                                                  : "text-sm"
-                                        }
-                                    >
-                                        {day}
-                                    </span>
-
-                                    {hasSchedule && !isPayDate && !holiday && (
-                                        <span className="absolute bottom-1 h-1 w-1 rounded-full bg-black" />
-                                    )}
-
-                                    {holiday && (
-                                        <span className="absolute bottom-0 max-w-full truncate px-1 text-[8px] font-medium text-red-500">
-                                            {holiday.name}
-                                        </span>
-                                    )}
-
-                                    {isPayDate && (
-                                        <span className="absolute bottom-0 text-[8px] font-medium text-gray-500">급여일</span>
-                                    )}
-                                </button>
-                            </div>
-                        );
-                    })}
-                </div>
-
-                <div className="mt-4 flex items-center gap-4 text-xs text-gray-400">
-                    <div className="flex items-center gap-2">
-                        <span className="h-3 w-3 rounded bg-gray-100" />
-                        급여 기간
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                        <span className="h-3 w-3 rounded-full bg-black" />
-                        근무 등록
-                    </div>
-                </div>
-            </section>
-
-            {/* This Month Schedule List */}
-
-            <section className="mt-5 rounded-3xl bg-white p-5 shadow-sm">
-                <div className="flex items-center justify-between">
-                    <h2 className="text-lg font-semibold">이번 달 근무</h2>
-
-                    <span className="text-sm text-gray-400">{currentMonthSchedules.length}회</span>
-                </div>
-
-                {currentMonthSchedules.length === 0 ? (
-                    <p className="mt-5 text-sm text-gray-400">아직 등록된 근무가 없어요.</p>
-                ) : (
-                    <>
-                        <div className="mt-4 space-y-3">
-                            {currentMonthSchedules
-                                .slice(0, showAllSchedules ? currentMonthSchedules.length : 3)
-                                .map((schedule) => {
-                                    const hours = calculateHours(
-                                        schedule.startTime,
-                                        schedule.endTime,
-                                        schedule.hasBreak ? schedule.breakMinutes : 0,
-                                    );
-
-                                    const basePay = hours * hourlyWage;
-
-                                    const scheduleDate = schedule.date.slice(0, 10);
-
-                                    const holiday = isHoliday(scheduleDate, holidays);
-
-                                    const premiumPay = holiday ? basePay * 0.5 : 0;
-
-                                    const totalPay = basePay + premiumPay;
-
-                                    return (
-                                        <button
-                                            key={schedule.id}
-                                            onClick={() => openEditModal(schedule)}
-                                            className="w-full rounded-2xl bg-gray-50 p-4 text-left"
-                                        >
-                                            <div className="flex items-center justify-between">
-                                                <div>
-                                                    <div className="flex items-center gap-2">
-                                                        <p className={`font-semibold ${holiday ? "text-red-500" : ""}`}>
-                                                            {formatDate(new Date(schedule.date))}
-                                                        </p>
-
-                                                        {holiday && (
-                                                            <span className="text-[10px] font-medium text-red-400">
-                                                                {holiday.name}
-                                                            </span>
-                                                        )}
-                                                    </div>
-
-                                                    <p className="mt-1 text-sm text-gray-500">
-                                                        {schedule.startTime.slice(0, 5)}
-                                                        {" ~ "}
-                                                        {schedule.endTime.slice(0, 5)}
-                                                    </p>
-                                                </div>
-
-                                                <div className="text-right">
-                                                    {salarySettings?.payType === "hourly" ? (
-                                                        <>
-                                                            <p className="font-semibold">${totalPay.toFixed(2)}</p>
-
-                                                            <p className="mt-1 text-xs text-gray-400">
-                                                                {hours.toFixed(1)}
-                                                                시간
-                                                            </p>
-                                                        </>
-                                                    ) : salarySettings?.payType === "salary" ? (
-                                                        <>
-                                                            <p className="font-semibold">월급</p>
-
-                                                            <p className="mt-1 text-xs text-gray-400">
-                                                                {hours.toFixed(1)}
-                                                                시간
-                                                            </p>
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <p className="font-semibold">-</p>
-
-                                                            <p className="mt-1 text-xs text-gray-400">
-                                                                {hours.toFixed(1)}
-                                                                시간
-                                                            </p>
-                                                        </>
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            <div className="mt-3 flex gap-2">
-                                                {schedule.alarmEnabled && (
-                                                    <span className="rounded-full bg-white px-3 py-1 text-xs text-gray-500">
-                                                        🔔 {schedule.alarmMinutesBefore}분 전
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </button>
-                                    );
-                                })}
-                        </div>
-
-                        {currentMonthSchedules.length > 3 && (
-                            <button
-                                type="button"
-                                onClick={() => setShowAllSchedules((prev) => !prev)}
-                                className="mt-4 w-full rounded-2xl bg-gray-100 py-3 text-sm font-medium text-gray-600"
-                            >
-                                {showAllSchedules ? "접기" : `전체 ${currentMonthSchedules.length}개 보기`}
-                            </button>
-                        )}
-                    </>
-                )}
-            </section>
-
-            {/* Add / Edit Modal */}
-
-            {isAddModalOpen && (
-                <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40 p-5">
-                    <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl bg-white p-5 scrollbar-hide">
-                        {/* Modal Header */}
-                        <div className="flex items-start justify-between">
-                            <div className="relative">
-                                <h2 className="text-xl font-bold">{editingSchedule ? "근무 수정" : "근무 추가"}</h2>
-
-                                <div className="mt-1 flex items-center gap-2">
-                                    <p
-                                        className={`text-sm ${
-                                            selectedDate && isHoliday(selectedDate.slice(0, 10), holidays)
-                                                ? "text-red-500"
-                                                : "text-gray-400"
-                                        }`}
-                                    >
-                                        {selectedDate && formatDate(new Date(selectedDate))}
-                                    </p>
-
-                                    {/* Holiday Notice */}
-                                    {selectedDate && isHoliday(selectedDate.slice(0, 10), holidays) && (
-                                        <div className="flex items-center gap-1 rounded-lg bg-red-50 px-2 py-0.5">
-                                            <span className="text-[9px]">🇨🇦</span>
-
-                                            <p className="max-w-[100px] truncate text-[9px] font-medium text-red-500">
-                                                {isHoliday(selectedDate.slice(0, 10), holidays)?.name}
-                                            </p>
-
-                                            <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[8px] font-semibold text-red-500">
-                                                PREMIUM
-                                            </span>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            <button
-                                onClick={() => {
-                                    setIsAddModalOpen(false);
-                                    setEditingSchedule(null);
-                                    setShowHolidayInfo(false);
-                                }}
-                                className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-500"
-                            >
-                                ×
-                            </button>
-                        </div>
-                        {/* Time */}
-                        <div className="mt-6 grid grid-cols-2 gap-3">
-                            <div>
-                                <p className="mb-2 text-sm text-gray-500">시작</p>
-
-                                <input
-                                    type="time"
-                                    value={startTime}
-                                    onChange={(e) => setStartTime(e.target.value)}
-                                    className="w-full rounded-2xl bg-gray-100 px-4 py-4 outline-none"
-                                />
-                            </div>
-
-                            <div>
-                                <p className="mb-2 text-sm text-gray-500">종료</p>
-
-                                <input
-                                    type="time"
-                                    value={endTime}
-                                    onChange={(e) => setEndTime(e.target.value)}
-                                    className="w-full rounded-2xl bg-gray-100 px-4 py-4 outline-none"
-                                />
-                            </div>
-                        </div>
-                        {/* Break */}
-                        <div className="mt-5 rounded-2xl bg-gray-50 p-4">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="font-medium">☕ 휴게시간</p>
-
-                                    <p className="mt-1 text-xs text-gray-400">이번 근무에 휴게시간이 있었나요?</p>
-                                </div>
-
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setHasBreak((prev) => {
-                                            const next = !prev;
-
-                                            if (!next) {
-                                                setBreakMinutes("0");
-                                            }
-
-                                            return next;
-                                        });
-                                    }}
-                                    className={`relative h-7 w-12 rounded-full transition ${
-                                        hasBreak ? "bg-black" : "bg-gray-300"
-                                    }`}
-                                >
-                                    <span
-                                        className={`absolute top-1 h-5 w-5 rounded-full bg-white transition ${
-                                            hasBreak ? "left-6" : "left-1"
-                                        }`}
-                                    />
-                                </button>
-                            </div>
-
-                            {hasBreak && (
-                                <div className="mt-4">
-                                    <p className="mb-2 text-sm text-gray-500">휴게시간은 몇 분이었나요?</p>
-
-                                    <div className="flex items-center rounded-2xl bg-white px-4">
-                                        <input
-                                            type="number"
-                                            min={0}
-                                            value={breakMinutes}
-                                            onChange={(e) => {
-                                                const value = e.target.value;
-
-                                                if (value === "") {
-                                                    setBreakMinutes("");
-                                                    return;
-                                                }
-
-                                                setBreakMinutes(value.replace(/^0+(?=\d)/, ""));
-                                            }}
-                                            className="w-full bg-transparent px-2 py-4 outline-none"
-                                            placeholder="30"
-                                        />
-
-                                        <span className="shrink-0 text-sm text-gray-400">분</span>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                        {/* Hours Preview */}
-                        <div className="mt-4 rounded-2xl bg-gray-50 p-4">
-                            <div className="flex justify-between">
-                                <span className="text-sm text-gray-500">실제 근무시간</span>
-
-                                <span className="font-semibold">
-                                    {calculateHours(startTime, endTime, hasBreak ? Number(breakMinutes) || 0 : 0).toFixed(2)}
-                                    시간
-                                </span>
-                            </div>
-                        </div>
-                        {/* Alarm */}
-                        <div className="mt-5 rounded-2xl bg-gray-50 p-4">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="font-medium">🔔 근무 알림</p>
-
-                                    <p className="mt-1 text-xs text-gray-400">근무 전에 미리 알려드려요.</p>
-                                </div>
-
-                                <button
-                                    type="button"
-                                    onClick={async () => {
-                                        if (!alarmEnabled) {
-                                            try {
-                                                await subscribeToPush();
-                                            } catch (error) {
-                                                console.error(error);
-
-                                                alert(error instanceof Error ? error.message : "알림 설정에 실패했어요.");
-
-                                                return;
-                                            }
-                                        }
-
-                                        setAlarmEnabled((prev) => !prev);
-                                    }}
-                                    className={`relative h-7 w-12 rounded-full transition ${
-                                        alarmEnabled ? "bg-black" : "bg-gray-300"
-                                    }`}
-                                >
-                                    <span
-                                        className={`absolute top-1 h-5 w-5 rounded-full bg-white transition ${
-                                            alarmEnabled ? "left-6" : "left-1"
-                                        }`}
-                                    />
-                                </button>
-                            </div>
-
-                            {alarmEnabled && (
-                                <div className="mt-4">
-                                    <p className="mb-2 text-sm text-gray-500">몇 분 전에 알려드릴까요?</p>
-
-                                    <select
-                                        value={alarmMinutesBefore}
-                                        onChange={(e) => setAlarmMinutesBefore(Number(e.target.value))}
-                                        className="w-full rounded-2xl bg-white px-4 py-4 outline-none"
-                                    >
-                                        <option value={15}>15분 전</option>
-
-                                        <option value={30}>30분 전</option>
-
-                                        <option value={60}>1시간 전</option>
-
-                                        <option value={120}>2시간 전</option>
-
-                                        <option value={1440}>하루 전</option>
-                                    </select>
-                                </div>
-                            )}
-                        </div>
-                        {/* Buttons */}
-                        <button
-                            onClick={handleSaveSchedule}
-                            className="mt-5 w-full rounded-2xl bg-black py-4 font-semibold text-white"
-                        >
-                            {editingSchedule ? "근무 수정" : "근무 등록"}
-                        </button>
-                        {editingSchedule && (
-                            <button
-                                onClick={handleDeleteSchedule}
-                                className="mt-3 w-full rounded-2xl bg-red-50 py-4 font-semibold text-red-500"
-                            >
-                                근무 삭제
-                            </button>
-                        )}
-                        <button
-                            onClick={() => {
-                                setIsAddModalOpen(false);
-                                setEditingSchedule(null);
-                            }}
-                            className="mt-3 w-full py-3 text-sm text-gray-400"
-                        >
-                            취소
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {/* Handle Break Modal */}
-            {isDefaultBreakConfirmOpen && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-5">
-                    <div className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-xl">
-                        <p className="text-lg font-bold">휴게시간 설정이 변경됐어요.</p>
-
-                        <p className="mt-2 text-sm leading-6 text-gray-500">
-                            이번 근무에만 적용할까요, 아니면 앞으로 기본값으로 사용할까요?
-                        </p>
-
-                        <div className="mt-6 grid grid-cols-2 gap-3">
-                            <button
-                                type="button"
-                                onClick={useBreakOnce}
-                                className="rounded-2xl bg-gray-100 py-4 text-sm font-semibold"
-                            >
-                                이번 근무만
-                            </button>
-
-                            <button
-                                type="button"
-                                onClick={saveAsDefaultBreak}
-                                className="rounded-2xl bg-black py-4 text-sm font-semibold text-white"
-                            >
-                                기본값으로 변경
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Pay Period Tips */}
 
             {currentPayPeriod && salarySettings?.hasTips && (
                 <section className="mt-5 rounded-3xl bg-white p-5 shadow-sm">
@@ -1558,10 +1297,11 @@ export default function SchedulePage() {
                                 alert("팁이 저장됐어요!");
                             } catch (error) {
                                 console.error(error);
+
                                 alert("팁 저장에 실패했어요.");
                             }
                         }}
-                        className="mt-4 w-full rounded-2xl bg-black py-4 text-sm font-semibold text-white"
+                        className="mt-4 w-full rounded-2xl bg-gray-900 py-4 text-sm font-semibold text-white"
                     >
                         팁 저장
                     </button>
@@ -1569,7 +1309,6 @@ export default function SchedulePage() {
             )}
 
             {/* Expected Salary */}
-
             <section className="mt-6 rounded-3xl bg-black p-6 text-white shadow-sm">
                 <p className="text-sm text-gray-400">예상 급여</p>
 
@@ -1587,21 +1326,21 @@ export default function SchedulePage() {
                 </div>
 
                 <div className="mt-6 space-y-3 text-sm">
-                    {/* 근무시간 */}
                     <div className="flex justify-between">
                         <span className="text-gray-400">근무시간</span>
 
-                        <span>{periodHours.toFixed(2)}시간</span>
+                        <span>
+                            {periodHours.toFixed(1)}
+                            시간
+                        </span>
                     </div>
 
-                    {/* 기본 급여 */}
                     <div className="flex justify-between">
                         <span className="text-gray-400">기본 급여</span>
 
                         <span>${estimatedBasePay.toFixed(2)}</span>
                     </div>
 
-                    {/* 급여 포함 팁 */}
                     {salarySettings?.hasTips && (salarySettings.tipType === "paycheque" || salarySettings.tipType === "both") && (
                         <div className="flex justify-between">
                             <span className="text-gray-400">급여 포함 팁</span>
@@ -1610,7 +1349,6 @@ export default function SchedulePage() {
                         </div>
                     )}
 
-                    {/* Holiday Pay */}
                     {holidaySchedules.length > 0 && (
                         <div className="flex justify-between">
                             <span className="text-gray-400">Holiday Pay</span>
@@ -1619,14 +1357,15 @@ export default function SchedulePage() {
                         </div>
                     )}
 
-                    {/* Vacation Pay */}
                     <div className="flex justify-between">
-                        <span className="text-gray-400">Vacation Pay ({vacationPayRate}%)</span>
+                        <span className="text-gray-400">
+                            Vacation Pay ({vacationPayRate}
+                            %)
+                        </span>
 
                         <span>${estimatedVacationPay.toFixed(2)}</span>
                     </div>
 
-                    {/* 세전 급여 */}
                     <div className="mt-4 border-t border-gray-800 pt-4">
                         <div className="flex justify-between">
                             <span className="text-gray-300">세전 급여</span>
@@ -1635,21 +1374,18 @@ export default function SchedulePage() {
                         </div>
                     </div>
 
-                    {/* 예상 공제 */}
                     <div className="flex justify-between">
                         <span className="text-gray-400">예상 공제</span>
 
-                        <span>-${payrollDeductions.totalDeductions.toFixed(2)}</span>
+                        <span>- ${payrollDeductions.totalDeductions.toFixed(2)}</span>
                     </div>
 
-                    {/* 실수령 급여 */}
                     <div className="flex justify-between">
                         <span className="text-gray-300">실수령 급여</span>
 
                         <span className="font-semibold">${estimatedNetPay.toFixed(2)}</span>
                     </div>
 
-                    {/* 현금 팁 */}
                     {hasCashTips && (
                         <div className="mt-4 border-t border-gray-800 pt-4">
                             <div className="flex justify-between">
@@ -1660,8 +1396,7 @@ export default function SchedulePage() {
                         </div>
                     )}
 
-                    {/* 최종 총액 */}
-                    <div className="flex items-center justify-between rounded-2xl bg-white p-3 my-6 text-black">
+                    <div className="my-6 flex items-center justify-between rounded-2xl bg-white p-3 text-black">
                         <span className="text-sm font-medium">{hasCashTips ? "예상 총 수령액" : "예상 실수령액"}</span>
 
                         <span className="text-xl font-bold">
@@ -1670,42 +1405,63 @@ export default function SchedulePage() {
                     </div>
                 </div>
 
-                {/* 공제 상세 */}
                 <div className="mt-5 rounded-2xl bg-white/5 p-4">
                     <p className="text-xs font-medium text-gray-300">예상 공제 내역</p>
 
                     <div className="mt-3 space-y-2 text-xs">
                         <div className="flex justify-between">
                             <span className="text-gray-500">CPP</span>
-                            <span className="text-gray-300">-${payrollDeductions.cpp.toFixed(2)}</span>
+
+                            <span className="text-gray-300">
+                                -$
+                                {payrollDeductions.cpp.toFixed(2)}
+                            </span>
                         </div>
 
                         <div className="flex justify-between">
                             <span className="text-gray-500">CPP2</span>
-                            <span className="text-gray-300">-${payrollDeductions.cpp2.toFixed(2)}</span>
+
+                            <span className="text-gray-300">
+                                -$
+                                {payrollDeductions.cpp2.toFixed(2)}
+                            </span>
                         </div>
 
                         <div className="flex justify-between">
                             <span className="text-gray-500">EI</span>
-                            <span className="text-gray-300">-${payrollDeductions.ei.toFixed(2)}</span>
+
+                            <span className="text-gray-300">
+                                -$
+                                {payrollDeductions.ei.toFixed(2)}
+                            </span>
                         </div>
 
                         <div className="flex justify-between">
                             <span className="text-gray-500">연방 소득세</span>
-                            <span className="text-gray-300">-${payrollDeductions.federalTax.toFixed(2)}</span>
+
+                            <span className="text-gray-300">
+                                -$
+                                {payrollDeductions.federalTax.toFixed(2)}
+                            </span>
                         </div>
 
                         <div className="flex justify-between">
                             <span className="text-gray-500">{taxes.provinceName} 소득세</span>
 
-                            <span className="text-gray-300">-${payrollDeductions.provincialTax.toFixed(2)}</span>
+                            <span className="text-gray-300">
+                                -$
+                                {payrollDeductions.provincialTax.toFixed(2)}
+                            </span>
                         </div>
 
                         <div className="mt-3 border-t border-white/10 pt-3">
                             <div className="flex justify-between">
                                 <span className="text-gray-300">총 공제</span>
 
-                                <span className="font-medium text-white">-${payrollDeductions.totalDeductions.toFixed(2)}</span>
+                                <span className="font-medium text-white">
+                                    -$
+                                    {payrollDeductions.totalDeductions.toFixed(2)}
+                                </span>
                             </div>
                         </div>
                     </div>
@@ -1720,14 +1476,417 @@ export default function SchedulePage() {
                         설정된 월급 ${Number(salarySettings.monthlySalary ?? 0).toFixed(2)}
                     </p>
                 )}
+            </section>
+
+            {/* Actual Net Pay Statistics */}
+
+            <section className="mt-6 rounded-3xl bg-white p-5 shadow-sm">
+                <div className="flex items-start justify-between">
+                    <div>
+                        <p className="text-xs text-gray-400">실수령액 통계</p>
+
+                        <h2 className="mt-1 text-lg font-bold">평균 실수령액</h2>
+                    </div>
+
+                    <Link
+                        href="/salary/pay-history"
+                        className="rounded-full bg-gray-100 px-3 py-2 text-xs font-medium text-gray-600"
+                    >
+                        기록하기 →
+                    </Link>
+                </div>
+
+                <p className="mt-4 text-3xl font-bold">{averageActualNetPay !== null ? formatMoney(averageActualNetPay) : "-"}</p>
+
+                {recentActualPayHistory.length > 0 ? (
+                    <>
+                        <div className="mt-8">
+                            <div className="relative h-48 w-full">
+                                {(() => {
+                                    const values = recentActualPayHistory.map((history) => Number(history.actualNetPay ?? 0));
+
+                                    const allValues = [...values, averageActualNetPay ?? 0];
+
+                                    const minValue = Math.min(...allValues);
+                                    const maxValue = Math.max(...allValues);
+
+                                    const range = Math.max(maxValue - minValue, 1);
+
+                                    const width = 320;
+                                    const height = 150;
+                                    const paddingX = 16;
+                                    const paddingY = 16;
+
+                                    const points = recentActualPayHistory.map((history, index) => {
+                                        const value = Number(history.actualNetPay ?? 0);
+
+                                        const x =
+                                            recentActualPayHistory.length === 1
+                                                ? width / 2
+                                                : paddingX +
+                                                  (index / (recentActualPayHistory.length - 1)) * (width - paddingX * 2);
+
+                                        const y = height - paddingY - ((value - minValue) / range) * (height - paddingY * 2);
+
+                                        return {
+                                            history,
+                                            x,
+                                            y,
+                                            value,
+                                        };
+                                    });
+
+                                    const linePoints = points.map((point) => `${point.x},${point.y}`).join(" ");
+
+                                    const averageY =
+                                        height -
+                                        paddingY -
+                                        (((averageActualNetPay ?? 0) - minValue) / range) * (height - paddingY * 2);
+
+                                    return (
+                                        <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full overflow-visible">
+                                            <line
+                                                x1={paddingX}
+                                                y1={averageY}
+                                                x2={width - paddingX}
+                                                y2={averageY}
+                                                stroke="currentColor"
+                                                strokeWidth="1"
+                                                strokeDasharray="4 4"
+                                                className="text-gray-300"
+                                            />
+
+                                            <polyline
+                                                points={linePoints}
+                                                fill="none"
+                                                stroke="currentColor"
+                                                strokeWidth="2"
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                className="text-gray-900"
+                                            />
+
+                                            {points.map((point) => (
+                                                <g
+                                                    key={`${point.history.startDate}-${point.history.endDate}`}
+                                                    onClick={() => setSelectedPayHistory(point.history)}
+                                                    className="cursor-pointer"
+                                                >
+                                                    <circle cx={point.x} cy={point.y} r="10" fill="transparent" />
+
+                                                    <circle cx={point.x} cy={point.y} r="4" className="fill-gray-900" />
+                                                </g>
+                                            ))}
+                                        </svg>
+                                    );
+                                })()}
+                            </div>
+
+                            <div className="mt-2 flex justify-between text-[10px] text-gray-400">
+                                {recentActualPayHistory.map((history) => (
+                                    <button
+                                        key={`${history.startDate}-${history.endDate}`}
+                                        type="button"
+                                        onClick={() => setSelectedPayHistory(history)}
+                                        className="text-center"
+                                    >
+                                        {formatDisplayDate(history.endDate)}
+                                    </button>
+                                ))}
+                            </div>
+
+                            <div className="mt-4 flex items-center justify-end gap-2 text-xs text-gray-400">
+                                <span className="h-px w-5 border-t border-dashed border-gray-300" />
+                                평균
+                            </div>
+                        </div>
+                    </>
+                ) : (
+                    <div className="mt-6 rounded-2xl bg-gray-100 p-4 text-sm text-gray-500">
+                        아직 기록된 실수령액이 없어요.
+                        <br />
+                        급여 기록에서 실수령액을 기록하면 통계가 보여요.
+                    </div>
+                )}
 
                 <Link
                     href="/salary/pay-history"
-                    className="mt-3 block w-full text-right text-xs text-gray-400 transition hover:text-gray-600"
+                    className="mt-5 block w-full rounded-2xl bg-gray-900 py-4 text-center text-sm font-semibold text-white"
                 >
-                    급여 기록을 확인해보세요 →
+                    내 실수령액 기록하기
                 </Link>
             </section>
+
+            {/* Previous Expected Salary Modal */}
+            {isPreviousExpectedOpen && previousPayPeriod && (
+                <div
+                    className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 p-4 sm:items-center"
+                    onClick={() => setIsPreviousExpectedOpen(false)}
+                >
+                    <div
+                        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl bg-black p-6 text-white shadow-xl"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <div className="flex items-start justify-between">
+                            <div>
+                                <p className="text-xs text-gray-500">저번 급여 기간</p>
+
+                                <p className="mt-1 text-sm font-semibold">
+                                    {formatDisplayDate(previousPayPeriod.startDate)}
+                                    {" ~ "}
+                                    {formatDisplayDate(previousPayPeriod.endDate)}
+                                </p>
+                            </div>
+
+                            <button
+                                type="button"
+                                onClick={() => setIsPreviousExpectedOpen(false)}
+                                className="text-xl text-gray-400"
+                            >
+                                ×
+                            </button>
+                        </div>
+
+                        <p className="mt-6 text-4xl font-bold">{formatMoney(previousEstimatedNetPay)}</p>
+
+                        <p className="mt-2 text-sm text-gray-400">
+                            {previousPayHistory?.actualNetPay != null ? "실제 실수령액" : "예상 실수령액"}
+                        </p>
+
+                        <div className="mt-6 space-y-3 text-sm">
+                            <div className="flex justify-between">
+                                <span className="text-gray-400">근무시간</span>
+
+                                <span>
+                                    {(previousPayHistory?.hours ?? previousPeriodHours).toFixed(1)}
+                                    시간
+                                </span>
+                            </div>
+
+                            <div className="flex justify-between">
+                                <span className="text-gray-400">기본 급여</span>
+
+                                <span>{formatMoney(previousPayHistory?.basePay ?? previousBasePay)}</span>
+                            </div>
+
+                            <div className="flex justify-between">
+                                <span className="text-gray-400">Holiday Pay</span>
+
+                                <span>
+                                    {formatMoney(
+                                        previousPayHistory?.grossPay != null && previousPayHistory?.basePay != null
+                                            ? Math.max(
+                                                  0,
+                                                  (previousPayHistory.grossPay ?? 0) -
+                                                      (previousPayHistory.basePay ?? 0) -
+                                                      (previousPayHistory.vacationPay ?? 0) -
+                                                      (previousPayHistory.paychequeTips ?? 0),
+                                              )
+                                            : previousHolidayPay,
+                                    )}
+                                </span>
+                            </div>
+
+                            <div className="flex justify-between">
+                                <span className="text-gray-400">Vacation Pay</span>
+
+                                <span>{formatMoney(previousPayHistory?.vacationPay ?? previousEstimatedVacationPay)}</span>
+                            </div>
+
+                            {previousPayHistory?.paychequeTips != null && previousPayHistory.paychequeTips > 0 && (
+                                <div className="flex justify-between">
+                                    <span className="text-gray-400">급여 포함 팁</span>
+
+                                    <span>{formatMoney(previousPayHistory.paychequeTips)}</span>
+                                </div>
+                            )}
+
+                            <div className="mt-4 border-t border-gray-800 pt-4">
+                                <div className="flex justify-between">
+                                    <span className="text-gray-300">세전 급여</span>
+
+                                    <span className="font-semibold">
+                                        {formatMoney(previousPayHistory?.grossPay ?? previousEstimatedGross)}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div className="flex justify-between">
+                                <span className="text-gray-400">공제</span>
+
+                                <span>
+                                    -{" "}
+                                    {formatMoney(
+                                        previousPayHistory?.deductions ?? previousTaxes.totalDeductions / periodsPerYear,
+                                    )}
+                                </span>
+                            </div>
+
+                            <div className="flex justify-between">
+                                <span className="text-gray-300">실수령액</span>
+
+                                <span className="font-semibold">{formatMoney(previousEstimatedNetPay)}</span>
+                            </div>
+
+                            {previousPayHistory?.cashTips != null && previousPayHistory.cashTips > 0 && (
+                                <div className="mt-4 border-t border-gray-800 pt-4">
+                                    <div className="flex justify-between">
+                                        <span className="text-gray-400">현금 팁</span>
+
+                                        <span>{formatMoney(previousPayHistory.cashTips)}</span>
+                                    </div>
+
+                                    <div className="mt-3 flex justify-between rounded-2xl bg-white p-3 text-black">
+                                        <span className="text-sm font-medium">총 수령액</span>
+
+                                        <span className="text-lg font-bold">
+                                            {formatMoney(
+                                                (previousPayHistory.actualNetPay ?? previousPayHistory.netPay) +
+                                                    previousPayHistory.cashTips,
+                                            )}
+                                        </span>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        <Link
+                            href="/salary/pay-history"
+                            className="mt-6 block w-full rounded-2xl bg-white py-4 text-center text-sm font-semibold text-black"
+                        >
+                            급여 기록 보기
+                        </Link>
+                    </div>
+                </div>
+            )}
+
+            {/* Actual Net Pay Detail Modal */}
+
+            {selectedPayHistory && (
+                <div
+                    className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 p-4 sm:items-center"
+                    onClick={() => setSelectedPayHistory(null)}
+                >
+                    <div
+                        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl bg-black p-6 text-white shadow-xl"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <div className="flex items-start justify-between">
+                            <div>
+                                <p className="text-xs text-gray-500">실수령액 기록</p>
+
+                                <p className="mt-1 text-sm font-semibold">
+                                    {formatDisplayDate(selectedPayHistory.startDate)}
+                                    {" ~ "}
+                                    {formatDisplayDate(selectedPayHistory.endDate)}
+                                </p>
+                            </div>
+
+                            <button type="button" onClick={() => setSelectedPayHistory(null)} className="text-xl text-gray-400">
+                                ×
+                            </button>
+                        </div>
+
+                        <p className="mt-6 text-4xl font-bold">{formatMoney(Number(selectedPayHistory.actualNetPay ?? 0))}</p>
+
+                        <p className="mt-2 text-sm text-gray-400">실제 실수령액</p>
+
+                        {selectedPayDifference !== null && selectedPayChangePercent !== null && (
+                            <div className="mt-5 rounded-2xl bg-white/5 p-4">
+                                <p className="text-xs text-gray-500">평균과 비교</p>
+
+                                <p className="mt-2 text-sm">
+                                    평균보다{" "}
+                                    <span
+                                        className={
+                                            selectedPayDifference >= 0
+                                                ? "font-semibold text-red-400"
+                                                : "font-semibold text-blue-400"
+                                        }
+                                    >
+                                        {selectedPayDifference >= 0
+                                            ? `${formatMoney(Math.abs(selectedPayDifference))} 많아요`
+                                            : `${formatMoney(Math.abs(selectedPayDifference))} 적어요`}
+                                    </span>
+                                </p>
+
+                                <p className="mt-1 text-xs text-gray-500">
+                                    평균 대비 {Math.abs(selectedPayChangePercent).toFixed(1)}%
+                                    {selectedPayDifference >= 0 ? " 높아요" : " 낮아요"}
+                                </p>
+                            </div>
+                        )}
+
+                        <div className="mt-6 space-y-3 text-sm">
+                            <div className="flex justify-between">
+                                <span className="text-gray-400">근무시간</span>
+
+                                <span>
+                                    {(selectedPayHistory.hours ?? 0).toFixed(1)}
+                                    시간
+                                </span>
+                            </div>
+
+                            <div className="flex justify-between">
+                                <span className="text-gray-400">기본 급여</span>
+
+                                <span>{formatMoney(selectedPayHistory.basePay ?? 0)}</span>
+                            </div>
+
+                            {(selectedPayHistory.paychequeTips ?? 0) > 0 && (
+                                <div className="flex justify-between">
+                                    <span className="text-gray-400">급여 포함 팁</span>
+
+                                    <span>{formatMoney(selectedPayHistory.paychequeTips ?? 0)}</span>
+                                </div>
+                            )}
+
+                            {(selectedPayHistory.cashTips ?? 0) > 0 && (
+                                <div className="flex justify-between">
+                                    <span className="text-gray-400">현금 팁</span>
+
+                                    <span>{formatMoney(selectedPayHistory.cashTips ?? 0)}</span>
+                                </div>
+                            )}
+
+                            {(selectedPayHistory.vacationPay ?? 0) > 0 && (
+                                <div className="flex justify-between">
+                                    <span className="text-gray-400">Vacation Pay</span>
+
+                                    <span>{formatMoney(selectedPayHistory.vacationPay ?? 0)}</span>
+                                </div>
+                            )}
+
+                            <div className="mt-4 border-t border-gray-800 pt-4">
+                                <div className="flex justify-between">
+                                    <span className="text-gray-300">세전 급여</span>
+
+                                    <span className="font-semibold">{formatMoney(selectedPayHistory.grossPay ?? 0)}</span>
+                                </div>
+                            </div>
+
+                            <div className="flex justify-between">
+                                <span className="text-gray-400">공제</span>
+
+                                <span>- {formatMoney(selectedPayHistory.deductions ?? 0)}</span>
+                            </div>
+
+                            <div className="flex justify-between">
+                                <span className="text-gray-300">실수령액</span>
+
+                                <span className="font-semibold">{formatMoney(Number(selectedPayHistory.actualNetPay ?? 0))}</span>
+                            </div>
+                        </div>
+
+                        <Link
+                            href="/salary/pay-history"
+                            className="mt-6 block w-full rounded-2xl bg-white py-4 text-center text-sm font-semibold text-black"
+                        >
+                            급여 기록 보기
+                        </Link>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
