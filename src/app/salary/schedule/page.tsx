@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { getPayPeriodEndDate, formatDate } from "@/lib/payPeriod";
+import { getPayPeriodEndDate, formatDate, getPeriodsPerYear } from "@/lib/payPeriod";
 import { getNotificationTime, subscribeToPush } from "@/lib/notification";
 import { isHoliday } from "@/lib/holiday";
+import { calculateTaxes } from "@/lib/tax";
+import BackButtonHeader from "@/components/BackButtonHeader";
 
 type PayType = "hourly" | "salary" | "commission" | "other";
 
@@ -11,20 +13,7 @@ type PayFrequency = "weekly" | "biweekly" | "semi-monthly" | "monthly" | "custom
 
 type SemiMonthlyType = "first-fifteenth" | "fifteenth-end";
 
-type Province =
-    | "ON"
-    | "BC"
-    | "AB"
-    | "SK"
-    | "MB"
-    | "QC"
-    | "NS"
-    | "NB"
-    | "NL"
-    | "PE"
-    | "YT"
-    | "NT"
-    | "NU";
+type Province = "ON" | "BC" | "AB" | "SK" | "MB" | "QC" | "NS" | "NB" | "NL" | "PE" | "YT" | "NT" | "NU";
 
 type SalarySettings = {
     province: Province;
@@ -58,24 +47,47 @@ type PayPeriod = {
     payDate: string;
 };
 
+type PayPeriodTips = {
+    payPeriodStart: string;
+    payPeriodEnd: string;
+    cashTips: number;
+    paychequeTips: number;
+};
+
 type Holiday = {
     date: string;
     name: string;
     global: boolean;
 };
 
+type PeriodEstimate = {
+    hours: number;
+    basePay: number;
+    holidayPay: number;
+    vacationPay: number;
+    paychequeTips: number;
+    cashTips: number;
+    grossPay: number;
+    deductions: number;
+    cpp: number;
+    cpp2: number;
+    ei: number;
+    federalTax: number;
+    provincialTax: number;
+    provinceName: string;
+    netPay: number;
+    totalIncome: number;
+};
+
 const WEEK_DAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
-const calculateHours = (
-    startTime: string,
-    endTime: string,
-    breakMinutes: number = 0,
-) => {
+const calculateHours = (startTime: string, endTime: string, breakMinutes: number = 0) => {
     if (!startTime || !endTime) {
         return 0;
     }
 
     const [startHour, startMinute] = startTime.split(":").map(Number);
+
     const [endHour, endMinute] = endTime.split(":").map(Number);
 
     const start = startHour * 60 + startMinute;
@@ -101,6 +113,14 @@ const formatISO = (date: Date) => {
     return `${year}-${month}-${day}`;
 };
 
+const formatDisplayDate = (value: string) => {
+    return formatDate(new Date(`${value}T00:00:00`));
+};
+
+const formatMoney = (value: number) => {
+    return `$${Number(value || 0).toFixed(2)}`;
+};
+
 const shiftPayPeriod = (
     startDate: string,
     payDate: string,
@@ -108,12 +128,7 @@ const shiftPayPeriod = (
     semiMonthlyType?: SemiMonthlyType,
     customPayDays?: number,
 ): PayPeriod => {
-    const currentEndDate = getPayPeriodEndDate(
-        startDate,
-        frequency,
-        semiMonthlyType,
-        customPayDays,
-    );
+    const currentEndDate = getPayPeriodEndDate(startDate, frequency, semiMonthlyType, customPayDays);
 
     const nextStart = new Date(`${currentEndDate}T00:00:00`);
 
@@ -157,20 +172,13 @@ const shiftPayPeriod = (
             break;
 
         case "custom":
-            nextPayDate.setDate(
-                nextPayDate.getDate() + (Number(customPayDays) || 14),
-            );
+            nextPayDate.setDate(nextPayDate.getDate() + (Number(customPayDays) || 14));
             break;
     }
 
     return {
         startDate: nextStartDate,
-        endDate: getPayPeriodEndDate(
-            nextStartDate,
-            frequency,
-            semiMonthlyType,
-            customPayDays,
-        ),
+        endDate: getPayPeriodEndDate(nextStartDate, frequency, semiMonthlyType, customPayDays),
         payDate: formatISO(nextPayDate),
     };
 };
@@ -208,8 +216,7 @@ export default function SchedulePage() {
 
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
-    const [editingSchedule, setEditingSchedule] =
-        useState<WorkSchedule | null>(null);
+    const [editingSchedule, setEditingSchedule] = useState<WorkSchedule | null>(null);
 
     const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
@@ -255,17 +262,27 @@ export default function SchedulePage() {
         }
     });
 
-    const [isDefaultBreakConfirmOpen, setIsDefaultBreakConfirmOpen] =
-        useState(false);
+    const [isDefaultBreakConfirmOpen, setIsDefaultBreakConfirmOpen] = useState(false);
 
     const [showAllSchedules, setShowAllSchedules] = useState(false);
 
-    const [salarySettings, setSalarySettings] =
-        useState<SalarySettings | null>(null);
+    const [salarySettings, setSalarySettings] = useState<SalarySettings | null>(null);
 
     /*
      * --------------------------------------------------
-     * Salary Settings
+     * Tips
+     * --------------------------------------------------
+     */
+
+    const [cashTips, setCashTips] = useState("");
+
+    const [paychequeTips, setPaychequeTips] = useState("");
+
+    const [savedTips, setSavedTips] = useState<PayPeriodTips | null>(null);
+
+    /*
+     * --------------------------------------------------
+     * Salary
      * --------------------------------------------------
      */
 
@@ -369,10 +386,7 @@ export default function SchedulePage() {
      */
 
     const getCurrentPayPeriod = (): PayPeriod | null => {
-        if (
-            !salarySettings?.payPeriodStartDate ||
-            !salarySettings?.payDate
-        ) {
+        if (!salarySettings?.payPeriodStartDate || !salarySettings?.payDate) {
             return null;
         }
 
@@ -418,12 +432,298 @@ export default function SchedulePage() {
 
     /*
      * --------------------------------------------------
+     * Load Current Period Tips
+     * --------------------------------------------------
+     */
+
+    useEffect(() => {
+        if (!currentPayPeriod) {
+            setSavedTips(null);
+
+            setCashTips("");
+
+            setPaychequeTips("");
+
+            return;
+        }
+
+        const loadTips = async () => {
+            try {
+                const response = await fetch(
+                    `/api/pay-period-tips?startDate=${encodeURIComponent(
+                        currentPayPeriod.startDate,
+                    )}&endDate=${encodeURIComponent(
+                        currentPayPeriod.endDate,
+                    )}`,
+                );
+
+                if (!response.ok) {
+                    throw new Error("팁 조회 실패");
+                }
+
+                const data: PayPeriodTips | null = await response.json();
+
+                setSavedTips(data);
+
+                setCashTips(
+                    data && data.cashTips > 0
+                        ? String(data.cashTips)
+                        : "",
+                );
+
+                setPaychequeTips(
+                    data && data.paychequeTips > 0
+                        ? String(data.paychequeTips)
+                        : "",
+                );
+            } catch (error) {
+                console.error("팁 조회 실패:", error);
+
+                setSavedTips(null);
+
+                setCashTips("");
+
+                setPaychequeTips("");
+            }
+        };
+
+        loadTips();
+    }, [
+        currentPayPeriod?.startDate,
+        currentPayPeriod?.endDate,
+    ]);
+
+    /*
+     * --------------------------------------------------
+     * Current Period Estimate
+     * --------------------------------------------------
+     */
+
+    const currentPeriodSchedules = currentPayPeriod
+        ? schedules.filter((schedule) => {
+              const scheduleDate = schedule.date.slice(0, 10);
+
+              return (
+                  scheduleDate >= currentPayPeriod.startDate &&
+                  scheduleDate <= currentPayPeriod.endDate
+              );
+          })
+        : [];
+
+    const currentPeriodHours = currentPeriodSchedules.reduce(
+        (total, schedule) =>
+            total +
+            calculateHours(
+                schedule.startTime,
+                schedule.endTime,
+                schedule.hasBreak
+                    ? schedule.breakMinutes
+                    : 0,
+            ),
+        0,
+    );
+
+    const currentHolidaySchedules = currentPeriodSchedules.filter(
+        (schedule) =>
+            isHoliday(
+                schedule.date.slice(0, 10),
+                holidays,
+            ),
+    );
+
+    const currentHolidayHours = currentHolidaySchedules.reduce(
+        (total, schedule) =>
+            total +
+            calculateHours(
+                schedule.startTime,
+                schedule.endTime,
+                schedule.hasBreak
+                    ? schedule.breakMinutes
+                    : 0,
+            ),
+        0,
+    );
+
+    const hasPaychequeTips = Boolean(
+        salarySettings?.hasTips &&
+            (salarySettings.tipType === "paycheque" ||
+                salarySettings.tipType === "both"),
+    );
+
+    const hasCashTips = Boolean(
+        salarySettings?.hasTips &&
+            (salarySettings.tipType === "cash" ||
+                salarySettings.tipType === "both"),
+    );
+
+    const currentPeriodPaychequeTips = hasPaychequeTips
+        ? Math.max(0, Number(paychequeTips) || 0)
+        : 0;
+
+    const currentPeriodCashTips = hasCashTips
+        ? Math.max(0, Number(cashTips) || 0)
+        : 0;
+
+    const currentBasePay =
+        salarySettings?.payType === "hourly"
+            ? currentPeriodHours * hourlyWage
+            : salarySettings?.payType === "salary"
+              ? Number(salarySettings.monthlySalary ?? 0)
+              : 0;
+
+    const currentHolidayPay =
+        salarySettings?.payType === "hourly"
+            ? currentHolidayHours * hourlyWage * 0.5
+            : 0;
+
+    const vacationPayRate = Number(
+        salarySettings?.vacationPayRate ?? 4.15,
+    );
+
+    const currentVacationPay =
+        currentBasePay * (vacationPayRate / 100);
+
+    const currentTaxableGrossPay =
+        currentBasePay +
+        currentHolidayPay +
+        currentVacationPay +
+        currentPeriodPaychequeTips;
+
+    const periodsPerYear = getPeriodsPerYear(
+        salarySettings?.payFrequency ?? "biweekly",
+    );
+
+    const currentAnnualGross =
+        currentTaxableGrossPay * periodsPerYear;
+
+    const currentTaxes = calculateTaxes({
+        country: "CA",
+        province: salarySettings?.province ?? "",
+        annualGross: currentAnnualGross,
+    });
+
+    const currentPeriodEstimate: PeriodEstimate = {
+        hours: currentPeriodHours,
+
+        basePay: currentBasePay,
+
+        holidayPay: currentHolidayPay,
+
+        vacationPay: currentVacationPay,
+
+        paychequeTips: currentPeriodPaychequeTips,
+
+        cashTips: currentPeriodCashTips,
+
+        grossPay: currentTaxableGrossPay,
+
+        deductions:
+            currentTaxes.totalDeductions /
+            periodsPerYear,
+
+        cpp: currentTaxes.cpp / periodsPerYear,
+
+        cpp2: currentTaxes.cpp2 / periodsPerYear,
+
+        ei: currentTaxes.ei / periodsPerYear,
+
+        federalTax:
+            currentTaxes.federalTax /
+            periodsPerYear,
+
+        provincialTax:
+            currentTaxes.provincialTax /
+            periodsPerYear,
+
+        provinceName: currentTaxes.provinceName,
+
+        netPay:
+            currentTaxableGrossPay -
+            currentTaxes.totalDeductions /
+                periodsPerYear,
+
+        totalIncome:
+            currentTaxableGrossPay -
+            currentTaxes.totalDeductions /
+                periodsPerYear +
+            currentPeriodCashTips,
+    };
+
+    /*
+     * --------------------------------------------------
+     * Animated Expected Salary
+     * --------------------------------------------------
+     */
+
+    const [animatedNetPay, setAnimatedNetPay] = useState(0);
+
+    useEffect(() => {
+        const target = currentPeriodEstimate.netPay;
+
+        let startTime: number | null = null;
+
+        let animationFrame: number;
+
+        const duration = 700;
+
+        const animate = (timestamp: number) => {
+            if (startTime === null) {
+                startTime = timestamp;
+            }
+
+            const elapsed = timestamp - startTime;
+
+            const progress = Math.min(
+                elapsed / duration,
+                1,
+            );
+
+            const eased =
+                1 -
+                Math.pow(
+                    1 - progress,
+                    3,
+                );
+
+            setAnimatedNetPay(
+                target * eased,
+            );
+
+            if (progress < 1) {
+                animationFrame =
+                    requestAnimationFrame(
+                        animate,
+                    );
+            } else {
+                setAnimatedNetPay(target);
+            }
+        };
+
+        animationFrame =
+            requestAnimationFrame(
+                animate,
+            );
+
+        return () =>
+            cancelAnimationFrame(
+                animationFrame,
+            );
+    }, [
+        currentPeriodEstimate.netPay,
+    ]);
+
+    /*
+     * --------------------------------------------------
      * Calendar Days
      * --------------------------------------------------
      */
 
     const calendarDays = useMemo(() => {
-        const firstDay = new Date(year, month, 1).getDay();
+        const firstDay = new Date(
+            year,
+            month,
+            1,
+        ).getDay();
 
         const daysInMonth = new Date(
             year,
@@ -433,11 +733,19 @@ export default function SchedulePage() {
 
         const days: (number | null)[] = [];
 
-        for (let i = 0; i < firstDay; i++) {
+        for (
+            let i = 0;
+            i < firstDay;
+            i++
+        ) {
             days.push(null);
         }
 
-        for (let day = 1; day <= daysInMonth; day++) {
+        for (
+            let day = 1;
+            day <= daysInMonth;
+            day++
+        ) {
             days.push(day);
         }
 
@@ -480,22 +788,36 @@ export default function SchedulePage() {
      * --------------------------------------------------
      */
 
-    const openEditModal = (schedule: WorkSchedule) => {
+    const openEditModal = (
+        schedule: WorkSchedule,
+    ) => {
         setEditingSchedule(schedule);
 
-        setSelectedDate(schedule.date.slice(0, 10));
+        setSelectedDate(
+            schedule.date.slice(0, 10),
+        );
 
         setStartTime(schedule.startTime);
 
         setEndTime(schedule.endTime);
 
-        setHasBreak(schedule.hasBreak ?? false);
+        setHasBreak(
+            schedule.hasBreak ?? false,
+        );
 
-        setBreakMinutes(String(schedule.breakMinutes ?? 0));
+        setBreakMinutes(
+            String(
+                schedule.breakMinutes ?? 0,
+            ),
+        );
 
-        setAlarmEnabled(schedule.alarmEnabled);
+        setAlarmEnabled(
+            schedule.alarmEnabled,
+        );
 
-        setAlarmMinutesBefore(schedule.alarmMinutesBefore);
+        setAlarmMinutesBefore(
+            schedule.alarmMinutesBefore,
+        );
 
         setIsAddModalOpen(true);
     };
@@ -506,36 +828,48 @@ export default function SchedulePage() {
      * --------------------------------------------------
      */
 
-    const saveSchedule = async (breakSetting: {
-        enabled: boolean;
-        minutes: number;
-    }) => {
+    const saveSchedule = async (
+        breakSetting: {
+            enabled: boolean;
+            minutes: number;
+        },
+    ) => {
         if (!selectedDate) {
             return;
         }
 
         const schedule = {
             date: selectedDate,
+
             startTime,
+
             endTime,
-            hasBreak: breakSetting.enabled,
-            breakMinutes: breakSetting.enabled
-                ? breakSetting.minutes
-                : 0,
+
+            hasBreak:
+                breakSetting.enabled,
+
+            breakMinutes:
+                breakSetting.enabled
+                    ? breakSetting.minutes
+                    : 0,
+
             alarmEnabled,
+
             alarmMinutesBefore,
         };
 
         if (alarmEnabled) {
-            const notificationTime = getNotificationTime(
-                selectedDate,
-                startTime,
-                alarmMinutesBefore,
-            );
+            const notificationTime =
+                getNotificationTime(
+                    selectedDate,
+                    startTime,
+                    alarmMinutesBefore,
+                );
 
             if (notificationTime) {
                 const delay =
-                    notificationTime.getTime() - Date.now();
+                    notificationTime.getTime() -
+                    Date.now();
 
                 console.log(
                     "알림 예정 시간:",
@@ -549,12 +883,15 @@ export default function SchedulePage() {
 
                 if (delay > 0) {
                     setTimeout(() => {
-                        new Notification("차곡", {
-                            body: `오늘 ${startTime.slice(
-                                0,
-                                5,
-                            )}에 근무가 있어요.`,
-                        });
+                        new Notification(
+                            "차곡",
+                            {
+                                body: `오늘 ${startTime.slice(
+                                    0,
+                                    5,
+                                )}에 근무가 있어요.`,
+                            },
+                        );
                     }, delay);
                 }
             }
@@ -564,11 +901,15 @@ export default function SchedulePage() {
             const response = await fetch(
                 "/api/work-schedules",
                 {
-                    method: editingSchedule ? "PUT" : "POST",
+                    method: editingSchedule
+                        ? "PUT"
+                        : "POST",
+
                     headers: {
                         "Content-Type":
                             "application/json",
                     },
+
                     body: JSON.stringify(
                         editingSchedule
                             ? {
@@ -581,7 +922,9 @@ export default function SchedulePage() {
             );
 
             if (!response.ok) {
-                throw new Error("근무 저장 실패");
+                throw new Error(
+                    "근무 저장 실패",
+                );
             }
 
             const savedSchedule: WorkSchedule =
@@ -590,11 +933,15 @@ export default function SchedulePage() {
             setSchedules((prev) =>
                 editingSchedule
                     ? prev.map((item) =>
-                          item.id === savedSchedule.id
+                          item.id ===
+                          savedSchedule.id
                               ? savedSchedule
                               : item,
                       )
-                    : [...prev, savedSchedule],
+                    : [
+                          ...prev,
+                          savedSchedule,
+                      ],
             );
 
             setIsAddModalOpen(false);
@@ -603,7 +950,9 @@ export default function SchedulePage() {
         } catch (error) {
             console.error(error);
 
-            alert("근무 저장에 실패했어요.");
+            alert(
+                "근무 저장에 실패했어요.",
+            );
         }
     };
 
@@ -612,20 +961,22 @@ export default function SchedulePage() {
             return;
         }
 
-        const currentBreakMinutes = hasBreak
-            ? Math.max(
-                  0,
-                  Number(breakMinutes) || 0,
-              )
-            : 0;
+        const currentBreakMinutes =
+            hasBreak
+                ? Math.max(
+                      0,
+                      Number(
+                          breakMinutes,
+                      ) || 0,
+                  )
+                : 0;
 
-        // 현재 근무의 휴게 설정
         const currentBreak = {
             enabled: hasBreak,
-            minutes: currentBreakMinutes,
+            minutes:
+                currentBreakMinutes,
         };
 
-        // 기본값과 이번 근무 설정이 다른지 확인
         const breakChanged =
             currentBreak.enabled !==
                 defaultBreak.enabled ||
@@ -633,55 +984,73 @@ export default function SchedulePage() {
                 currentBreak.minutes !==
                     defaultBreak.minutes);
 
-        // 휴게 설정이 기본값과 다르면 확인 팝업
         if (breakChanged) {
-            setIsDefaultBreakConfirmOpen(true);
+            setIsDefaultBreakConfirmOpen(
+                true,
+            );
 
             return;
         }
 
-        // 변경사항이 없으면 바로 저장
         saveSchedule(currentBreak);
     };
 
     const saveAsDefaultBreak = () => {
-        const currentBreakMinutes = hasBreak
-            ? Math.max(
-                  0,
-                  Number(breakMinutes) || 0,
-              )
-            : 0;
+        const currentBreakMinutes =
+            hasBreak
+                ? Math.max(
+                      0,
+                      Number(
+                          breakMinutes,
+                      ) || 0,
+                  )
+                : 0;
 
         const newDefaultBreak = {
             enabled: hasBreak,
-            minutes: currentBreakMinutes,
+            minutes:
+                currentBreakMinutes,
         };
 
         localStorage.setItem(
             "chagok-default-break",
-            JSON.stringify(newDefaultBreak),
+            JSON.stringify(
+                newDefaultBreak,
+            ),
         );
 
-        setDefaultBreak(newDefaultBreak);
+        setDefaultBreak(
+            newDefaultBreak,
+        );
 
-        setIsDefaultBreakConfirmOpen(false);
+        setIsDefaultBreakConfirmOpen(
+            false,
+        );
 
-        saveSchedule(newDefaultBreak);
+        saveSchedule(
+            newDefaultBreak,
+        );
     };
 
     const useBreakOnce = () => {
-        const currentBreakMinutes = hasBreak
-            ? Math.max(
-                  0,
-                  Number(breakMinutes) || 0,
-              )
-            : 0;
+        const currentBreakMinutes =
+            hasBreak
+                ? Math.max(
+                      0,
+                      Number(
+                          breakMinutes,
+                      ) || 0,
+                  )
+                : 0;
 
-        setIsDefaultBreakConfirmOpen(false);
+        setIsDefaultBreakConfirmOpen(
+            false,
+        );
 
         saveSchedule({
             enabled: hasBreak,
-            minutes: currentBreakMinutes,
+            minutes:
+                currentBreakMinutes,
         });
     };
 
@@ -691,44 +1060,146 @@ export default function SchedulePage() {
      * --------------------------------------------------
      */
 
-    const handleDeleteSchedule = async () => {
-        if (!editingSchedule) {
+    const handleDeleteSchedule =
+        async () => {
+            if (!editingSchedule) {
+                return;
+            }
+
+            try {
+                const response =
+                    await fetch(
+                        "/api/work-schedules",
+                        {
+                            method: "DELETE",
+
+                            headers: {
+                                "Content-Type":
+                                    "application/json",
+                            },
+
+                            body: JSON.stringify({
+                                id: editingSchedule.id,
+                            }),
+                        },
+                    );
+
+                if (!response.ok) {
+                    throw new Error(
+                        "근무 삭제 실패",
+                    );
+                }
+
+                setSchedules((prev) =>
+                    prev.filter(
+                        (item) =>
+                            item.id !==
+                            editingSchedule.id,
+                    ),
+                );
+
+                setIsAddModalOpen(
+                    false,
+                );
+
+                setEditingSchedule(null);
+            } catch (error) {
+                console.error(error);
+
+                alert(
+                    "근무 삭제에 실패했어요.",
+                );
+            }
+        };
+
+    /*
+     * --------------------------------------------------
+     * Save Tips
+     * --------------------------------------------------
+     */
+
+    const handleSaveTips = async () => {
+        if (!currentPayPeriod) {
             return;
         }
 
+        const newTips: PayPeriodTips = {
+            payPeriodStart:
+                currentPayPeriod.startDate,
+
+            payPeriodEnd:
+                currentPayPeriod.endDate,
+
+            cashTips:
+                Math.max(
+                    0,
+                    Number(cashTips) || 0,
+                ),
+
+            paychequeTips:
+                Math.max(
+                    0,
+                    Number(
+                        paychequeTips,
+                    ) || 0,
+                ),
+        };
+
         try {
-            const response = await fetch(
-                "/api/work-schedules",
-                {
-                    method: "DELETE",
-                    headers: {
-                        "Content-Type":
-                            "application/json",
+            const response =
+                await fetch(
+                    "/api/pay-period-tips",
+                    {
+                        method: "PUT",
+
+                        headers: {
+                            "Content-Type":
+                                "application/json",
+                        },
+
+                        body: JSON.stringify(
+                            newTips,
+                        ),
                     },
-                    body: JSON.stringify({
-                        id: editingSchedule.id,
-                    }),
-                },
-            );
+                );
 
             if (!response.ok) {
-                throw new Error("근무 삭제 실패");
+                throw new Error(
+                    "팁 저장 실패",
+                );
             }
 
-            setSchedules((prev) =>
-                prev.filter(
-                    (item) =>
-                        item.id !== editingSchedule.id,
-                ),
+            const saved: PayPeriodTips =
+                await response.json();
+
+            setSavedTips(saved);
+
+            setCashTips(
+                saved.cashTips > 0
+                    ? String(
+                          saved.cashTips,
+                      )
+                    : "",
             );
 
-            setIsAddModalOpen(false);
+            setPaychequeTips(
+                saved.paychequeTips >
+                0
+                    ? String(
+                          saved.paychequeTips,
+                      )
+                    : "",
+            );
 
-            setEditingSchedule(null);
+            alert(
+                "팁이 저장됐어요!",
+            );
         } catch (error) {
             console.error(error);
 
-            alert("근무 삭제에 실패했어요.");
+            alert(
+                "팁 저장에 실패했어요.",
+            );
         }
     };
 
@@ -738,23 +1209,29 @@ export default function SchedulePage() {
      * --------------------------------------------------
      */
 
-    const currentMonthSchedules = schedules
-        .filter((schedule) => {
-            const [
-                scheduleYear,
-                scheduleMonth,
-            ] = schedule.date
-                .split("-")
-                .map(Number);
+    const currentMonthSchedules =
+        schedules
+            .filter((schedule) => {
+                const [
+                    scheduleYear,
+                    scheduleMonth,
+                ] = schedule.date
+                    .slice(0, 10)
+                    .split("-")
+                    .map(Number);
 
-            return (
-                scheduleYear === year &&
-                scheduleMonth === month + 1
+                return (
+                    scheduleYear ===
+                        year &&
+                    scheduleMonth ===
+                        month + 1
+                );
+            })
+            .sort((a, b) =>
+                a.date.localeCompare(
+                    b.date,
+                ),
             );
-        })
-        .sort((a, b) =>
-            a.date.localeCompare(b.date),
-        );
 
     /*
      * --------------------------------------------------
@@ -782,35 +1259,26 @@ export default function SchedulePage() {
         <div className="mx-auto max-w-md">
             {/* Header */}
 
-            <header>
-                <p className="text-sm text-gray-500">
-                    차곡
-                </p>
+            <header className="flex items-center justify-between">
+                <BackButtonHeader
+                    href="/salary"
+                    title="근무 관리"
+                    description="근무 일정을 등록하고 예상 급여를 확인해보세요."
+                />
 
-                <div className="mt-2 flex items-center justify-between">
-                    <h1 className="text-3xl font-bold">
-                        근무 관리
-                    </h1>
-
-                    <a
-                        href="/salary/settings"
-                        className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-gray-500 shadow-sm"
-                        aria-label="급여 설정"
-                    >
-                        ⚙
-                    </a>
-                </div>
-
-                <p className="mt-2 text-sm text-gray-500">
-                    근무 일정을 등록하고 예상 급여를
-                    확인해보세요.
-                </p>
+                <a
+                    href="/salary/settings"
+                    className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-gray-500 shadow-sm"
+                    aria-label="급여 설정"
+                >
+                    ⚙
+                </a>
             </header>
 
             {/* Pay Period Notice */}
 
             {currentPayPeriod && (
-                <section className="mt-5 rounded-3xl bg-white p-5 shadow-sm">
+                <section className="mt-10 rounded-3xl bg-white p-5 shadow-sm">
                     <div className="flex items-center justify-between">
                         <div>
                             <p className="text-xs text-gray-400">
@@ -858,7 +1326,8 @@ export default function SchedulePage() {
                             setCurrentDate(
                                 new Date(
                                     year,
-                                    month - 1,
+                                    month -
+                                        1,
                                     1,
                                 ),
                             )
@@ -869,7 +1338,8 @@ export default function SchedulePage() {
                     </button>
 
                     <h2 className="text-lg font-semibold">
-                        {year}년 {month + 1}월
+                        {year}년{" "}
+                        {month + 1}월
                     </h2>
 
                     <button
@@ -877,7 +1347,8 @@ export default function SchedulePage() {
                             setCurrentDate(
                                 new Date(
                                     year,
-                                    month + 1,
+                                    month +
+                                        1,
                                     1,
                                 ),
                             )
@@ -889,47 +1360,62 @@ export default function SchedulePage() {
                 </div>
 
                 <div className="mb-2 grid grid-cols-7 text-center text-xs text-gray-400">
-                    {WEEK_DAYS.map((day) => (
-                        <div key={day}>{day}</div>
-                    ))}
+                    {WEEK_DAYS.map(
+                        (day) => (
+                            <div key={day}>
+                                {day}
+                            </div>
+                        ),
+                    )}
                 </div>
 
                 <div className="grid grid-cols-7 gap-y-2">
                     {calendarDays.map(
-                        (day, index) => {
-                            if (day === null) {
+                        (
+                            day,
+                            index,
+                        ) => {
+                            if (
+                                day ===
+                                null
+                            ) {
                                 return (
                                     <div
-                                        key={index}
+                                        key={
+                                            index
+                                        }
                                     />
                                 );
                             }
 
-                            const date = formatDate(
-                                new Date(
-                                    year,
-                                    month,
-                                    day,
-                                ),
-                            );
+                            const date =
+                                formatDate(
+                                    new Date(
+                                        year,
+                                        month,
+                                        day,
+                                    ),
+                                );
 
                             const holiday =
                                 holidays.find(
-                                    (item) =>
+                                    (
+                                        item,
+                                    ) =>
                                         item.date ===
                                         date,
                                 );
 
                             const daySchedules =
                                 schedules.filter(
-                                    (schedule) => {
-                                        return (
-                                            schedule.date.slice(
-                                                0,
-                                                10,
-                                            ) === date
-                                        );
-                                    },
+                                    (
+                                        schedule,
+                                    ) =>
+                                        schedule.date.slice(
+                                            0,
+                                            10,
+                                        ) ===
+                                        date,
                                 );
 
                             const hasSchedule =
@@ -952,7 +1438,9 @@ export default function SchedulePage() {
 
                             return (
                                 <div
-                                    key={date}
+                                    key={
+                                        date
+                                    }
                                     className={`relative flex h-16 flex-col items-center ${
                                         isPayPeriodDay
                                             ? "rounded-xl bg-gray-100"
@@ -1031,7 +1519,9 @@ export default function SchedulePage() {
                     </h2>
 
                     <span className="text-sm text-gray-400">
-                        {currentMonthSchedules.length}
+                        {
+                            currentMonthSchedules.length
+                        }
                         회
                     </span>
                 </div>
@@ -1039,7 +1529,8 @@ export default function SchedulePage() {
                 {currentMonthSchedules.length ===
                 0 ? (
                     <p className="mt-5 text-sm text-gray-400">
-                        아직 등록된 근무가 없어요.
+                        아직 등록된 근무가
+                        없어요.
                     </p>
                 ) : (
                     <>
@@ -1213,7 +1704,9 @@ export default function SchedulePage() {
                                 type="button"
                                 onClick={() =>
                                     setShowAllSchedules(
-                                        (prev) =>
+                                        (
+                                            prev,
+                                        ) =>
                                             !prev,
                                     )
                                 }
@@ -1265,8 +1758,6 @@ export default function SchedulePage() {
                                                 ),
                                             )}
                                     </p>
-
-                                    {/* Holiday Notice */}
 
                                     {selectedDate &&
                                         isHoliday(
@@ -1327,10 +1818,15 @@ export default function SchedulePage() {
 
                                 <input
                                     type="time"
-                                    value={startTime}
-                                    onChange={(e) =>
+                                    value={
+                                        startTime
+                                    }
+                                    onChange={(
+                                        e,
+                                    ) =>
                                         setStartTime(
-                                            e.target
+                                            e
+                                                .target
                                                 .value,
                                         )
                                     }
@@ -1345,10 +1841,15 @@ export default function SchedulePage() {
 
                                 <input
                                     type="time"
-                                    value={endTime}
-                                    onChange={(e) =>
+                                    value={
+                                        endTime
+                                    }
+                                    onChange={(
+                                        e,
+                                    ) =>
                                         setEndTime(
-                                            e.target
+                                            e
+                                                .target
                                                 .value,
                                         )
                                     }
@@ -1367,8 +1868,7 @@ export default function SchedulePage() {
                                     </p>
 
                                     <p className="mt-1 text-xs text-gray-400">
-                                        이번 근무에 휴게시간이
-                                        있었나요?
+                                        이번 근무에 휴게시간이 있었나요?
                                     </p>
                                 </div>
 
@@ -1376,11 +1876,15 @@ export default function SchedulePage() {
                                     type="button"
                                     onClick={() => {
                                         setHasBreak(
-                                            (prev) => {
+                                            (
+                                                prev,
+                                            ) => {
                                                 const next =
                                                     !prev;
 
-                                                if (!next) {
+                                                if (
+                                                    !next
+                                                ) {
                                                     setBreakMinutes(
                                                         "0",
                                                     );
@@ -1474,7 +1978,9 @@ export default function SchedulePage() {
                                                   breakMinutes,
                                               ) || 0
                                             : 0,
-                                    ).toFixed(2)}
+                                    ).toFixed(
+                                        2,
+                                    )}
                                     시간
                                 </span>
                             </div>
@@ -1502,9 +2008,7 @@ export default function SchedulePage() {
                                         ) {
                                             try {
                                                 await subscribeToPush();
-                                            } catch (
-                                                error
-                                            ) {
+                                            } catch (error) {
                                                 console.error(
                                                     error,
                                                 );
@@ -1521,7 +2025,9 @@ export default function SchedulePage() {
                                         }
 
                                         setAlarmEnabled(
-                                            (prev) =>
+                                            (
+                                                prev,
+                                            ) =>
                                                 !prev,
                                         );
                                     }}
@@ -1551,7 +2057,9 @@ export default function SchedulePage() {
                                         value={
                                             alarmMinutesBefore
                                         }
-                                        onChange={(e) =>
+                                        onChange={(
+                                            e,
+                                        ) =>
                                             setAlarmMinutesBefore(
                                                 Number(
                                                     e
@@ -1634,12 +2142,16 @@ export default function SchedulePage() {
                 <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-5">
                     <div className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-xl">
                         <p className="text-lg font-bold">
-                            휴게시간 설정이 변경됐어요.
+                            휴게시간 설정이
+                            변경됐어요.
                         </p>
 
                         <p className="mt-2 text-sm leading-6 text-gray-500">
-                            이번 근무에만 적용할까요, 아니면
-                            앞으로 기본값으로 사용할까요?
+                            이번 근무에만
+                            적용할까요,
+                            아니면 앞으로
+                            기본값으로
+                            사용할까요?
                         </p>
 
                         <div className="mt-6 grid grid-cols-2 gap-3">
@@ -1660,11 +2172,536 @@ export default function SchedulePage() {
                                 }
                                 className="rounded-2xl bg-black py-4 text-sm font-semibold text-white"
                             >
-                                기본값으로 변경
+                                기본값으로
+                                변경
                             </button>
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* --------------------------------------------------
+                Current Period Tips
+            -------------------------------------------------- */}
+
+            {currentPayPeriod &&
+                salarySettings?.hasTips && (
+                    <section className="mt-5 rounded-3xl bg-white p-5 shadow-sm">
+                        <div>
+                            <h2 className="text-lg font-semibold">
+                                이번 급여 기간
+                                팁
+                            </h2>
+
+                            <p className="mt-1 text-sm text-gray-400">
+                                {formatDisplayDate(
+                                    currentPayPeriod.startDate,
+                                )}
+                                {" ~ "}
+                                {formatDisplayDate(
+                                    currentPayPeriod.endDate,
+                                )}
+                            </p>
+                        </div>
+
+                        {salarySettings.tipType ===
+                            "cash" && (
+                            <div className="mt-4">
+                                <p className="mb-2 text-sm text-gray-500">
+                                    현금으로 받은
+                                    팁
+                                </p>
+
+                                <div className="flex items-center rounded-2xl bg-gray-100 px-4">
+                                    <span className="text-gray-500">
+                                        $
+                                    </span>
+
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        value={
+                                            cashTips
+                                        }
+                                        onChange={(
+                                            e,
+                                        ) => {
+                                            const value =
+                                                e
+                                                    .target
+                                                    .value;
+
+                                            if (
+                                                value ===
+                                                ""
+                                            ) {
+                                                setCashTips(
+                                                    "",
+                                                );
+
+                                                return;
+                                            }
+
+                                            setCashTips(
+                                                value.replace(
+                                                    /^0+(?=\d)/,
+                                                    "",
+                                                ),
+                                            );
+                                        }}
+                                        placeholder="0"
+                                        className="w-full bg-transparent px-2 py-4 outline-none"
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+                        {salarySettings.tipType ===
+                            "paycheque" && (
+                            <div className="mt-4">
+                                <p className="mb-2 text-sm text-gray-500">
+                                    급여에 포함되는
+                                    팁
+                                </p>
+
+                                <div className="flex items-center rounded-2xl bg-gray-100 px-4">
+                                    <span className="text-gray-500">
+                                        $
+                                    </span>
+
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        value={
+                                            paychequeTips
+                                        }
+                                        onChange={(
+                                            e,
+                                        ) => {
+                                            const value =
+                                                e
+                                                    .target
+                                                    .value;
+
+                                            if (
+                                                value ===
+                                                ""
+                                            ) {
+                                                setPaychequeTips(
+                                                    "",
+                                                );
+
+                                                return;
+                                            }
+
+                                            setPaychequeTips(
+                                                value.replace(
+                                                    /^0+(?=\d)/,
+                                                    "",
+                                                ),
+                                            );
+                                        }}
+                                        placeholder="0"
+                                        className="w-full bg-transparent px-2 py-4 outline-none"
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+                        {salarySettings.tipType ===
+                            "both" && (
+                            <div className="mt-4 space-y-4">
+                                <div>
+                                    <p className="mb-2 text-sm text-gray-500">
+                                        급여에 포함되는
+                                        팁
+                                    </p>
+
+                                    <div className="flex items-center rounded-2xl bg-gray-100 px-4">
+                                        <span className="text-gray-500">
+                                            $
+                                        </span>
+
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="0.01"
+                                            value={
+                                                paychequeTips
+                                            }
+                                            onChange={(
+                                                e,
+                                            ) => {
+                                                const value =
+                                                    e
+                                                        .target
+                                                        .value;
+
+                                                if (
+                                                    value ===
+                                                    ""
+                                                ) {
+                                                    setPaychequeTips(
+                                                        "",
+                                                    );
+
+                                                    return;
+                                                }
+
+                                                setPaychequeTips(
+                                                    value.replace(
+                                                        /^0+(?=\d)/,
+                                                        "",
+                                                    ),
+                                                );
+                                            }}
+                                            placeholder="0"
+                                            className="w-full bg-transparent px-2 py-4 outline-none"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <p className="mb-2 text-sm text-gray-500">
+                                        현금으로 받은
+                                        팁
+                                    </p>
+
+                                    <div className="flex items-center rounded-2xl bg-gray-100 px-4">
+                                        <span className="text-gray-500">
+                                            $
+                                        </span>
+
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="0.01"
+                                            value={
+                                                cashTips
+                                            }
+                                            onChange={(
+                                                e,
+                                            ) => {
+                                                const value =
+                                                    e
+                                                        .target
+                                                        .value;
+
+                                                if (
+                                                    value ===
+                                                    ""
+                                                ) {
+                                                    setCashTips(
+                                                        "",
+                                                    );
+
+                                                    return;
+                                                }
+
+                                                setCashTips(
+                                                    value.replace(
+                                                        /^0+(?=\d)/,
+                                                        "",
+                                                    ),
+                                                );
+                                            }}
+                                            placeholder="0"
+                                            className="w-full bg-transparent px-2 py-4 outline-none"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        <button
+                            type="button"
+                            onClick={
+                                handleSaveTips
+                            }
+                            className="mt-4 w-full rounded-2xl bg-gray-900 py-4 text-sm font-semibold text-white"
+                        >
+                            팁 저장
+                        </button>
+                    </section>
+                )}
+
+            {/* --------------------------------------------------
+                Current Expected Salary
+            -------------------------------------------------- */}
+
+            {currentPayPeriod && (
+                <section className="mt-6 rounded-3xl bg-black p-6 text-white shadow-sm">
+                    <p className="text-sm text-gray-400">
+                        이번예상 급여
+                    </p>
+
+                    <div className="mt-2 flex items-start gap-2">
+                        <p className="text-4xl font-bold tabular-nums">
+                            $
+                            {animatedNetPay.toFixed(
+                                2,
+                            )}
+                        </p>
+                    </div>
+
+                    <div className="mt-6 space-y-3 text-sm">
+                        <div className="flex justify-between">
+                            <span className="text-gray-400">
+                                근무시간
+                            </span>
+
+                            <span>
+                                {currentPeriodEstimate.hours.toFixed(
+                                    2,
+                                )}
+                                시간
+                            </span>
+                        </div>
+
+                        <div className="flex justify-between">
+                            <span className="text-gray-400">
+                                기본 급여
+                            </span>
+
+                            <span>
+                                {formatMoney(
+                                    currentPeriodEstimate.basePay,
+                                )}
+                            </span>
+                        </div>
+
+                        {hasPaychequeTips && (
+                            <div className="flex justify-between">
+                                <span className="text-gray-400">
+                                    급여 포함 팁
+                                </span>
+
+                                <span>
+                                    {formatMoney(
+                                        currentPeriodEstimate.paychequeTips,
+                                    )}
+                                </span>
+                            </div>
+                        )}
+
+                        {currentHolidaySchedules.length >
+                            0 && (
+                            <div className="flex justify-between">
+                                <span className="text-gray-400">
+                                    Holiday Pay
+                                </span>
+
+                                <span>
+                                    {formatMoney(
+                                        currentPeriodEstimate.holidayPay,
+                                    )}
+                                </span>
+                            </div>
+                        )}
+
+                        <div className="flex justify-between">
+                            <span className="text-gray-400">
+                                Vacation Pay (
+                                {
+                                    vacationPayRate
+                                }
+                                %)
+                            </span>
+
+                            <span>
+                                {formatMoney(
+                                    currentPeriodEstimate.vacationPay,
+                                )}
+                            </span>
+                        </div>
+
+                        <div className="mt-4 border-t border-gray-800 pt-4">
+                            <div className="flex justify-between">
+                                <span className="text-gray-300">
+                                    세전 급여
+                                </span>
+
+                                <span className="font-semibold">
+                                    {formatMoney(
+                                        currentPeriodEstimate.grossPay,
+                                    )}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-between">
+                            <span className="text-gray-400">
+                                예상 공제
+                            </span>
+
+                            <span>
+                                -{" "}
+                                {formatMoney(
+                                    currentPeriodEstimate.deductions,
+                                )}
+                            </span>
+                        </div>
+
+                        <div className="flex justify-between">
+                            <span className="text-gray-300">
+                                실수령 급여
+                            </span>
+
+                            <span className="font-semibold">
+                                {formatMoney(
+                                    currentPeriodEstimate.netPay,
+                                )}
+                            </span>
+                        </div>
+
+                        {hasCashTips && (
+                            <div className="mt-4 border-t border-gray-800 pt-4">
+                                <div className="flex justify-between">
+                                    <span className="text-gray-400">
+                                        현금 팁
+                                    </span>
+
+                                    <span>
+                                        {formatMoney(
+                                            currentPeriodEstimate.cashTips,
+                                        )}
+                                    </span>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="my-6 flex items-center justify-between rounded-2xl bg-white p-3 text-black">
+                            <span className="text-sm font-medium">
+                                {hasCashTips
+                                    ? "예상 총 수령액"
+                                    : "예상 실수령액"}
+                            </span>
+
+                            <span className="text-xl font-bold">
+                                {formatMoney(
+                                    hasCashTips
+                                        ? currentPeriodEstimate.totalIncome
+                                        : currentPeriodEstimate.netPay,
+                                )}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="mt-5 rounded-2xl bg-white/5 p-4">
+                        <p className="text-xs font-medium text-gray-300">
+                            예상 공제 내역
+                        </p>
+
+                        <div className="mt-3 space-y-2 text-xs">
+                            <div className="flex justify-between">
+                                <span className="text-gray-500">
+                                    CPP
+                                </span>
+
+                                <span className="text-gray-300">
+                                    -$
+                                    {currentPeriodEstimate.cpp.toFixed(
+                                        2,
+                                    )}
+                                </span>
+                            </div>
+
+                            <div className="flex justify-between">
+                                <span className="text-gray-500">
+                                    CPP2
+                                </span>
+
+                                <span className="text-gray-300">
+                                    -$
+                                    {currentPeriodEstimate.cpp2.toFixed(
+                                        2,
+                                    )}
+                                </span>
+                            </div>
+
+                            <div className="flex justify-between">
+                                <span className="text-gray-500">
+                                    EI
+                                </span>
+
+                                <span className="text-gray-300">
+                                    -$
+                                    {currentPeriodEstimate.ei.toFixed(
+                                        2,
+                                    )}
+                                </span>
+                            </div>
+
+                            <div className="flex justify-between">
+                                <span className="text-gray-500">
+                                    연방 소득세
+                                </span>
+
+                                <span className="text-gray-300">
+                                    -$
+                                    {currentPeriodEstimate.federalTax.toFixed(
+                                        2,
+                                    )}
+                                </span>
+                            </div>
+
+                            <div className="flex justify-between">
+                                <span className="text-gray-500">
+                                    {
+                                        currentPeriodEstimate.provinceName
+                                    }{" "}
+                                    소득세
+                                </span>
+
+                                <span className="text-gray-300">
+                                    -$
+                                    {currentPeriodEstimate.provincialTax.toFixed(
+                                        2,
+                                    )}
+                                </span>
+                            </div>
+
+                            <div className="mt-3 border-t border-white/10 pt-3">
+                                <div className="flex justify-between">
+                                    <span className="text-gray-300">
+                                        총 공제
+                                    </span>
+
+                                    <span className="font-medium text-white">
+                                        -$
+                                        {currentPeriodEstimate.deductions.toFixed(
+                                            2,
+                                        )}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {salarySettings?.payType ===
+                        "hourly" && (
+                        <p className="mt-5 text-xs text-gray-400">
+                            $
+                            {hourlyWage.toFixed(
+                                2,
+                            )}{" "}
+                            / 시간 기준
+                        </p>
+                    )}
+
+                    {salarySettings?.payType ===
+                        "salary" && (
+                        <p className="mt-5 text-xs text-gray-400">
+                            설정된 월급 $
+                            {Number(
+                                salarySettings.monthlySalary ??
+                                    0,
+                            ).toFixed(2)}
+                        </p>
+                    )}
+                </section>
             )}
         </div>
     );

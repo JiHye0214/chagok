@@ -1,86 +1,39 @@
 import { sql } from "@/lib/db";
-import { getPeriodsPerYear } from "@/lib/payPeriod";
-import { calculateTaxes } from "@/lib/tax";
 
-type PayFrequency = "weekly" | "biweekly" | "semi-monthly" | "monthly" | "custom";
+/* ============================================================
+   GET
+   실제 저장된 급여 기록 조회
+   ============================================================ */
 
 export async function GET() {
     try {
-        // ============================================================
-        // 1. 급여 설정
-        // ============================================================
-
-        const settingsResult = await sql`
-            SELECT
-                province,
-                pay_type,
-                pay_frequency,
-                hourly_wage,
-                monthly_salary,
-                has_tips,
-                tip_type
-            FROM salary_settings
-            WHERE id = 1
-            LIMIT 1
-        `;
-
-        const settings = settingsResult[0];
-
-        if (!settings) {
-            return Response.json([]);
-        }
-
-        const frequency = settings.pay_frequency as PayFrequency;
-
-        const periodsPerYear = getPeriodsPerYear(frequency);
-
-        const vacationPayRate = 4.15;
-
-        // ============================================================
-        // 2. 실제 저장된 급여 기록
-        //
-        // 중요:
-        // pay_period_actuals에는 현재 is_confirmed 컬럼이 없다.
-        // 따라서 여기서 조회하지 않는다.
-        // ============================================================
-
-        const actualsResult = await sql`
+        const result = await sql`
             SELECT
                 id,
-
                 TO_CHAR(
                     pay_period_start_date,
                     'YYYY-MM-DD'
                 ) AS start_date,
-
                 TO_CHAR(
                     pay_period_end_date,
                     'YYYY-MM-DD'
                 ) AS end_date,
-
                 TO_CHAR(
                     pay_date,
                     'YYYY-MM-DD'
                 ) AS pay_date,
 
                 actual_hours,
-
                 actual_cash_tips,
-
                 actual_paycheque_tips,
 
                 actual_pay,
-
                 actual_tips,
-
                 actual_deductions,
-
+                adjustments,
                 actual_net_pay,
 
-                adjustments,
-
                 created_at,
-
                 updated_at
 
             FROM pay_period_actuals
@@ -89,205 +42,693 @@ export async function GET() {
                 pay_period_start_date DESC
         `;
 
-        // ============================================================
-        // 3. 급여 기록 계산
-        // ============================================================
-
-        const histories = [];
-
-        for (const row of actualsResult) {
-            const startDate = String(row.start_date);
-
-            const endDate = String(row.end_date);
-
-            const payDate = row.pay_date ? String(row.pay_date) : null;
-
-            const hours = Number(row.actual_hours) || 0;
+        const histories = result.map((row) => {
+            const actualHours = Number(row.actual_hours) || 0;
 
             const actualCashTips = Number(row.actual_cash_tips) || 0;
 
             const actualPaychequeTips = Number(row.actual_paycheque_tips) || 0;
 
-            // ========================================================
-            // 기본 급여
-            // ========================================================
+            const actualPay = Number(row.actual_pay) || 0;
 
-            let basePay = 0;
+            const actualTips = Number(row.actual_tips) || 0;
 
-            if (settings.pay_type === "hourly") {
-                basePay = hours * Number(settings.hourly_wage || 0);
-            } else if (settings.pay_type === "salary") {
-                basePay = Number(settings.monthly_salary || 0);
-            }
+            const actualDeductions = Number(row.actual_deductions) || 0;
 
-            // ========================================================
-            // 팁
-            // ========================================================
+            const actualNetPay = row.actual_net_pay !== null && row.actual_net_pay !== undefined ? Number(row.actual_net_pay) : 0;
 
-            const hasTips = Boolean(settings.has_tips);
+            const adjustments = Array.isArray(row.adjustments) ? row.adjustments : [];
 
-            const tipType = settings.tip_type ? String(settings.tip_type) : null;
-
-            const hasPaychequeTips = hasTips && (tipType === "paycheque" || tipType === "both");
-
-            const hasCashTips = hasTips && (tipType === "cash" || tipType === "both");
-
-            const paychequeTips = hasPaychequeTips ? actualPaychequeTips : 0;
-
-            const cashTips = hasCashTips ? actualCashTips : 0;
-
-            // ========================================================
-            // Vacation Pay
-            // ========================================================
-
-            const vacationPay = basePay * (vacationPayRate / 100);
-
-            // ========================================================
-            // 세전 급여
-            // ========================================================
-
-            const taxableGrossPay = basePay + paychequeTips + vacationPay;
-
-            // ========================================================
-            // 세금 계산
-            // ========================================================
-
-            const annualGross = taxableGrossPay * periodsPerYear;
-
-            const taxes = calculateTaxes({
-                country: "CA",
-
-                province: String(settings.province || ""),
-
-                annualGross,
-            });
-
-            // ========================================================
-            // 기간당 공제
-            // ========================================================
-
-            const cpp = taxes.cpp / periodsPerYear;
-
-            const cpp2 = taxes.cpp2 / periodsPerYear;
-
-            const ei = taxes.ei / periodsPerYear;
-
-            const federalTax = taxes.federalTax / periodsPerYear;
-
-            const provincialTax = taxes.provincialTax / periodsPerYear;
-
-            const deductions = taxes.totalDeductions / periodsPerYear;
-
-            // ========================================================
-            // 계산된 실수령액
-            // ========================================================
-
-            const calculatedNetPay = taxableGrossPay - deductions;
-
-            const calculatedTotalIncome = calculatedNetPay + cashTips;
-
-            // ========================================================
-            // DB에 실제 저장된 값
-            //
-            // 나중에 실제 급여를 직접 기록한 경우
-            // DB 값을 우선적으로 사용할 수 있도록 같이 반환한다.
-            // ========================================================
-
-            const savedActualPay = row.actual_pay !== null && row.actual_pay !== undefined ? Number(row.actual_pay) : null;
-
-            const savedActualTips = row.actual_tips !== null && row.actual_tips !== undefined ? Number(row.actual_tips) : null;
-
-            const savedActualDeductions =
-                row.actual_deductions !== null && row.actual_deductions !== undefined ? Number(row.actual_deductions) : null;
-
-            const savedActualNetPay =
-                row.actual_net_pay !== null && row.actual_net_pay !== undefined ? Number(row.actual_net_pay) : null;
-
-            // ========================================================
-            // History
-            // ========================================================
-
-            histories.push({
+            return {
                 id: Number(row.id),
 
-                startDate,
+                startDate: String(row.start_date),
 
-                endDate,
+                endDate: String(row.end_date),
 
-                payDate,
+                payDate: row.pay_date ? String(row.pay_date) : null,
 
-                hours,
+                hours: actualHours,
 
-                basePay,
+                pay: actualPay,
+                actualPay,
 
-                paychequeTips,
+                tips: actualTips,
+                actualTips,
 
-                cashTips,
+                cashTips: actualCashTips,
 
-                grossPay: taxableGrossPay,
+                paychequeTips: actualPaychequeTips,
 
-                deductions,
+                deductions: actualDeductions,
+                actualDeductions,
 
-                cpp,
+                adjustments,
 
-                cpp2,
+                netPay: actualNetPay,
+                actualNetPay,
 
-                ei,
+                totalIncome: actualNetPay + actualCashTips,
 
-                federalTax,
+                // 기존 화면과의 호환을 위해 유지.
+                // 실제 급여에서는 세금을 다시 계산하지 않는다.
+                calculatedNetPay: actualNetPay,
 
-                provincialTax,
+                createdAt: row.created_at,
 
-                netPay: savedActualNetPay ?? calculatedNetPay,
-
-                totalIncome: savedActualNetPay !== null ? savedActualNetPay + cashTips : calculatedTotalIncome,
-
-                province: taxes.provinceName,
-
-                tipType: hasTips ? tipType : null,
-
-                hasTips,
-
-                // 현재 DB에서는 is_confirmed를
-                // 사용하지 않으므로 false로 유지
-                isConfirmed: false,
-
-                vacationPay,
-
-                // 실제 저장값도 같이 전달
-                actualPay: savedActualPay,
-
-                actualTips: savedActualTips,
-
-                actualDeductions: savedActualDeductions,
-
-                actualNetPay: savedActualNetPay,
-
-                adjustments: row.adjustments ?? [],
-
-                calculatedNetPay,
-
-                calculatedTotalIncome,
-            });
-        }
-
-        // ============================================================
-        // 4. 반환
-        // ============================================================
+                updatedAt: row.updated_at,
+            };
+        });
 
         return Response.json(histories);
     } catch (error) {
-        console.error("Pay history error:", error);
+        console.error("Pay history GET error:", error);
 
         return Response.json(
             {
                 error: "급여 기록을 불러오지 못했습니다.",
-
                 detail: error instanceof Error ? error.message : String(error),
             },
+            { status: 500 },
+        );
+    }
+}
+
+/* ============================================================
+   POST
+   새로운 실제 급여 기록 저장
+   ============================================================ */
+
+export async function POST(request: Request) {
+    try {
+        const body = await request.json();
+
+        const {
+            payPeriodStart,
+            payPeriodEnd,
+            payDate,
+            actualHours,
+            actualPay,
+            actualTips,
+            actualDeductions,
+            adjustments,
+            actualNetPay,
+        } = body;
+
+        // --------------------------------------------------------
+        // 필수값
+        // --------------------------------------------------------
+
+        if (!payPeriodStart || !payPeriodEnd) {
+            return Response.json(
+                {
+                    error: "급여 기간이 없습니다.",
+                },
+                { status: 400 },
+            );
+        }
+
+        // --------------------------------------------------------
+        // 숫자 검증
+        // --------------------------------------------------------
+
+        const hours = Number(actualHours);
+
+        const pay = Number(actualPay);
+
+        const tips = Number(actualTips);
+
+        const deductions = Number(actualDeductions);
+
+        const netPay = Number(actualNetPay);
+
+        if (!Number.isFinite(hours) || hours < 0) {
+            return Response.json(
+                {
+                    error: "근무시간이 올바르지 않습니다.",
+                },
+                { status: 400 },
+            );
+        }
+
+        if (!Number.isFinite(pay) || pay < 0) {
+            return Response.json(
+                {
+                    error: "실제 급여가 올바르지 않습니다.",
+                },
+                { status: 400 },
+            );
+        }
+
+        if (!Number.isFinite(tips) || tips < 0) {
+            return Response.json(
+                {
+                    error: "실제 팁이 올바르지 않습니다.",
+                },
+                { status: 400 },
+            );
+        }
+
+        if (!Number.isFinite(deductions) || deductions < 0) {
+            return Response.json(
+                {
+                    error: "공제액이 올바르지 않습니다.",
+                },
+                { status: 400 },
+            );
+        }
+
+        if (!Number.isFinite(netPay)) {
+            return Response.json(
+                {
+                    error: "실제 실수령액이 올바르지 않습니다.",
+                },
+                { status: 400 },
+            );
+        }
+
+        // --------------------------------------------------------
+        // adjustments
+        // --------------------------------------------------------
+
+        const validAdjustments = Array.isArray(adjustments)
+            ? adjustments
+                  .filter(
+                      (item) =>
+                          item &&
+                          (item.type === "add" || item.type === "subtract") &&
+                          typeof item.name === "string" &&
+                          Number.isFinite(Number(item.amount)) &&
+                          Number(item.amount) >= 0,
+                  )
+                  .map((item) => ({
+                      type: item.type,
+                      name: item.name.trim(),
+                      amount: Number(item.amount),
+                  }))
+                  .filter((item) => item.name.length > 0)
+            : [];
+
+        // --------------------------------------------------------
+        // cash / paycheque tip 분리
+        //
+        // 실제 입력한 actualTips를 총 팁으로 저장하고,
+        // 현재 설정에 따라 cash/paycheque 값을 분리한다.
+        //
+        // 만약 화면에서 별도로 전달한다면 그 값을 우선한다.
+        // --------------------------------------------------------
+
+        const actualCashTips = Number(body.actualCashTips);
+
+        const actualPaychequeTips = Number(body.actualPaychequeTips);
+
+        let cashTips = 0;
+        let paychequeTips = 0;
+
+        if (Number.isFinite(actualCashTips) && actualCashTips >= 0) {
+            cashTips = actualCashTips;
+        }
+
+        if (Number.isFinite(actualPaychequeTips) && actualPaychequeTips >= 0) {
+            paychequeTips = actualPaychequeTips;
+        }
+
+        // --------------------------------------------------------
+        // 저장
+        //
+        // 같은 기간이 이미 있으면 UPDATE
+        // --------------------------------------------------------
+
+        const result = await sql`
+            INSERT INTO pay_period_actuals (
+                pay_period_start_date,
+                pay_period_end_date,
+                pay_date,
+
+                actual_hours,
+                actual_cash_tips,
+                actual_paycheque_tips,
+
+                actual_pay,
+                actual_tips,
+                actual_deductions,
+                adjustments,
+                actual_net_pay,
+
+                updated_at
+            )
+            VALUES (
+                ${payPeriodStart},
+                ${payPeriodEnd},
+                ${payDate || null},
+
+                ${hours},
+                ${cashTips},
+                ${paychequeTips},
+
+                ${pay},
+                ${tips},
+                ${deductions},
+                ${JSON.stringify(validAdjustments)},
+                ${netPay},
+
+                CURRENT_TIMESTAMP
+            )
+
+            ON CONFLICT (
+                pay_period_start_date,
+                pay_period_end_date
+            )
+
+            DO UPDATE SET
+                pay_date =
+                    EXCLUDED.pay_date,
+
+                actual_hours =
+                    EXCLUDED.actual_hours,
+
+                actual_cash_tips =
+                    EXCLUDED.actual_cash_tips,
+
+                actual_paycheque_tips =
+                    EXCLUDED.actual_paycheque_tips,
+
+                actual_pay =
+                    EXCLUDED.actual_pay,
+
+                actual_tips =
+                    EXCLUDED.actual_tips,
+
+                actual_deductions =
+                    EXCLUDED.actual_deductions,
+
+                adjustments =
+                    EXCLUDED.adjustments,
+
+                actual_net_pay =
+                    EXCLUDED.actual_net_pay,
+
+                updated_at =
+                    CURRENT_TIMESTAMP
+
+            RETURNING
+                id,
+                TO_CHAR(
+                    pay_period_start_date,
+                    'YYYY-MM-DD'
+                ) AS start_date,
+                TO_CHAR(
+                    pay_period_end_date,
+                    'YYYY-MM-DD'
+                ) AS end_date,
+                TO_CHAR(
+                    pay_date,
+                    'YYYY-MM-DD'
+                ) AS pay_date,
+
+                actual_hours,
+                actual_cash_tips,
+                actual_paycheque_tips,
+
+                actual_pay,
+                actual_tips,
+                actual_deductions,
+                adjustments,
+                actual_net_pay,
+
+                created_at,
+                updated_at
+        `;
+
+        const row = result[0];
+
+        return Response.json(
             {
-                status: 500,
+                success: true,
+                data: {
+                    id: Number(row.id),
+
+                    startDate: String(row.start_date),
+
+                    endDate: String(row.end_date),
+
+                    payDate: row.pay_date ? String(row.pay_date) : null,
+
+                    hours: Number(row.actual_hours) || 0,
+
+                    pay: Number(row.actual_pay) || 0,
+
+                    actualPay: Number(row.actual_pay) || 0,
+
+                    tips: Number(row.actual_tips) || 0,
+
+                    actualTips: Number(row.actual_tips) || 0,
+
+                    cashTips: Number(row.actual_cash_tips) || 0,
+
+                    paychequeTips: Number(row.actual_paycheque_tips) || 0,
+
+                    deductions: Number(row.actual_deductions) || 0,
+
+                    actualDeductions: Number(row.actual_deductions) || 0,
+
+                    adjustments: Array.isArray(row.adjustments) ? row.adjustments : [],
+
+                    netPay: Number(row.actual_net_pay) || 0,
+
+                    actualNetPay: Number(row.actual_net_pay) || 0,
+
+                    totalIncome: (Number(row.actual_net_pay) || 0) + (Number(row.actual_cash_tips) || 0),
+                },
             },
+            { status: 201 },
+        );
+    } catch (error) {
+        console.error("Pay history POST error:", error);
+
+        return Response.json(
+            {
+                error: "급여 기록을 저장하지 못했습니다.",
+                detail: error instanceof Error ? error.message : String(error),
+            },
+            { status: 500 },
+        );
+    }
+}
+
+/* ============================================================
+   PUT
+   기존 실제 급여 기록 수정
+   ============================================================ */
+
+export async function PUT(request: Request) {
+    try {
+        const body = await request.json();
+
+        const { id, payPeriodStart, payPeriodEnd, payDate, actualHours, actualPay, actualTips, actualDeductions, adjustments } =
+            body;
+
+        if (!id) {
+            return Response.json(
+                {
+                    error: "급여 기록 ID가 없습니다.",
+                },
+                { status: 400 },
+            );
+        }
+
+        if (!payPeriodStart || !payPeriodEnd) {
+            return Response.json(
+                {
+                    error: "급여 기간이 없습니다.",
+                },
+                { status: 400 },
+            );
+        }
+
+        const hours = Number(actualHours);
+
+        const pay = Number(actualPay);
+
+        const tips = Number(actualTips);
+
+        const deductions = Number(actualDeductions);
+
+        if (!Number.isFinite(hours) || hours < 0) {
+            return Response.json(
+                {
+                    error: "근무시간이 올바르지 않습니다.",
+                },
+                { status: 400 },
+            );
+        }
+
+        if (!Number.isFinite(pay) || pay < 0) {
+            return Response.json(
+                {
+                    error: "실제 급여가 올바르지 않습니다.",
+                },
+                { status: 400 },
+            );
+        }
+
+        if (!Number.isFinite(tips) || tips < 0) {
+            return Response.json(
+                {
+                    error: "실제 팁이 올바르지 않습니다.",
+                },
+                { status: 400 },
+            );
+        }
+
+        if (!Number.isFinite(deductions) || deductions < 0) {
+            return Response.json(
+                {
+                    error: "공제액이 올바르지 않습니다.",
+                },
+                { status: 400 },
+            );
+        }
+
+        // --------------------------------------------------------
+        // adjustment 정리
+        // --------------------------------------------------------
+
+        const validAdjustments = Array.isArray(adjustments)
+            ? adjustments
+                  .filter(
+                      (item) =>
+                          item &&
+                          (item.type === "add" || item.type === "subtract") &&
+                          typeof item.name === "string" &&
+                          Number.isFinite(Number(item.amount)) &&
+                          Number(item.amount) >= 0,
+                  )
+                  .map((item) => ({
+                      type: item.type,
+                      name: item.name.trim(),
+                      amount: Number(item.amount),
+                  }))
+                  .filter((item) => item.name.length > 0)
+            : [];
+
+        // --------------------------------------------------------
+        // 실제 실수령액
+        //
+        // 수정할 때도 사용자가 입력한 actualNetPay를
+        // 그대로 저장한다.
+        // --------------------------------------------------------
+
+        const actualNetPay = Number(body.actualNetPay);
+
+        if (!Number.isFinite(actualNetPay)) {
+            return Response.json(
+                {
+                    error: "실제 실수령액이 올바르지 않습니다.",
+                },
+                { status: 400 },
+            );
+        }
+
+        // --------------------------------------------------------
+        // cash / paycheque tip
+        // --------------------------------------------------------
+
+        const actualCashTips = Number(body.actualCashTips);
+
+        const actualPaychequeTips = Number(body.actualPaychequeTips);
+
+        const cashTips = Number.isFinite(actualCashTips) && actualCashTips >= 0 ? actualCashTips : 0;
+
+        const paychequeTips = Number.isFinite(actualPaychequeTips) && actualPaychequeTips >= 0 ? actualPaychequeTips : 0;
+
+        // --------------------------------------------------------
+        // UPDATE
+        // --------------------------------------------------------
+
+        const result = await sql`
+            UPDATE pay_period_actuals
+
+            SET
+                pay_period_start_date =
+                    ${payPeriodStart},
+
+                pay_period_end_date =
+                    ${payPeriodEnd},
+
+                pay_date =
+                    ${payDate || null},
+
+                actual_hours =
+                    ${hours},
+
+                actual_cash_tips =
+                    ${cashTips},
+
+                actual_paycheque_tips =
+                    ${paychequeTips},
+
+                actual_pay =
+                    ${pay},
+
+                actual_tips =
+                    ${tips},
+
+                actual_deductions =
+                    ${deductions},
+
+                adjustments =
+                    ${JSON.stringify(validAdjustments)},
+
+                actual_net_pay =
+                    ${actualNetPay},
+
+                updated_at =
+                    CURRENT_TIMESTAMP
+
+            WHERE id = ${Number(id)}
+
+            RETURNING
+                id,
+                TO_CHAR(
+                    pay_period_start_date,
+                    'YYYY-MM-DD'
+                ) AS start_date,
+                TO_CHAR(
+                    pay_period_end_date,
+                    'YYYY-MM-DD'
+                ) AS end_date,
+                TO_CHAR(
+                    pay_date,
+                    'YYYY-MM-DD'
+                ) AS pay_date,
+
+                actual_hours,
+                actual_cash_tips,
+                actual_paycheque_tips,
+
+                actual_pay,
+                actual_tips,
+                actual_deductions,
+                adjustments,
+                actual_net_pay,
+
+                created_at,
+                updated_at
+        `;
+
+        if (result.length === 0) {
+            return Response.json(
+                {
+                    error: "해당 급여 기록을 찾을 수 없습니다.",
+                },
+                { status: 404 },
+            );
+        }
+
+        const row = result[0];
+
+        return Response.json({
+            success: true,
+            data: {
+                id: Number(row.id),
+
+                startDate: String(row.start_date),
+
+                endDate: String(row.end_date),
+
+                payDate: row.pay_date ? String(row.pay_date) : null,
+
+                hours: Number(row.actual_hours) || 0,
+
+                pay: Number(row.actual_pay) || 0,
+
+                actualPay: Number(row.actual_pay) || 0,
+
+                tips: Number(row.actual_tips) || 0,
+
+                actualTips: Number(row.actual_tips) || 0,
+
+                cashTips: Number(row.actual_cash_tips) || 0,
+
+                paychequeTips: Number(row.actual_paycheque_tips) || 0,
+
+                deductions: Number(row.actual_deductions) || 0,
+
+                actualDeductions: Number(row.actual_deductions) || 0,
+
+                adjustments: Array.isArray(row.adjustments) ? row.adjustments : [],
+
+                netPay: Number(row.actual_net_pay) || 0,
+
+                actualNetPay: Number(row.actual_net_pay) || 0,
+
+                totalIncome: (Number(row.actual_net_pay) || 0) + (Number(row.actual_cash_tips) || 0),
+            },
+        });
+    } catch (error) {
+        console.error("Pay history PUT error:", error);
+
+        return Response.json(
+            {
+                error: "급여 기록을 수정하지 못했습니다.",
+                detail: error instanceof Error ? error.message : String(error),
+            },
+            { status: 500 },
+        );
+    }
+}
+
+/* ============================================================
+   DELETE
+   실제 급여 기록 삭제
+   ============================================================ */
+
+export async function DELETE(request: Request) {
+    try {
+        const body = await request.json();
+
+        const id = Number(body.id);
+
+        if (!Number.isFinite(id) || id <= 0) {
+            return Response.json(
+                {
+                    error: "급여 기록 ID가 올바르지 않습니다.",
+                },
+                { status: 400 },
+            );
+        }
+
+        const result = await sql`
+            DELETE FROM pay_period_actuals
+
+            WHERE id = ${id}
+
+            RETURNING id
+        `;
+
+        if (result.length === 0) {
+            return Response.json(
+                {
+                    error: "해당 급여 기록을 찾을 수 없습니다.",
+                },
+                { status: 404 },
+            );
+        }
+
+        return Response.json({
+            success: true,
+            id: Number(result[0].id),
+        });
+    } catch (error) {
+        console.error("Pay history DELETE error:", error);
+
+        return Response.json(
+            {
+                error: "급여 기록을 삭제하지 못했습니다.",
+                detail: error instanceof Error ? error.message : String(error),
+            },
+            { status: 500 },
         );
     }
 }

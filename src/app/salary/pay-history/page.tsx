@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import BackButtonHeader from "@/components/BackButtonHeader";
-import { getPayPeriodEndDate } from "@/lib/payPeriod";
+import { getPayPeriodEndDate, formatDate } from "@/lib/payPeriod";
+import { calculateTaxes } from "@/lib/tax";
+import { isHoliday } from "@/lib/holiday";
 import { calculateExpectedSalary } from "@/lib/payroll/calculateExpectedSalary";
 
 type AdjustmentType = "add" | "subtract";
@@ -31,6 +34,13 @@ type PayHistory = {
     calculatedNetPay: number;
     netPay: number;
     totalIncome: number;
+};
+
+type PayPeriodTips = {
+    payPeriodStart: string;
+    payPeriodEnd: string;
+    cashTips: number;
+    paychequeTips: number;
 };
 
 type SalarySettings = {
@@ -89,6 +99,8 @@ type FormState = {
     netPay: string;
 };
 
+type HistoryFilter = "all" | "this-month" | "3-months" | "6-months" | "1-year" | "custom";
+
 const emptyForm: FormState = {
     startDate: "",
     endDate: "",
@@ -104,18 +116,8 @@ const emptyForm: FormState = {
     netPay: "",
 };
 
-const formatDisplayDate = (dateValue: string | Date) => {
-    if (!dateValue) {
-        return "";
-    }
-
-    const date = dateValue instanceof Date ? dateValue : new Date(`${dateValue}T00:00:00`);
-
-    if (Number.isNaN(date.getTime())) {
-        return String(dateValue);
-    }
-
-    return `${date.getFullYear()}. ${date.getMonth() + 1}. ${date.getDate()}.`;
+const formatDisplayDate = (value: string) => {
+    return formatDate(new Date(`${value}T00:00:00`));
 };
 
 const formatMoney = (value: number | null | undefined) => {
@@ -147,6 +149,42 @@ const getTodayString = () => {
     );
 };
 
+const getDaysDifference = (targetDate: string) => {
+    const today = new Date();
+
+    const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    const target = new Date(`${targetDate}T00:00:00`);
+
+    return Math.round((target.getTime() - todayOnly.getTime()) / (1000 * 60 * 60 * 24));
+};
+
+const getDdayLabel = (targetDate: string) => {
+    const days = getDaysDifference(targetDate);
+
+    if (days === 0) {
+        return "오늘";
+    }
+
+    if (days === 1) {
+        return "내일";
+    }
+
+    if (days === 2) {
+        return "모레";
+    }
+
+    if (days > 2) {
+        return `${days}일 뒤`;
+    }
+
+    if (days === -1) {
+        return "어제";
+    }
+
+    return `${Math.abs(days)}일 전`;
+};
+
 const calculateHours = (startTime: string, endTime: string, breakMinutes: number = 0) => {
     if (!startTime || !endTime) {
         return 0;
@@ -166,6 +204,68 @@ const calculateHours = (startTime: string, endTime: string, breakMinutes: number
     const totalMinutes = Math.max(0, end - start - Math.max(0, breakMinutes));
 
     return totalMinutes / 60;
+};
+
+/*
+ * 날짜를 YYYY-MM-DD로 반환
+ */
+const formatDateString = (date: Date) => {
+    return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
+};
+
+/*
+ * 현재 달의 시작일
+ */
+const getCurrentMonthStart = () => {
+    const today = new Date();
+
+    return formatDateString(new Date(today.getFullYear(), today.getMonth(), 1));
+};
+
+/*
+ * 현재 달의 마지막 날
+ */
+const getCurrentMonthEnd = () => {
+    const today = new Date();
+
+    return formatDateString(new Date(today.getFullYear(), today.getMonth() + 1, 0));
+};
+
+/*
+ * 급여 기록 필터의 기본 기간 계산
+ *
+ * 이번 달:
+ * 현재 달 1일 ~ 현재 달 말일
+ *
+ * 3개월:
+ * 현재 달 포함 최근 3개 달
+ *
+ * 6개월:
+ * 현재 달 포함 최근 6개 달
+ *
+ * 1년:
+ * 현재 달 포함 최근 12개 달
+ */
+const getPresetDateRange = (filter: Exclude<HistoryFilter, "custom">) => {
+    const today = new Date();
+
+    const endDate = getCurrentMonthEnd();
+
+    if (filter === "month") {
+        return {
+            startDate: getCurrentMonthStart(),
+            endDate,
+        };
+    }
+
+    const monthCount = filter === "3months" ? 3 : filter === "6months" ? 6 : 12;
+
+    const start = new Date(today.getFullYear(), today.getMonth() - (monthCount - 1), 1);
+
+    return {
+        startDate: formatDateString(start),
+        endDate,
+    };
 };
 
 export default function PayHistoryPage() {
@@ -189,7 +289,11 @@ export default function PayHistoryPage() {
 
     const [holidays, setHolidays] = useState<Holiday[]>([]);
 
-    const [isExpectedSalaryOpen, setIsExpectedSalaryOpen] = useState(false);
+    const [isPendingExpectedOpen, setIsPendingExpectedOpen] = useState(false);
+
+    const [animatedPendingNetPay, setAnimatedPendingNetPay] = useState(0);
+
+    const [pendingSavedTips, setPendingSavedTips] = useState<PayPeriodTips | null>(null);
 
     const [pendingPeriod, setPendingPeriod] = useState<{
         startDate: string;
@@ -198,6 +302,24 @@ export default function PayHistoryPage() {
     } | null>(null);
 
     const [isPendingPeriod, setIsPendingPeriod] = useState(false);
+
+    /*
+     * 급여 기록 필터
+     */
+    const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
+
+    const [customStartDate, setCustomStartDate] = useState("");
+    const [customEndDate, setCustomEndDate] = useState("");
+
+    const [isHistoryFilterOpen, setIsHistoryFilterOpen] = useState(false);
+
+    const [showAllHistory, setShowAllHistory] = useState(false);
+
+    /*
+     * 급여 기록이 많을 때
+     * 처음에는 6개만 표시
+     */
+    const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
 
     const loadPayHistory = async () => {
         try {
@@ -274,17 +396,8 @@ export default function PayHistoryPage() {
 
                     hours: Number(item.hours ?? 0),
 
-                    /*
-                     * 실제 급여가 저장되어 있으면
-                     * 실제 급여를 사용하고,
-                     * 없으면 API에서 계산한 기본급 사용
-                     */
                     pay: actualPay > 0 ? actualPay : basePay,
 
-                    /*
-                     * cash + paycheque 팁을
-                     * 화면에서는 하나의 팁 금액으로 표시
-                     */
                     tips: actualTips,
 
                     deductions: actualDeductions,
@@ -324,6 +437,7 @@ export default function PayHistoryPage() {
             const settings = (await response.json()) as SalarySettings | null;
 
             setSalarySettings(settings);
+
             setHourlyWage(settings?.hourlyWage ?? null);
 
             return settings;
@@ -441,17 +555,159 @@ export default function PayHistoryPage() {
      *
      * 지급일이 없는 수동 기록은 그대로 표시
      */
+    const formatDateValue = (date: Date) => {
+        return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join(
+            "-",
+        );
+    };
+
     const visiblePayHistory = useMemo(() => {
         const today = getTodayString();
 
         return payHistory.filter((history) => {
-            if (!history.payDate) {
-                return true;
-            }
-
+            if (!history.payDate) return true;
             return history.payDate <= today;
         });
     }, [payHistory]);
+
+    const sortedPayHistory = useMemo(() => {
+        return [...visiblePayHistory].sort((a, b) => {
+            const aDate = a.payDate ?? a.endDate;
+            const bDate = b.payDate ?? b.endDate;
+
+            return bDate.localeCompare(aDate);
+        });
+    }, [visiblePayHistory]);
+
+    const isCustomRangeValid =
+        historyFilter !== "custom" || (!!customStartDate && !!customEndDate && customStartDate <= customEndDate);
+
+    const historyRange = useMemo(() => {
+        if (historyFilter === "all" || !isCustomRangeValid) {
+            return null;
+        }
+
+        if (historyFilter === "custom") {
+            return {
+                startDate: customStartDate,
+                endDate: customEndDate,
+            };
+        }
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const start = new Date(today);
+
+        if (historyFilter === "this-month") {
+            start.setDate(1);
+        }
+
+        if (historyFilter === "3-months") {
+            start.setDate(1);
+            start.setMonth(start.getMonth() - 2);
+        }
+
+        if (historyFilter === "6-months") {
+            start.setDate(1);
+            start.setMonth(start.getMonth() - 5);
+        }
+
+        if (historyFilter === "1-year") {
+            start.setDate(1);
+            start.setMonth(start.getMonth() - 11);
+        }
+
+        return {
+            startDate: formatDateValue(start),
+            endDate: formatDateValue(today),
+        };
+    }, [historyFilter, customStartDate, customEndDate, isCustomRangeValid]);
+
+    // 급여 기간 필터
+    useEffect(() => {
+        setShowAllHistory(false);
+    }, [historyFilter, customStartDate, customEndDate]);
+
+    /*
+     * ---------------------------------------------------------
+     * 급여 기록 기간 필터
+     *
+     * 지급일이 아니라
+     * 급여 기간(startDate ~ endDate)을 기준으로 판단
+     *
+     * 선택한 범위 안에 급여 기간 전체가 들어와야 표시
+     * ---------------------------------------------------------
+     */
+    const historyDateRange = useMemo(() => {
+        if (historyFilter === "custom") {
+            return {
+                startDate: customStartDate,
+                endDate: customEndDate,
+            };
+        }
+
+        return getPresetDateRange(historyFilter);
+    }, [historyFilter, customStartDate, customEndDate]);
+
+    const filteredPayHistory = useMemo(() => {
+        const { startDate, endDate } = historyDateRange;
+
+        /*
+         * 사용자화에서 날짜가 아직 완성되지 않았으면
+         * 필터 결과를 표시하지 않음
+         */
+        if (!startDate || !endDate) {
+            return [];
+        }
+
+        /*
+         * 시작일이 종료일보다 뒤라면
+         * 잘못된 사용자화 기간
+         */
+        if (startDate > endDate) {
+            return [];
+        }
+
+        return visiblePayHistory.filter((history) => {
+            /*
+             * 핵심:
+             *
+             * 급여 기간 전체가
+             * 선택한 조회 기간 안에 들어와야 함
+             *
+             * 예:
+             * 조회기간 9/1 ~ 9/30
+             *
+             * 9/1 ~ 9/14  → 표시
+             * 9/15 ~ 9/28 → 표시
+             * 8/31 ~ 9/13 → 제외
+             * 9/29 ~ 10/12 → 제외
+             */
+            return history.startDate >= startDate && history.endDate <= endDate;
+        });
+    }, [visiblePayHistory, historyDateRange]);
+
+    /*
+     * 표시 개수 제한
+     *
+     * 최근 6개만 먼저 표시
+     */
+    const displayedPayHistory = useMemo(() => {
+        if (isHistoryExpanded) {
+            return filteredPayHistory;
+        }
+
+        return filteredPayHistory.slice(0, 6);
+    }, [filteredPayHistory, isHistoryExpanded]);
+
+    /*
+     * 필터가 변경되면
+     * 다시 접힌 상태로 시작
+     */
+    useEffect(() => {
+        setIsHistoryExpanded(false);
+    }, [historyFilter, customStartDate, customEndDate]);
 
     /*
      * 급여 기간을 다음 기간으로 이동
@@ -464,6 +720,7 @@ export default function PayHistoryPage() {
         customPayDays?: number,
     ) => {
         const start = new Date(`${startDate}T00:00:00`);
+
         const payment = new Date(`${payDate}T00:00:00`);
 
         const shiftDate = (date: Date) => {
@@ -535,13 +792,16 @@ export default function PayHistoryPage() {
         }
 
         const today = new Date();
+
         today.setHours(0, 0, 0, 0);
 
         const DAY = 1000 * 60 * 60 * 24;
 
         const parseDate = (value: string) => {
             const date = new Date(`${value}T00:00:00`);
+
             date.setHours(0, 0, 0, 0);
+
             return date;
         };
 
@@ -561,12 +821,6 @@ export default function PayHistoryPage() {
          * ---------------------------------------------------------
          * 지급일 offset 계산
          * ---------------------------------------------------------
-         *
-         * 예:
-         * 급여기간 종료일 9/4
-         * 지급일          9/11
-         *
-         * => +7일
          */
         const anchorStartDate = salarySettings.payPeriodStartDate;
 
@@ -619,11 +873,6 @@ export default function PayHistoryPage() {
                     break;
 
                 case "semi-monthly":
-                    /*
-                     * 1~15 / 16~말일
-                     *
-                     * 시작일만 1 또는 16으로 이동시킨다.
-                     */
                     if (next.getDate() <= 15) {
                         if (direction === 1) {
                             next.setDate(16);
@@ -649,12 +898,6 @@ export default function PayHistoryPage() {
          * ---------------------------------------------------------
          * 모든 급여기간 생성
          * ---------------------------------------------------------
-         *
-         * 기준일 이전 52개 + 이후 52개
-         *
-         * 중요:
-         * 급여기간이 오늘 이전이어도 지급일이 미래라면
-         * 3번 카드의 후보가 된다.
          */
         const periods: {
             startDate: string;
@@ -663,7 +906,7 @@ export default function PayHistoryPage() {
         }[] = [];
 
         const addPeriod = (startDate: Date) => {
-            const startString = formatDateString(startDate);
+            const startString = formatDate(startDate);
 
             const endString = getPayPeriodEndDate(
                 startString,
@@ -680,12 +923,12 @@ export default function PayHistoryPage() {
 
             const payDate = new Date(endDate);
 
-            payDate.setDate(payDate.getDate() + paymentOffset);
+            payDate.setDate(payDate.getDate() + paymentOffset!);
 
             periods.push({
                 startDate: startString,
                 endDate: endString,
-                payDate: formatDateString(payDate),
+                payDate: formatDate(payDate),
             });
         };
 
@@ -712,23 +955,14 @@ export default function PayHistoryPage() {
         }
 
         /*
-         * ---------------------------------------------------------
          * 중복 기간 제거
-         * ---------------------------------------------------------
          */
         const uniquePeriods = Array.from(
             new Map(periods.map((period) => [`${period.startDate}-${period.endDate}`, period])).values(),
         );
 
         /*
-         * ---------------------------------------------------------
-         * 3번
-         *
-         * 유효기간은 이미 끝났지만
          * 지급일은 아직 지나지 않은 급여
-         *
-         * 여기서는 DB를 절대로 확인하지 않는다.
-         * ---------------------------------------------------------
          */
         const upcomingPeriods = uniquePeriods
             .filter((period) => {
@@ -740,16 +974,6 @@ export default function PayHistoryPage() {
             })
             .sort((a, b) => parseDate(a.payDate).getTime() - parseDate(b.payDate).getTime());
 
-        /*
-         * 3번이 있으면 무조건 이것을 먼저 보여준다.
-         *
-         * 예:
-         *
-         * 8/22 ~ 9/4  → 9/11
-         * 오늘 9/6
-         *
-         * => 5일 뒤 받을 예정
-         */
         const upcomingPeriod = upcomingPeriods[0];
 
         if (upcomingPeriod) {
@@ -802,13 +1026,7 @@ export default function PayHistoryPage() {
 
         /*
          * ---------------------------------------------------------
-         * 1번
-         *
-         * 유효기간도 지났고 지급일도 지난 급여
-         *
-         * 여기서만 DB 기록 여부를 확인한다.
-         *
-         * 그리고 "가장 최근에 지난 급여기간" 하나만 본다.
+         * 지급일도 지난 가장 최근 급여기간
          * ---------------------------------------------------------
          */
         const latestPastPeriod = uniquePeriods
@@ -821,32 +1039,21 @@ export default function PayHistoryPage() {
             })
             .sort((a, b) => parseDate(b.endDate).getTime() - parseDate(a.endDate).getTime())[0];
 
-        /*
-         * 지난 급여기간 자체가 없다면 끝
-         */
         if (!latestPastPeriod) {
             return null;
         }
 
         /*
-         * 여기서 처음으로 DB 확인
+         * 여기서만 DB 기록 여부 확인
          */
         const recorded = payHistory.some(
             (history) => history.startDate === latestPastPeriod.startDate && history.endDate === latestPastPeriod.endDate,
         );
 
-        /*
-         * 가장 최근에 지난 급여가 이미 기록되어 있으면
-         * 오래된 다른 미기록 급여를 찾지 않는다.
-         */
         if (recorded) {
             return null;
         }
 
-        /*
-         * 가장 최근에 지난 급여 하나만
-         * 기록 유도 카드로 표시
-         */
         return {
             type: "overdue" as const,
 
@@ -857,6 +1064,261 @@ export default function PayHistoryPage() {
             endDate: latestPastPeriod.endDate,
         };
     }, [salarySettings, payHistory, schedules, holidays]);
+
+    /*
+     * ---------------------------------------------------------
+     * 급여 상태 카드용 데이터
+     * ---------------------------------------------------------
+     */
+    const pendingPayPeriod = useMemo(() => {
+        if (!salaryStatus) {
+            return null;
+        }
+
+        return {
+            startDate: salaryStatus.startDate,
+            endDate: salaryStatus.endDate,
+            payDate: salaryStatus.payDate,
+        };
+    }, [salaryStatus]);
+
+    const shouldShowPendingPay = salaryStatus?.type === "upcoming";
+
+    const shouldGoToPayHistory = salaryStatus?.type === "overdue";
+
+    /*
+     * ---------------------------------------------------------
+     * pending 기간 팁 조회
+     * ---------------------------------------------------------
+     */
+    useEffect(() => {
+        if (!pendingPayPeriod) {
+            setPendingSavedTips(null);
+            return;
+        }
+
+        const loadPendingTips = async () => {
+            try {
+                const response = await fetch(
+                    `/api/pay-period-tips?startDate=${encodeURIComponent(
+                        pendingPayPeriod.startDate,
+                    )}&endDate=${encodeURIComponent(pendingPayPeriod.endDate)}`,
+                );
+
+                if (!response.ok) {
+                    throw new Error("이전 급여 기간 팁 조회 실패");
+                }
+
+                const data = (await response.json()) as PayPeriodTips | null;
+
+                setPendingSavedTips(data);
+            } catch (error) {
+                console.error(error);
+
+                setPendingSavedTips(null);
+            }
+        };
+
+        void loadPendingTips();
+    }, [pendingPayPeriod?.startDate, pendingPayPeriod?.endDate]);
+
+    /*
+     * ---------------------------------------------------------
+     * pending 급여 계산
+     * ---------------------------------------------------------
+     */
+    const pendingPeriodSchedules = useMemo(() => {
+        if (!pendingPayPeriod) {
+            return [];
+        }
+
+        return schedules.filter((schedule) => {
+            const scheduleDate = schedule.date.slice(0, 10);
+
+            return scheduleDate >= pendingPayPeriod.startDate && scheduleDate <= pendingPayPeriod.endDate;
+        });
+    }, [schedules, pendingPayPeriod]);
+
+    const pendingPeriodHours = useMemo(() => {
+        return pendingPeriodSchedules.reduce(
+            (total, schedule) =>
+                total + calculateHours(schedule.startTime, schedule.endTime, schedule.hasBreak ? schedule.breakMinutes : 0),
+            0,
+        );
+    }, [pendingPeriodSchedules]);
+
+    const pendingBasePay = useMemo(() => {
+        if (!salarySettings) {
+            return 0;
+        }
+
+        if (salarySettings.payType === "hourly") {
+            return pendingPeriodHours * (hourlyWage ?? 0);
+        }
+
+        if (salarySettings.payType === "salary") {
+            return Number(salarySettings.monthlySalary ?? 0);
+        }
+
+        return 0;
+    }, [salarySettings, pendingPeriodHours, hourlyWage]);
+
+    const pendingHolidaySchedules = useMemo(() => {
+        return pendingPeriodSchedules.filter((schedule) => isHoliday(schedule.date.slice(0, 10), holidays));
+    }, [pendingPeriodSchedules, holidays]);
+
+    const pendingHolidayHours = useMemo(() => {
+        return pendingHolidaySchedules.reduce(
+            (total, schedule) =>
+                total + calculateHours(schedule.startTime, schedule.endTime, schedule.hasBreak ? schedule.breakMinutes : 0),
+            0,
+        );
+    }, [pendingHolidaySchedules]);
+
+    const pendingHolidayPay = salarySettings?.payType === "hourly" ? pendingHolidayHours * (hourlyWage ?? 0) * 0.5 : 0;
+
+    const vacationPayRate = Number(salarySettings?.vacationPayRate ?? 4.15);
+
+    const pendingVacationPay = pendingBasePay * (vacationPayRate / 100);
+
+    const hasPaychequeTips = Boolean(
+        salarySettings?.hasTips && (salarySettings.tipType === "paycheque" || salarySettings.tipType === "both"),
+    );
+
+    const hasCashTips = Boolean(
+        salarySettings?.hasTips && (salarySettings.tipType === "cash" || salarySettings.tipType === "both"),
+    );
+
+    const pendingPaychequeTips = hasPaychequeTips ? (pendingSavedTips?.paychequeTips ?? 0) : 0;
+
+    const pendingCashTips = hasCashTips ? (pendingSavedTips?.cashTips ?? 0) : 0;
+
+    const periodsPerYear = useMemo(() => {
+        if (!salarySettings) {
+            return 26;
+        }
+
+        switch (salarySettings.payFrequency) {
+            case "weekly":
+                return 52;
+
+            case "biweekly":
+                return 26;
+
+            case "semi-monthly":
+                return 24;
+
+            case "monthly":
+                return 12;
+
+            default:
+                return 26;
+        }
+    }, [salarySettings]);
+
+    const pendingTaxableGrossPay = pendingBasePay + pendingHolidayPay + pendingVacationPay + pendingPaychequeTips;
+
+    const pendingAnnualGross = pendingTaxableGrossPay * periodsPerYear;
+
+    const pendingTaxes = useMemo(() => {
+        return calculateTaxes({
+            country: "CA",
+            province: salarySettings?.province ?? "",
+            annualGross: pendingAnnualGross,
+        });
+    }, [salarySettings?.province, pendingAnnualGross]);
+
+    const pendingPeriodEstimate = useMemo(() => {
+        const deductions = pendingTaxes.totalDeductions / periodsPerYear;
+
+        return {
+            hours: pendingPeriodHours,
+
+            basePay: pendingBasePay,
+
+            holidayPay: pendingHolidayPay,
+
+            vacationPay: pendingVacationPay,
+
+            paychequeTips: pendingPaychequeTips,
+
+            cashTips: pendingCashTips,
+
+            grossPay: pendingTaxableGrossPay,
+
+            deductions,
+
+            cpp: pendingTaxes.cpp / periodsPerYear,
+
+            cpp2: pendingTaxes.cpp2 / periodsPerYear,
+
+            ei: pendingTaxes.ei / periodsPerYear,
+
+            federalTax: pendingTaxes.federalTax / periodsPerYear,
+
+            provincialTax: pendingTaxes.provincialTax / periodsPerYear,
+
+            provinceName: pendingTaxes.provinceName,
+
+            netPay: pendingTaxableGrossPay - deductions,
+
+            totalIncome: pendingTaxableGrossPay - deductions + pendingCashTips,
+        };
+    }, [
+        pendingPeriodHours,
+        pendingBasePay,
+        pendingHolidayPay,
+        pendingVacationPay,
+        pendingPaychequeTips,
+        pendingCashTips,
+        pendingTaxableGrossPay,
+        pendingTaxes,
+        periodsPerYear,
+    ]);
+
+    /*
+     * 카드 숫자 애니메이션
+     */
+    useEffect(() => {
+        if (!shouldShowPendingPay) {
+            setAnimatedPendingNetPay(0);
+            return;
+        }
+
+        const target = pendingPeriodEstimate.netPay;
+
+        let startTime: number | null = null;
+
+        let animationFrame: number;
+
+        const duration = 1000;
+
+        const animate = (timestamp: number) => {
+            if (startTime === null) {
+                startTime = timestamp;
+            }
+
+            const elapsed = timestamp - startTime;
+
+            const progress = Math.min(elapsed / duration, 1);
+
+            const eased = 1 - Math.pow(1 - progress, 3);
+
+            setAnimatedPendingNetPay(target * eased);
+
+            if (progress < 1) {
+                animationFrame = requestAnimationFrame(animate);
+            } else {
+                setAnimatedPendingNetPay(target);
+            }
+        };
+
+        animationFrame = requestAnimationFrame(animate);
+
+        return () => {
+            cancelAnimationFrame(animationFrame);
+        };
+    }, [pendingPeriodEstimate.netPay, shouldShowPendingPay]);
 
     /*
      * URL에서 넘어온 미기록 급여 입력
@@ -887,50 +1349,11 @@ export default function PayHistoryPage() {
     const openCreateForm = () => {
         setSelectedHistory(null);
 
-        if (!salarySettings?.payPeriodStartDate) {
-            setForm({
-                ...emptyForm,
-
-                pay: hourlyWage !== null ? "0.00" : "",
-            });
-
-            setIsFormOpen(true);
-
-            return;
-        }
-
-        const startDate = salarySettings.payPeriodStartDate;
-
-        const endDate = getPayPeriodEndDate(
-            startDate,
-            salarySettings.payFrequency,
-            salarySettings.semiMonthlyType,
-            salarySettings.customPayDays,
-        );
-
-        let expectedPayDate = salarySettings.payDate ?? "";
-
-        if (salarySettings.payDateOffset !== null) {
-            const end = new Date(`${endDate}T00:00:00`);
-
-            end.setDate(end.getDate() + salarySettings.payDateOffset);
-
-            expectedPayDate = [
-                end.getFullYear(),
-                String(end.getMonth() + 1).padStart(2, "0"),
-                String(end.getDate()).padStart(2, "0"),
-            ].join("-");
-        }
-
         setForm({
             ...emptyForm,
-
-            startDate,
-
-            endDate,
-
-            payDate: expectedPayDate,
-
+            startDate: "",
+            endDate: "",
+            payDate: "",
             pay: hourlyWage !== null ? "0.00" : "",
         });
 
@@ -945,7 +1368,9 @@ export default function PayHistoryPage() {
 
         setForm({
             startDate: history.startDate,
+
             endDate: history.endDate,
+
             payDate: history.payDate ?? "",
 
             hours: history.hours.toString(),
@@ -976,7 +1401,9 @@ export default function PayHistoryPage() {
         }
 
         setIsFormOpen(false);
+
         setSelectedHistory(null);
+
         setForm(emptyForm);
     };
 
@@ -1041,8 +1468,6 @@ export default function PayHistoryPage() {
 
     /*
      * 현재 입력값으로 계산되는 실수령액
-     *
-     * 급여 + 팁 - 공제 + 추가/차감
      */
     const calculatedNetPay = useMemo(() => {
         const pay = Number(form.pay) || 0;
@@ -1180,12 +1605,9 @@ export default function PayHistoryPage() {
 
             await loadPayHistory();
 
-            /*
-             * pending 급여를 저장한 경우
-             * URL과 pending 상태 제거
-             */
             if (pendingPeriod && pendingPeriod.startDate === form.startDate && pendingPeriod.endDate === form.endDate) {
                 setPendingPeriod(null);
+
                 setIsPendingPeriod(false);
 
                 window.history.replaceState({}, "", "/salary/pay-history");
@@ -1252,7 +1674,7 @@ export default function PayHistoryPage() {
 
     return (
         <>
-            <div className="mx-auto max-w-md pb-10">
+            <div className="mx-auto max-w-md">
                 <BackButtonHeader
                     href="/salary"
                     title="급여 기록"
@@ -1260,70 +1682,62 @@ export default function PayHistoryPage() {
                 />
 
                 {/* 급여 상태 */}
-                {salaryStatus?.type === "overdue" && (
-                    <section className="mt-6 rounded-3xl bg-gray-900 p-5 text-white shadow-sm">
-                        <p className="text-xs text-gray-400">급여 기록</p>
+                {pendingPayPeriod && (
+                    <>
+                        {shouldGoToPayHistory && (
+                            <Link
+                                href="/salary/pay-history"
+                                className="mt-5 block w-full rounded-3xl bg-gray-900 p-5 text-left shadow-sm transition hover:shadow-md"
+                            >
+                                <p className="text-xs text-gray-400">급여 기록</p>
 
-                        <p className="mt-1 text-lg font-bold">지급일이 지났어요</p>
+                                <p className="mt-1 text-lg font-bold text-white">지급일이 지났어요</p>
 
-                        <p className="mt-2 text-sm text-gray-400">
-                            {formatDisplayDate(salaryStatus.startDate)}
-                            {" ~ "}
-                            {formatDisplayDate(salaryStatus.endDate)}
-                        </p>
+                                <p className="mt-1 text-sm text-gray-500">아직 기록되지 않은 급여가 있어요.</p>
 
-                        <p className="mt-1 text-xs text-gray-500">지급일 {formatDisplayDate(salaryStatus.payDate)}</p>
+                                <p className="mt-4 text-xs text-gray-400">
+                                    {formatDisplayDate(pendingPayPeriod.startDate)}
+                                    {" ~ "}
+                                    {formatDisplayDate(pendingPayPeriod.endDate)}
+                                </p>
 
-                        <button
-                            type="button"
-                            onClick={() => {
-                                setPendingPeriod({
-                                    startDate: salaryStatus.startDate,
+                                <p className="mt-3 text-xs font-medium text-gray-500">급여 기록에서 확인하기 →</p>
+                            </Link>
+                        )}
 
-                                    endDate: salaryStatus.endDate,
+                        {shouldShowPendingPay && pendingPayPeriod && (
+                            <button
+                                type="button"
+                                onClick={() => setIsPendingExpectedOpen(true)}
+                                className="mt-10 block w-full rounded-3xl border border-blue-100 bg-blue-50 p-5 text-left shadow-sm transition hover:bg-blue-100/70"
+                            >
+                                <div className="flex items-start justify-between gap-4">
+                                    <div>
+                                        <p className="text-xs text-blue-500">급여 예정</p>
 
-                                    payDate: salaryStatus.payDate,
-                                });
+                                        <p className="mt-1 text-sm font-semibold text-gray-700">
+                                            {formatDisplayDate(pendingPayPeriod.startDate)}
+                                            {" ~ "}
+                                            {formatDisplayDate(pendingPayPeriod.endDate)}
+                                        </p>
 
-                                setIsPendingPeriod(true);
+                                        <p className="mt-3 text-lg font-semibold text-gray-900">
+                                            <span className="text-blue-600">{getDdayLabel(pendingPayPeriod.payDate)}</span>{" "}
+                                            {formatMoney(animatedPendingNetPay)}를 받아요
+                                        </p>
 
-                                setSelectedHistory(null);
+                                        <p className="mt-1 text-sm text-gray-500">
+                                            지급일 {formatDisplayDate(pendingPayPeriod.payDate)}
+                                        </p>
+                                    </div>
 
-                                setForm({
-                                    ...emptyForm,
-
-                                    startDate: salaryStatus.startDate,
-
-                                    endDate: salaryStatus.endDate,
-
-                                    payDate: salaryStatus.payDate,
-                                });
-
-                                setIsFormOpen(true);
-                            }}
-                            className="mt-5 flex w-full items-center justify-between rounded-2xl bg-white px-4 py-3 text-left text-sm font-medium text-black transition hover:bg-gray-100"
-                        >
-                            <span>실제 급여 기록하기</span>
-
-                            <span>→</span>
-                        </button>
-                    </section>
-                )}
-
-                {salaryStatus?.type === "upcoming" && (
-                    <button
-                        type="button"
-                        onClick={() => setIsExpectedSalaryOpen(true)}
-                        className="mt-6 block w-full rounded-3xl bg-black p-5 text-left text-white shadow-sm transition"
-                    >
-                        <p className="text-xs text-gray-400">급여 예정</p>
-
-                        <p className="mt-1 text-lg font-bold">{salaryStatus.daysUntil}일 뒤에 받을 예정</p>
-
-                        <p className="mt-2 text-2xl font-bold">{formatMoney(salaryStatus.expectedPay)}</p>
-
-                        <p className="mt-1 text-xs text-gray-500">지급일 {formatDisplayDate(salaryStatus.payDate)}</p>
-                    </button>
+                                    <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-blue-600 shadow-sm">
+                                        예상
+                                    </span>
+                                </div>
+                            </button>
+                        )}
+                    </>
                 )}
 
                 {/* 기록 추가 */}
@@ -1341,70 +1755,226 @@ export default function PayHistoryPage() {
                     <span className="text-xl">+</span>
                 </button>
 
-                {visiblePayHistory.length === 0 ? (
+                {/* --------------------------------------------------
+                    급여 기록 기간 필터
+                -------------------------------------------------- */}
+                <section className="mt-10">
+                    <div className="flex items-center justify-end gap-2">
+                        {/* 필터 옵션 */}
+                        <div
+                            className={`min-w-0 overflow-hidden transition-[max-width,opacity] duration-300 ease-out ${
+                                isHistoryFilterOpen ? "max-w-full opacity-100" : "max-w-0 opacity-0"
+                            }`}
+                        >
+                            <div className="flex items-center justify-end gap-1.5 overflow-x-auto scrollbar-hide whitespace-nowrap">
+                                {[
+                                    { value: "month" as const, label: "이번 달" },
+                                    { value: "3months" as const, label: "3개월" },
+                                    { value: "6months" as const, label: "6개월" },
+                                    { value: "year" as const, label: "1년" },
+                                    { value: "custom" as const, label: "사용자화" },
+                                ].map((option) => {
+                                    const isActive = historyFilter === option.value;
+
+                                    return (
+                                        <button
+                                            key={option.value}
+                                            type="button"
+                                            onClick={() => {
+                                                setHistoryFilter(option.value);
+                                                setIsHistoryExpanded(false);
+                                            }}
+                                            className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition ${
+                                                isActive
+                                                    ? "bg-gray-900 text-white"
+                                                    : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                                            }`}
+                                        >
+                                            {option.label}
+                                        </button>
+                                    );
+                                })}
+
+                                {/* 초기화 */}
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setHistoryFilter("all");
+                                        setCustomStartDate("");
+                                        setCustomEndDate("");
+                                        setIsHistoryExpanded(false);
+                                    }}
+                                    className="shrink-0 rounded-full bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-500 transition hover:bg-gray-200"
+                                >
+                                    초기화
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* 필터 버튼 / 닫기 버튼 */}
+                        <button
+                            type="button"
+                            aria-label={isHistoryFilterOpen ? "필터 닫기" : "급여 기록 필터 열기"}
+                            onClick={() => setIsHistoryFilterOpen((current) => !current)}
+                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-gray-500 shadow-sm transition-all duration-300 hover:bg-gray-50"
+                        >
+                            {isHistoryFilterOpen ? (
+                                /* X */
+                                <svg
+                                    viewBox="0 0 24 24"
+                                    className="h-4 w-4"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                >
+                                    <path d="M6 6l12 12" />
+                                    <path d="M18 6L6 18" />
+                                </svg>
+                            ) : (
+                                /* 필터 / 슬라이더 아이콘 */
+                                <svg
+                                    viewBox="0 0 24 24"
+                                    className="h-4 w-4"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="1.8"
+                                    strokeLinecap="round"
+                                >
+                                    <path d="M4 7h16" />
+                                    <path d="M7 12h10" />
+                                    <path d="M10 17h4" />
+                                </svg>
+                            )}
+                        </button>
+                    </div>
+
+                    {/* 사용자화 날짜 선택 */}
+                    {isHistoryFilterOpen && historyFilter === "custom" && (
+                        <div className="mt-3 rounded-3xl bg-white p-4 shadow-sm">
+                            <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                    <p className="mb-2 text-xs text-gray-400">시작일</p>
+
+                                    <input
+                                        type="date"
+                                        value={customStartDate}
+                                        onChange={(event) => {
+                                            setCustomStartDate(event.target.value);
+                                            setIsHistoryExpanded(false);
+                                        }}
+                                        className="w-full rounded-2xl border border-gray-200 px-3 py-3 text-sm outline-none"
+                                    />
+                                </div>
+
+                                <div>
+                                    <p className="mb-2 text-xs text-gray-400">종료일</p>
+
+                                    <input
+                                        type="date"
+                                        value={customEndDate}
+                                        onChange={(event) => {
+                                            setCustomEndDate(event.target.value);
+                                            setIsHistoryExpanded(false);
+                                        }}
+                                        className="w-full rounded-2xl border border-gray-200 px-3 py-3 text-sm outline-none"
+                                    />
+                                </div>
+                            </div>
+
+                            {customStartDate && customEndDate && customStartDate > customEndDate && (
+                                <p className="mt-3 text-xs text-red-500">시작일은 종료일보다 빠르거나 같아야 해요.</p>
+                            )}
+                        </div>
+                    )}
+                </section>
+
+                {historyFilter === "custom" && (!customStartDate || !customEndDate || customStartDate > customEndDate) ? (
                     <section className="mt-3 rounded-3xl bg-white p-6 shadow-sm">
-                        <p className="text-sm text-gray-400">아직 급여 기록이 없어요.</p>
+                        <p className="text-sm text-gray-400">
+                            {customStartDate && customEndDate && customStartDate > customEndDate
+                                ? "조회 기간을 다시 선택해주세요."
+                                : "조회할 기간을 선택해주세요."}
+                        </p>
+                    </section>
+                ) : filteredPayHistory.length === 0 ? (
+                    <section className="mt-3 rounded-3xl bg-white p-6 shadow-sm">
+                        <p className="text-sm text-gray-400">해당 기간에 급여 기록이 없어요.</p>
                     </section>
                 ) : (
-                    <div className="mt-3 space-y-3">
-                        {visiblePayHistory.map((history, index) => (
+                    <>
+                        <div className="mt-3 space-y-3">
+                            {displayedPayHistory.map((history, index) => (
+                                <button
+                                    type="button"
+                                    key={history.id}
+                                    onClick={() => setSelectedHistory(history)}
+                                    className="w-full rounded-3xl bg-white p-5 text-left shadow-sm transition hover:shadow-md"
+                                >
+                                    <div className="flex items-start justify-between">
+                                        <div>
+                                            {index === 0 && <p className="text-xs text-gray-400">최근 급여</p>}
+
+                                            <p className="mt-1 font-semibold">
+                                                {formatDisplayDate(history.startDate)}
+                                                {" ~ "}
+                                                {formatDisplayDate(history.endDate)}
+                                            </p>
+
+                                            {history.payDate && (
+                                                <p className="mt-1 text-xs text-gray-400">
+                                                    지급일 {formatDisplayDate(history.payDate)}
+                                                </p>
+                                            )}
+                                        </div>
+
+                                        <span className="text-gray-300">→</span>
+                                    </div>
+
+                                    <div className="mt-5 grid grid-cols-2 gap-y-4 text-sm">
+                                        <div>
+                                            <p className="text-xs text-gray-400">일한 시간</p>
+
+                                            <p className="mt-1 font-medium">
+                                                {history.hours.toFixed(2)}
+                                                시간
+                                            </p>
+                                        </div>
+
+                                        <div>
+                                            <p className="text-xs text-gray-400">급여</p>
+
+                                            <p className="mt-1 font-medium">{formatMoney(history.pay)}</p>
+                                        </div>
+
+                                        <div>
+                                            <p className="text-xs text-gray-400">팁</p>
+
+                                            <p className="mt-1 font-medium">{formatMoney(history.tips)}</p>
+                                        </div>
+
+                                        <div>
+                                            <p className="text-xs text-gray-400">실수령액</p>
+
+                                            <p className="mt-1 text-lg font-bold">{formatMoney(history.netPay)}</p>
+                                        </div>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+
+                        {filteredPayHistory.length > 6 && (
                             <button
                                 type="button"
-                                key={history.id}
-                                onClick={() => setSelectedHistory(history)}
-                                className="w-full rounded-3xl bg-white p-5 text-left shadow-sm transition hover:shadow-md"
+                                onClick={() => setIsHistoryExpanded((current) => !current)}
+                                className="mt-3 w-full rounded-2xl bg-white py-3 text-sm font-medium text-gray-500 shadow-sm transition hover:bg-gray-50"
                             >
-                                <div className="flex items-start justify-between">
-                                    <div>
-                                        {index === 0 && <p className="text-xs text-gray-400">최근 급여</p>}
-
-                                        <p className="mt-1 font-semibold">
-                                            {formatDisplayDate(history.startDate)}
-                                            {" ~ "}
-                                            {formatDisplayDate(history.endDate)}
-                                        </p>
-
-                                        {history.payDate && (
-                                            <p className="mt-1 text-xs text-gray-400">
-                                                지급일 {formatDisplayDate(history.payDate)}
-                                            </p>
-                                        )}
-                                    </div>
-
-                                    <span className="text-gray-300">→</span>
-                                </div>
-
-                                <div className="mt-5 grid grid-cols-2 gap-y-4 text-sm">
-                                    <div>
-                                        <p className="text-xs text-gray-400">일한 시간</p>
-
-                                        <p className="mt-1 font-medium">
-                                            {history.hours.toFixed(2)}
-                                            시간
-                                        </p>
-                                    </div>
-
-                                    <div>
-                                        <p className="text-xs text-gray-400">급여</p>
-
-                                        <p className="mt-1 font-medium">{formatMoney(history.pay)}</p>
-                                    </div>
-
-                                    <div>
-                                        <p className="text-xs text-gray-400">팁</p>
-
-                                        <p className="mt-1 font-medium">{formatMoney(history.tips)}</p>
-                                    </div>
-
-                                    <div>
-                                        <p className="text-xs text-gray-400">실수령액</p>
-
-                                        <p className="mt-1 text-lg font-bold">{formatMoney(history.netPay)}</p>
-                                    </div>
-                                </div>
+                                {isHistoryExpanded
+                                    ? "접기"
+                                    : `더 보기 · ${filteredPayHistory.length - displayedPayHistory.length}개`}
                             </button>
-                        ))}
-                    </div>
+                        )}
+                    </>
                 )}
             </div>
 
@@ -1521,66 +2091,173 @@ export default function PayHistoryPage() {
                 </div>
             )}
 
-            {/* 예상 급여 모달 */}
-            {isExpectedSalaryOpen && salaryStatus?.type === "upcoming" && (
+            {/* Pending Expected Salary Modal */}
+            {isPendingExpectedOpen && pendingPayPeriod && (
                 <div
-                    className="fixed inset-0 z-[70] flex items-end justify-center bg-black/40 p-4 sm:items-center"
-                    onClick={() => setIsExpectedSalaryOpen(false)}
+                    className="fixed inset-0 z-[60] flex items-end justify-center bg-gray-900/30 p-3 backdrop-blur-sm sm:items-center"
+                    onClick={() => setIsPendingExpectedOpen(false)}
                 >
-                    <div className="w-full max-w-md overflow-hidden rounded-3xl" onClick={(event) => event.stopPropagation()}>
-                        <section className="rounded-3xl bg-black p-6 text-white shadow-sm">
-                            <div className="flex items-start justify-between">
-                                <div>
-                                    <p className="text-xs text-gray-500">{salaryStatus.daysUntil}일 뒤 지급 예정</p>
+                    <div
+                        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-[2rem] bg-white p-6 shadow-2xl"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <div className="flex items-start justify-between">
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-600">
+                                        예상
+                                    </span>
 
-                                    <p className="mt-1 text-sm text-gray-400">
-                                        {formatDisplayDate(salaryStatus.startDate)}
-                                        {" ~ "}
-                                        {formatDisplayDate(salaryStatus.endDate)}
-                                    </p>
+                                    <span className="text-xs text-gray-400">{getDdayLabel(pendingPayPeriod.payDate)}</span>
                                 </div>
 
-                                <button
-                                    type="button"
-                                    onClick={() => setIsExpectedSalaryOpen(false)}
-                                    className="text-xl text-gray-400"
-                                >
-                                    ×
-                                </button>
+                                <p className="mt-3 text-lg font-bold text-gray-900">지급 예정 급여</p>
+
+                                <p className="mt-1 text-sm text-gray-500">
+                                    {formatDisplayDate(pendingPayPeriod.startDate)}
+                                    {" ~ "}
+                                    {formatDisplayDate(pendingPayPeriod.endDate)}
+                                </p>
                             </div>
 
-                            <p className="mt-1 text-4xl font-bold">{formatMoney(salaryStatus.expectedPay)}</p>
+                            <button
+                                type="button"
+                                onClick={() => setIsPendingExpectedOpen(false)}
+                                className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-lg text-gray-500 transition hover:bg-gray-200"
+                                aria-label="닫기"
+                            >
+                                ×
+                            </button>
+                        </div>
 
-                            <p className="mt-2 text-xs text-gray-500">지급일 {formatDisplayDate(salaryStatus.payDate)}</p>
+                        <div className="mt-6 rounded-3xl bg-blue-50 p-5">
+                            <p className="text-xs font-medium text-blue-500">예상 실수령액</p>
 
-                            <div className="mt-6 space-y-3 text-sm">
-                                <div className="flex justify-between">
-                                    <span className="text-gray-400">예상 급여</span>
+                            <p className="mt-2 text-4xl font-bold tracking-tight text-gray-900">
+                                {formatMoney(pendingPeriodEstimate.netPay)}
+                            </p>
 
-                                    <span>{formatMoney(salaryStatus.expectedBasePay)}</span>
-                                </div>
+                            <div className="mt-4 flex items-center justify-between">
+                                <span className="text-sm text-gray-500">지급일</span>
 
-                                <div className="flex justify-between">
-                                    <span className="text-gray-400">예상 공제</span>
+                                <span className="text-sm font-semibold text-gray-900">
+                                    {formatDisplayDate(pendingPayPeriod.payDate)}
+                                </span>
+                            </div>
+                        </div>
 
-                                    <span>-{formatMoney(salaryStatus.expectedDeductions)}</span>
-                                </div>
+                        <div className="mt-6">
+                            <p className="mb-3 text-xs font-semibold text-gray-400">예상 급여 내역</p>
 
-                                <div className="flex justify-between">
-                                    <span className="text-gray-400">예상 실수령액</span>
+                            <div className="rounded-3xl bg-gray-50 p-5">
+                                <div className="space-y-4 text-sm">
+                                    <div className="flex justify-between">
+                                        <span className="text-gray-500">근무시간</span>
 
-                                    <span>{formatMoney(salaryStatus.expectedNetPay)}</span>
+                                        <span className="font-medium text-gray-900">
+                                            {pendingPeriodEstimate.hours.toFixed(2)}
+                                            시간
+                                        </span>
+                                    </div>
+
+                                    <div className="flex justify-between">
+                                        <span className="text-gray-500">기본 급여</span>
+
+                                        <span className="font-medium text-gray-900">
+                                            {formatMoney(pendingPeriodEstimate.basePay)}
+                                        </span>
+                                    </div>
+
+                                    {pendingPeriodEstimate.paychequeTips > 0 && (
+                                        <div className="flex justify-between">
+                                            <span className="text-gray-500">급여 포함 팁</span>
+
+                                            <span className="font-medium text-gray-900">
+                                                {formatMoney(pendingPeriodEstimate.paychequeTips)}
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    {pendingPeriodEstimate.holidayPay > 0 && (
+                                        <div className="flex justify-between">
+                                            <span className="text-gray-500">Holiday Pay</span>
+
+                                            <span className="font-medium text-gray-900">
+                                                {formatMoney(pendingPeriodEstimate.holidayPay)}
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    <div className="flex justify-between">
+                                        <span className="text-gray-500">Vacation Pay</span>
+
+                                        <span className="font-medium text-gray-900">
+                                            {formatMoney(pendingPeriodEstimate.vacationPay)}
+                                        </span>
+                                    </div>
+
+                                    <div className="my-1 border-t border-gray-200" />
+
+                                    <div className="flex justify-between">
+                                        <span className="font-medium text-gray-600">세전 급여</span>
+
+                                        <span className="font-semibold text-gray-900">
+                                            {formatMoney(pendingPeriodEstimate.grossPay)}
+                                        </span>
+                                    </div>
+
+                                    <div className="flex justify-between">
+                                        <span className="text-gray-500">예상 공제</span>
+
+                                        <span className="text-gray-600">- {formatMoney(pendingPeriodEstimate.deductions)}</span>
+                                    </div>
+
+                                    <div className="my-1 border-t border-gray-200" />
+
+                                    <div className="flex justify-between">
+                                        <span className="font-semibold text-gray-900">실수령액</span>
+
+                                        <span className="font-bold text-gray-900">
+                                            {formatMoney(pendingPeriodEstimate.netPay)}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
+                        </div>
 
-                            <div className="mt-6 rounded-2xl bg-white p-4 text-black">
-                                <div className="flex items-center justify-between">
-                                    <span className="text-sm font-medium">예상 수령액</span>
+                        {pendingPeriodEstimate.cashTips > 0 && (
+                            <div className="mt-4 rounded-3xl bg-gray-50 p-5">
+                                <div className="flex justify-between">
+                                    <span className="text-sm text-gray-500">현금 팁</span>
 
-                                    <span className="text-xl font-bold">{formatMoney(salaryStatus.expectedPay)}</span>
+                                    <span className="text-sm font-semibold text-gray-900">
+                                        {formatMoney(pendingPeriodEstimate.cashTips)}
+                                    </span>
+                                </div>
+
+                                <div className="mt-4 flex items-center justify-between rounded-2xl bg-white p-4 shadow-sm">
+                                    <span className="text-sm font-semibold text-gray-700">예상 총 수령액</span>
+
+                                    <span className="text-xl font-bold text-gray-900">
+                                        {formatMoney(pendingPeriodEstimate.totalIncome)}
+                                    </span>
                                 </div>
                             </div>
-                        </section>
+                        )}
+
+                        <div className="mt-5 rounded-2xl bg-amber-50 px-4 py-3">
+                            <p className="text-xs leading-5 text-amber-700">
+                                실제 급여가 아직 기록되지 않아 이전 근무 기록과 팁을 기준으로 계산한 예상 금액이에요.
+                            </p>
+                        </div>
+
+                        <Link
+                            href="/salary/schedule"
+                            onClick={() => setIsPendingExpectedOpen(false)}
+                            className="mt-5 block w-full rounded-2xl bg-gray-900 py-4 text-center text-sm font-semibold text-white transition hover:bg-gray-800"
+                        >
+                            근무 기록 보기
+                        </Link>
                     </div>
                 </div>
             )}
@@ -1617,14 +2294,14 @@ export default function PayHistoryPage() {
                                         type="date"
                                         value={form.startDate}
                                         onChange={(event) => updateForm("startDate", event.target.value)}
-                                        className="rounded-2xl border border-gray-200 px-3 py-3 text-sm outline-none "
+                                        className="rounded-2xl border border-gray-200 px-3 py-3 text-sm outline-none"
                                     />
 
                                     <input
                                         type="date"
                                         value={form.endDate}
                                         onChange={(event) => updateForm("endDate", event.target.value)}
-                                        className="rounded-2xl border border-gray-200 px-3 py-3 text-sm outline-none "
+                                        className="rounded-2xl border border-gray-200 px-3 py-3 text-sm outline-none"
                                     />
                                 </div>
                             </div>
@@ -1637,7 +2314,7 @@ export default function PayHistoryPage() {
                                     type="date"
                                     value={form.payDate}
                                     onChange={(event) => updateForm("payDate", event.target.value)}
-                                    className="mt-2 w-full rounded-2xl border border-gray-200 px-4 py-3 outline-none "
+                                    className="mt-2 w-full rounded-2xl border border-gray-200 px-4 py-3 outline-none"
                                 />
                             </div>
 
@@ -1669,7 +2346,7 @@ export default function PayHistoryPage() {
                                                       }),
                                             }));
                                         }}
-                                        className="w-full rounded-2xl border border-gray-200 px-4 py-3 outline-none "
+                                        className="w-full rounded-2xl border border-gray-200 px-4 py-3 outline-none"
                                     />
 
                                     <span className="text-sm text-gray-400">시간</span>
@@ -1689,7 +2366,7 @@ export default function PayHistoryPage() {
                                         step="0.01"
                                         value={form.pay}
                                         onChange={(event) => updateForm("pay", normalizeNumberInput(event.target.value))}
-                                        className="w-full rounded-2xl border border-gray-200 px-4 py-3 outline-none "
+                                        className="w-full rounded-2xl border border-gray-200 px-4 py-3 outline-none"
                                     />
                                 </div>
                             </div>
@@ -1707,7 +2384,7 @@ export default function PayHistoryPage() {
                                         step="0.01"
                                         value={form.tips}
                                         onChange={(event) => updateForm("tips", normalizeNumberInput(event.target.value))}
-                                        className="w-full rounded-2xl border border-gray-200 px-4 py-3 outline-none "
+                                        className="w-full rounded-2xl border border-gray-200 px-4 py-3 outline-none"
                                     />
                                 </div>
                             </div>
@@ -1725,7 +2402,7 @@ export default function PayHistoryPage() {
                                         step="0.01"
                                         value={form.deductions}
                                         onChange={(event) => updateForm("deductions", normalizeNumberInput(event.target.value))}
-                                        className="w-full rounded-2xl border border-gray-200 px-4 py-3 outline-none "
+                                        className="w-full rounded-2xl border border-gray-200 px-4 py-3 outline-none"
                                     />
                                 </div>
                             </div>
@@ -1764,7 +2441,7 @@ export default function PayHistoryPage() {
                                                         value={adjustment.name}
                                                         onChange={(event) => updateAdjustment(index, "name", event.target.value)}
                                                         placeholder="예: Holiday Pay"
-                                                        className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none "
+                                                        className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none"
                                                     />
 
                                                     <button
@@ -1788,7 +2465,7 @@ export default function PayHistoryPage() {
                                                             updateAdjustment(index, "amount", event.target.value)
                                                         }
                                                         placeholder="0.00"
-                                                        className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none "
+                                                        className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none"
                                                     />
                                                 </div>
                                             </div>
@@ -1844,7 +2521,7 @@ export default function PayHistoryPage() {
                                         value={form.netPay}
                                         onChange={(event) => updateForm("netPay", normalizeNumberInput(event.target.value))}
                                         placeholder={calculatedNetPay.toFixed(2)}
-                                        className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-lg font-semibold outline-none "
+                                        className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-lg font-semibold outline-none"
                                     />
                                 </div>
 

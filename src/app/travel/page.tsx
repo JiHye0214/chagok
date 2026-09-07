@@ -355,7 +355,7 @@ export default function TravelPage() {
         <div className="mx-auto max-w-md">
             {" "}
             {/* Header */}
-            <header>
+            <header className="mt-5 mb-10">
                 <p className="text-sm text-gray-500">차곡</p>
 
                 <div className="mt-2 flex items-center justify-between">
