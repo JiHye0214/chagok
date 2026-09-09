@@ -1795,7 +1795,7 @@ export default function PayHistoryPage() {
                                     );
                                 })}
 
-                                {/* 초기화 */}
+                                {/* 전체 */}
                                 <button
                                     type="button"
                                     onClick={() => {
@@ -1806,7 +1806,7 @@ export default function PayHistoryPage() {
                                     }}
                                     className="shrink-0 rounded-full bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-500 transition hover:bg-gray-200"
                                 >
-                                    초기화
+                                    전체
                                 </button>
                             </div>
                         </div>

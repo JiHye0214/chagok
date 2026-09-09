@@ -63,19 +63,6 @@ const formatCityName = (value: string) => {
         .join(" ");
 };
 
-const categoryData = [
-    { name: "항공", value: 30, amount: 300 },
-    { name: "숙소", value: 25, amount: 250 },
-    { name: "식비", value: 20, amount: 200 },
-    { name: "교통", value: 10, amount: 100 },
-    { name: "택시", value: 5, amount: 50 },
-    { name: "기타", value: 10, amount: 100 },
-];
-
-const categoryColors = ["#D9E2EC", "#E8E1D9", "#E2E8D9", "#E6DDE8", "#DDE7E8", "#E8E8E8"];
-
-const categoryActiveColors = ["#8FA6BA", "#B5A18D", "#A8B895", "#B19BB5", "#A5BABC", "#AFAFAF"];
-
 export default function TravelPage() {
     const typeRef = useRef<HTMLDivElement>(null);
     const formRef = useRef<HTMLDivElement>(null);
@@ -492,92 +479,6 @@ export default function TravelPage() {
                             }))}
                     />
                 </div>
-
-                {/* Category Statistics */}
-                {/* <div className="mt-8 rounded-3xl bg-white p-5 shadow-sm">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-sm text-gray-500">전체 여행 지출</p>{" "}
-                            <p className="mt-1 text-lg font-semibold">카테고리별 소비</p>
-                        </div>
-
-                        <span className="text-xs text-gray-400">눌러서 확인</span>
-                    </div>
-
-                    <div className="mb-7 h-70 w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                                <Pie
-                                    data={categoryData}
-                                    dataKey="value"
-                                    nameKey="name"
-                                    cx="50%"
-                                    cy="50%"
-                                    innerRadius={65}
-                                    outerRadius={100}
-                                    paddingAngle={2}
-                                    isAnimationActive={false}
-                                    onClick={(_, index) => {
-                                        setSelectedIndex(selectedIndex === index ? null : index);
-                                    }}
-                                    label={({ name, value, cx, cy, midAngle }) => {
-                                        const RADIAN = Math.PI / 180;
-                                        const radius = 130;
-
-                                        const x = Number(cx) + radius * Math.cos(-Number(midAngle) * RADIAN);
-
-                                        const y = Number(cy) + radius * Math.sin(-Number(midAngle) * RADIAN);
-
-                                        const index = categoryData.findIndex((item) => item.name === name);
-
-                                        const isSelected = selectedIndex === index;
-
-                                        return (
-                                            <text
-                                                x={x}
-                                                y={y}
-                                                fill={isSelected ? categoryActiveColors[index] : "#666"}
-                                                textAnchor="middle"
-                                                dominantBaseline="central"
-                                                fontSize={11}
-                                            >
-                                                <tspan x={x}>
-                                                    {name}
-                                                </tspan>
-                                            </text>
-                                        );
-                                    }}
-                                    labelLine={false}
-                                >
-                                    {categoryData.map((entry, index) => (
-                                        <Cell
-                                            key={`cell-${index}`}
-                                            fill={selectedIndex === index ? categoryActiveColors[index] : categoryColors[index]}
-                                        />
-                                    ))}
-                                </Pie>
-                            </PieChart>
-                        </ResponsiveContainer>
-
-                        <div className="-mt-40 pointer-events-none text-center">
-                            {selectedIndex === null ? (
-                                <>
-                                    <p className="text-xs text-gray-400">카테고리를</p>
-                                    <p className="text-lg font-bold">눌러보세요</p>
-                                </>
-                            ) : (
-                                <>
-                                    <p className="text-xs text-gray-400">{categoryData[selectedIndex].name}</p>
-                                    <p className="mt-1 text-lg font-bold">
-                                        ${categoryData[selectedIndex].amount.toLocaleString()}
-                                    </p>
-                                </>
-                            )}
-                        </div>
-                    </div>
-
-                    <p className="mt-5 text-center text-xs text-gray-400">그래프를 누르면 카테고리별 평균 지출을 볼 수 있어요.</p>
-                </div> */}
             </section>
             {/* Country Insight */}
             <section className="mt-8">
