@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
@@ -157,7 +158,7 @@ export default function TravelGlobeClient({ trips }: TravelGlobeClientProps) {
     const worldProgress = Math.min(Math.round((visitedCountryCount / 195) * 100), 100);
 
     return (
-        <div className="relative h-[390px] w-full overflow-hidden rounded-3xl bg-[#eae6db]">
+        <div className="relative h-[390px] w-full overflow-hidden rounded-3xl bg-[#f3efe6]">
             <Canvas
                 camera={{
                     position: [-178, 173, 34],
@@ -190,6 +191,14 @@ export default function TravelGlobeClient({ trips }: TravelGlobeClientProps) {
 
                 <p className="mt-1 text-lg font-semibold text-gray-800">내가 가본 곳</p>
             </div>
+
+            {/* 여행 기록 보기 */}
+            <Link
+                href="/travel/list"
+                className="absolute right-5 top-5 shrink-0 rounded-full bg-white/30 px-3 py-1 text-xs text-gray-400 transition-colors"
+            >
+                여행 기록 →
+            </Link>
 
             {/* 여행 통계 */}
             <div className="pointer-events-none absolute bottom-5 left-5">

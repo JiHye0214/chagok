@@ -1277,7 +1277,7 @@ export default function SalaryPage() {
             )}
 
             {currentPayPeriod && (
-                <div className="mt-5 rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
+                <div className="mt-6 rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
                     <p className="text-xs font-medium text-blue-500">현재 급여 기간</p>
 
                     <p className="mt-1 text-sm font-semibold text-gray-900">

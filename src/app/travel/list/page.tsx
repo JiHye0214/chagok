@@ -122,6 +122,10 @@ export default function TravelListPage() {
 
     const [savedTrip, setSavedTrip] = useState<SavedTrip | null>(null);
 
+    // 추가 도시 위경도
+    const [newCityLatitude, setNewCityLatitude] = useState("");
+    const [newCityLongitude, setNewCityLongitude] = useState("");
+
     /*
      * ---------------------------------------------------------
      * 도시 검색
@@ -1490,8 +1494,8 @@ export default function TravelListPage() {
             )}
 
             {/* ==================================================
-            도시 추가 모달
-        ================================================== */}
+                    도시 추가 모달
+                ================================================== */}
             {isAddCityModalOpen && (
                 <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/30 px-5">
                     <div className="w-full max-w-md rounded-3xl bg-white p-5 shadow-xl">
@@ -1529,6 +1533,32 @@ export default function TravelListPage() {
                             </select>
                         </div>
 
+                        <div className="mt-5">
+                            <p className="text-sm font-medium text-gray-700">위도</p>
+
+                            <input
+                                type="number"
+                                step="any"
+                                value={newCityLatitude}
+                                onChange={(e) => setNewCityLatitude(e.target.value)}
+                                placeholder="예: 40.7128"
+                                className="mt-2 h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
+                            />
+                        </div>
+
+                        <div className="mt-5">
+                            <p className="text-sm font-medium text-gray-700">경도</p>
+
+                            <input
+                                type="number"
+                                step="any"
+                                value={newCityLongitude}
+                                onChange={(e) => setNewCityLongitude(e.target.value)}
+                                placeholder="예: -74.0060"
+                                className="mt-2 h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
+                            />
+                        </div>
+
                         <div className="mt-6 flex gap-3">
                             <button
                                 type="button"
@@ -1540,7 +1570,7 @@ export default function TravelListPage() {
 
                             <button
                                 type="button"
-                                disabled={!newCityCountryCode}
+                                disabled={!newCityCountryCode || !newCityLatitude || !newCityLongitude}
                                 onClick={async () => {
                                     const countryInfo = await getCountryInfo(newCityCountryCode);
 
@@ -1549,6 +1579,8 @@ export default function TravelListPage() {
                                     setCity(formatCityName(city));
                                     setCountryCode(newCityCountryCode);
                                     setCountry(countryInfo.name);
+                                    setLatitude(Number(newCityLatitude));
+                                    setLongitude(Number(newCityLongitude));
                                     setShowCityResults(false);
                                     setCitySearchResults([]);
                                     setIsAddCityModalOpen(false);

@@ -227,10 +227,12 @@ export default function TravelDetailPage() {
 
                 const cells: Record<string, string> = {};
 
-                expenses.forEach((expense: { expense_date: string; category_id: number; expression: string }) => {
+                expenses.forEach((expense: { expense_date: string; category_id: number; expression: string; amount: number }) => {
                     const key = `${expense.category_id}_${expense.expense_date.slice(0, 10)}`;
 
-                    cells[key] = expense.expression;
+                    const amount = Number(expense.amount);
+
+                    cells[key] = amount === 0 ? "" : Number.isInteger(amount) ? String(amount) : amount.toFixed(2);
                 });
 
                 setExpenseCells(cells);
@@ -403,15 +405,6 @@ export default function TravelDetailPage() {
 
         return () => clearInterval(interval);
     }, [categories.length]);
-
-    const categoryIcons = {
-        항공: Plane,
-        숙소: Hotel,
-        식비: Utensils,
-        교통: TrainFront,
-        쇼핑: ShoppingBag,
-        기타: MoreHorizontal,
-    };
 
     const tripDates = (() => {
         const dates: Date[] = [];
@@ -682,22 +675,16 @@ export default function TravelDetailPage() {
         }
     };
 
-    const handleCellKeyDown = async (event: React.KeyboardEvent<HTMLInputElement>, categoryId: number, date: Date) => {
-        if (event.key !== "Enter") return;
-
-        event.preventDefault();
-
-        const input = event.currentTarget;
-
+    const handleCellBlur = async (categoryId: number, date: Date) => {
         const key = getCellKey(categoryId, date);
         const currentValue = expenseCells[key] ?? "";
 
-        if (!currentValue.trim()) {
-            input.blur();
-            setSelectedCell(null);
+        setSelectedCell(null);
 
+        // 빈 값이면 기존 경비 삭제
+        if (!currentValue.trim()) {
             try {
-                await fetch(`/api/trips/${trip.id}/expenses`, {
+                const response = await fetch(`/api/trips/${trip.id}/expenses`, {
                     method: "PUT",
                     headers: {
                         "Content-Type": "application/json",
@@ -709,6 +696,10 @@ export default function TravelDetailPage() {
                         amount: 0,
                     }),
                 });
+
+                if (!response.ok) {
+                    throw new Error("여행 경비 삭제 실패");
+                }
             } catch (error) {
                 console.error("여행 경비 삭제 실패:", error);
             }
@@ -761,12 +752,16 @@ export default function TravelDetailPage() {
             if (!response.ok) {
                 throw new Error("여행 경비 저장 실패");
             }
-
-            input.blur();
-            setSelectedCell(null);
         } catch (error) {
             console.error("여행 경비 저장 실패:", error);
         }
+    };
+
+    const handleCellKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+        if (event.key !== "Enter") return;
+
+        event.preventDefault();
+        event.currentTarget.blur();
     };
 
     // ==============================
@@ -1055,18 +1050,37 @@ export default function TravelDetailPage() {
                                     {trip.rating > 0 ? (
                                         <div className="mt-5 flex items-center py-1">
                                             <div className="flex gap-0.5">
-                                                {Array.from({ length: 5 }).map((_, index) => (
-                                                    <Star
-                                                        key={index}
-                                                        size={18}
-                                                        strokeWidth={1.8}
-                                                        className={
-                                                            trip.rating >= index + 1
-                                                                ? "fill-gray-900 text-gray-900"
-                                                                : "text-gray-200"
-                                                        }
-                                                    />
-                                                ))}
+                                                {Array.from({ length: 5 }).map((_, index) => {
+                                                    const starValue = index + 1;
+                                                    const fillAmount = Math.min(Math.max(trip.rating - index, 0), 1);
+
+                                                    return (
+                                                        <div key={index} className="relative h-[18px] w-[18px]">
+                                                            {/* 빈 별 */}
+                                                            <Star
+                                                                size={18}
+                                                                strokeWidth={1.8}
+                                                                className="absolute left-0 top-0 text-gray-200"
+                                                            />
+
+                                                            {/* 채워진 별 */}
+                                                            {fillAmount > 0 && (
+                                                                <div
+                                                                    className="absolute left-0 top-0 overflow-hidden"
+                                                                    style={{
+                                                                        width: `${fillAmount * 100}%`,
+                                                                    }}
+                                                                >
+                                                                    <Star
+                                                                        size={18}
+                                                                        strokeWidth={1.8}
+                                                                        className="fill-gray-900 text-gray-900"
+                                                                    />
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
                                         </div>
                                     ) : (
@@ -1541,8 +1555,6 @@ export default function TravelDetailPage() {
 
                             <tbody>
                                 {categories.map((category) => {
-                                    const Icon = categoryIcons[category.name as keyof typeof categoryIcons] ?? MoreHorizontal;
-
                                     const categoryTotal = getCategoryTotal(category.id);
 
                                     const isSelected = selectedCategoryId === category.id;
@@ -1601,8 +1613,6 @@ export default function TravelDetailPage() {
                                                 }`}
                                             >
                                                 <div className="flex w-[76px] items-center gap-2">
-                                                    <Icon size={15} strokeWidth={1.8} className="shrink-0 text-gray-400" />
-
                                                     <input
                                                         type="text"
                                                         value={category.name}
@@ -1655,10 +1665,10 @@ export default function TravelDetailPage() {
                                                                 handleCellChange(category.id, date, event.target.value);
                                                             }}
                                                             onKeyDown={(event) => {
-                                                                handleCellKeyDown(event, category.id, date);
+                                                                handleCellKeyDown(event);
                                                             }}
                                                             onBlur={() => {
-                                                                setSelectedCell(null);
+                                                                handleCellBlur(category.id, date);
                                                             }}
                                                             placeholder="-"
                                                             className={`min-h-[48px] w-full rounded-xl bg-transparent px-2 text-center text-xs text-gray-700 outline-none transition cursor-pointer ${
