@@ -242,7 +242,7 @@ export default function TravelPage() {
 
         const countryInfo = await getCountryInfo(result.countryCode);
 
-        setCountry(result.countryCode === "US" ? "United States" : countryInfo.name);
+        setCountry(countryInfo.name);
     };
 
     // 인풋 초기화
@@ -286,7 +286,7 @@ export default function TravelPage() {
                     } else {
                         map.set(trip.countryCode, {
                             countryCode: trip.countryCode,
-                            name: trip.countryCode === "US" ? "United States" : trip.country,
+                            name: trip.country,
                             cities: [trip.city],
                             count: 1,
                         });
@@ -362,7 +362,7 @@ export default function TravelPage() {
             {/* Travel Budget */}
             <section className="mt-8">
                 <div className="rounded-3xl bg-white p-5 shadow-sm">
-                    <p className="text-sm text-gray-500">✈️ 다음 여행까지</p>
+                    <p className="text-sm text-gray-500">다음 여행까지</p>
 
                     <div className="mt-4 flex items-end justify-between">
                         <div>
@@ -384,86 +384,64 @@ export default function TravelPage() {
                 </div>
             </section>
             {/* Coming Soon */}
-            {upcomingTrips.length > 0 && (
-                <section className="mt-10">
-                    <div className="flex items-center justify-between">
-                        <h2 className="text-lg font-semibold">Coming Soon</h2>
+            {upcomingTrips.length > 0 &&
+                (() => {
+                    const upcomingTrip = [...upcomingTrips].sort(
+                        (a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime(),
+                    )[0];
 
-                        <Link href="/travel/list" className="text-sm text-gray-400">
-                            전체 보기
-                        </Link>
-                    </div>
+                    const daysUntil = Math.max(
+                        0,
+                        Math.ceil((new Date(upcomingTrip.startDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)),
+                    );
 
-                    <div className="mt-4 space-y-3">
-                        {upcomingTrips.map((trip) => {
-                            const nights = getNights(trip.startDate, trip.endDate);
+                    return (
+                        <section className="mt-8 sm:mt-10">
+                            <Link href={`/travel/list/${upcomingTrip.id}`} className="group block">
+                                <div className="relative overflow-hidden rounded-3xl bg-gray-900 p-5 text-white transition active:scale-[0.99] sm:p-6">
+                                    <div className="relative z-10">
+                                        <div className="flex items-center justify-between">
+                                            <p className="text-sm text-gray-400">다음 여행</p>
 
-                            return (
-                                <Link
-                                    key={trip.id}
-                                    href={`/travel/list/${trip.id}`}
-                                    className="block rounded-3xl bg-white p-5 shadow-sm transition active:scale-[0.99]"
-                                >
-                                    <div className="flex items-start justify-between gap-4">
-                                        <div className="min-w-0">
-                                            {trip.title ? (
-                                                <>
-                                                    <p className="truncate text-lg font-semibold text-gray-900">{trip.title}</p>
-
-                                                    <div className="mt-1 flex items-center gap-1.5">
-                                                        <img
-                                                            src={`https://flagcdn.com/w40/${trip.countryCode.toLowerCase()}.png`}
-                                                            alt={trip.country}
-                                                            className="h-3 w-auto object-cover"
-                                                        />
-
-                                                        <p className="truncate text-sm text-gray-400">
-                                                            {trip.city} · {trip.countryCode}
-                                                        </p>
-                                                    </div>
-                                                </>
-                                            ) : (
-                                                <div className="flex items-center gap-2">
-                                                    <img
-                                                        src={`https://flagcdn.com/w40/${trip.countryCode.toLowerCase()}.png`}
-                                                        alt={trip.country}
-                                                        className="h-3 w-auto object-cover"
-                                                    />
-
-                                                    <p className="truncate text-lg font-semibold text-gray-900">{trip.city}</p>
-                                                </div>
-                                            )}
-
-                                            <p className="mt-4 text-xs text-gray-500">
-                                                {formatDate(new Date(trip.startDate))} ~ {formatDate(new Date(trip.endDate))}
-                                            </p>
-
-                                            <p className="mt-1 text-xs text-gray-400">
-                                                {nights === 0
-                                                    ? `당일치기 · ${trip.people}명`
-                                                    : `${nights}박 ${nights + 1}일 · ${trip.people}명`}
-                                            </p>
+                                            <span className="shrink-0 rounded-full bg-white/10 px-3 py-1 text-xs text-gray-400">
+                                                D-
+                                                {Math.max(
+                                                    0,
+                                                    Math.ceil(
+                                                        (new Date(upcomingTrip.startDate).getTime() - Date.now()) /
+                                                            (1000 * 60 * 60 * 24),
+                                                    ),
+                                                )}
+                                            </span>
                                         </div>
 
-                                        <span className="shrink-0 rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-500">
-                                            D-
-                                            {Math.max(
-                                                0,
-                                                Math.ceil(
-                                                    (new Date(trip.startDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
-                                                ),
-                                            )}
-                                        </span>
+                                        <div className="mt-6">
+                                            <p className="text-3xl font-semibold tracking-tight sm:text-4xl">
+                                                {upcomingTrip.city}
+                                            </p>
+
+                                            <p className="mt-2 text-sm text-gray-400">{upcomingTrip.country}</p>
+                                        </div>
+
+                                        <div className="mt-7 flex items-end justify-between gap-4">
+                                            <p className="text-xs text-gray-500 sm:text-sm">
+                                                {formatDate(new Date(upcomingTrip.startDate))} —{" "}
+                                                {formatDate(new Date(upcomingTrip.endDate))}
+                                            </p>
+                                        </div>
                                     </div>
-                                </Link>
-                            );
-                        })}
-                    </div>
-                </section>
-            )}
+
+                                    <div className="pointer-events-none absolute -bottom-8 -right-4 text-[110px] leading-none opacity-10 sm:-bottom-10 sm:-right-5 sm:text-[140px]">
+                                        {upcomingTrip.countryCode}
+                                    </div>
+                                </div>
+                            </Link>
+                        </section>
+                    );
+                })()}
             {/* Travel Statistics */}
             <section className="mt-10">
-                <h2 className="text-lg font-semibold">여행 통계</h2>
+                {/* <h2 className="text-lg font-semibold">여행 통계</h2> */}
 
                 {/* Travel Globe */}
                 <div className="mt-4">

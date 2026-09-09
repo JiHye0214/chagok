@@ -391,7 +391,7 @@ export default function TravelDetailPage() {
 
         const countryInfo = await getCountryInfo(result.countryCode);
 
-        setEditCountry(result.countryCode === "US" ? "United States" : countryInfo.name);
+        setEditCountry(countryInfo.name);
     };
 
     useEffect(() => {
@@ -1860,7 +1860,7 @@ export default function TravelDetailPage() {
 
                                     setEditCity(formatCityName(editCity));
                                     setEditCountryCode(editNewCityCountryCode);
-                                    setEditCountry(editNewCityCountryCode === "US" ? "United States" : countryInfo.name);
+                                    setEditCountry(countryInfo.name);
 
                                     setShowEditCityResults(false);
                                     setEditCitySearchResults([]);

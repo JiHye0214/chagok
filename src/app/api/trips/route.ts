@@ -9,7 +9,10 @@ export async function GET() {
                 t.trip_type AS "tripType",
                 t.title,
                 t.city,
-                t.country,
+                CASE
+                    WHEN t.country_code = 'US' THEN 'United States'
+                    ELSE t.country
+                END AS country,
                 t.country_code AS "countryCode",
                 t.latitude,
                 t.longitude,

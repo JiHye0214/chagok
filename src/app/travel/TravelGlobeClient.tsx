@@ -157,7 +157,7 @@ export default function TravelGlobeClient({ trips }: TravelGlobeClientProps) {
     const worldProgress = Math.min(Math.round((visitedCountryCount / 195) * 100), 100);
 
     return (
-        <div className="relative h-[390px] w-full overflow-hidden rounded-3xl bg-[#F4F8F3]">
+        <div className="relative h-[390px] w-full overflow-hidden rounded-3xl bg-[#eae6db]">
             <Canvas
                 camera={{
                     position: [-178, 173, 34],

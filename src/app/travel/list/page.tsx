@@ -264,7 +264,7 @@ export default function TravelListPage() {
 
         const countryInfo = await getCountryInfo(result.countryCode);
 
-        setCountry(result.countryCode === "US" ? "United States" : countryInfo.name);
+        setCountry(countryInfo.name);
     };
 
     /*
