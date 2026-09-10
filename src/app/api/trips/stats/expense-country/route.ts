@@ -26,6 +26,7 @@ export async function GET(request: Request) {
                 ON te.trip_id = t.id
             WHERE t.trip_type = 'completed'
               AND t.country_code = ${countryCode}
+              AND tec.name <> '총지출'
             GROUP BY tec.name
             ORDER BY amount DESC
         `;

@@ -6,13 +6,32 @@ import { CheckCircle2, Plane, Star } from "lucide-react";
 import { formatDate } from "@/lib/payPeriod";
 import BackButtonHeader from "@/components/BackButtonHeader";
 
+type TripCity = {
+    id?: number;
+    city: string;
+    latitude?: number | null;
+    longitude?: number | null;
+};
+
+type TripDestination = {
+    id?: number;
+    country: string;
+    countryCode: string;
+    cities: TripCity[];
+};
+
 type SavedTrip = {
     id: number;
     tripType: "upcoming" | "completed";
     title?: string | null;
+
+    // legacy compatibility
     city: string;
     country: string;
     countryCode: string;
+
+    destinations?: TripDestination[];
+
     startDate: string;
     endDate: string;
     people: number;
@@ -61,6 +80,47 @@ const formatCityName = (value: string) => {
         .join(" ");
 };
 
+const normalizeDestinations = (trip: SavedTrip): TripDestination[] => {
+    if (trip.destinations?.length) {
+        return trip.destinations.map((destination) => ({
+            ...destination,
+            cities: destination.cities ?? [],
+        }));
+    }
+
+    if (trip.city && trip.countryCode) {
+        return [
+            {
+                country: trip.country,
+                countryCode: trip.countryCode,
+                cities: [
+                    {
+                        city: trip.city,
+                        latitude: trip.latitude ?? null,
+                        longitude: trip.longitude ?? null,
+                    },
+                ],
+            },
+        ];
+    }
+
+    return [];
+};
+
+const getFirstCity = (trip: SavedTrip) => {
+    return trip.destinations?.[0]?.cities?.[0]?.city ?? trip.city;
+};
+
+const getDestinationLabel = (destinations: TripDestination[]) => {
+    return destinations
+        .map((destination) => {
+            const cities = destination.cities.map((city) => city.city).join(", ");
+
+            return `${destination.countryCode} · ${cities}`;
+        })
+        .join(" / ");
+};
+
 export default function TravelListPage() {
     /*
      * ---------------------------------------------------------
@@ -78,16 +138,12 @@ export default function TravelListPage() {
     const [upcomingFilter, setUpcomingFilter] = useState<UpcomingFilter>("all");
     const [isUpcomingFilterOpen, setIsUpcomingFilterOpen] = useState(false);
 
-    const [customStartDate, setCustomStartDate] = useState("");
-    const [customEndDate, setCustomEndDate] = useState("");
-
     const [completedYearFilter, setCompletedYearFilter] = useState("all");
     const [isCompletedYearFilterOpen, setIsCompletedYearFilterOpen] = useState(false);
 
     const [isTravelExpanded, setIsTravelExpanded] = useState(false);
 
     const [upcomingCustomStartDate, setUpcomingCustomStartDate] = useState("");
-
     const [upcomingCustomEndDate, setUpcomingCustomEndDate] = useState("");
 
     /*
@@ -97,21 +153,12 @@ export default function TravelListPage() {
      */
     const typeRef = useRef<HTMLDivElement>(null);
     const formRef = useRef<HTMLDivElement>(null);
-    const isSelectingCityRef = useRef(false);
 
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-
     const [isAddCityModalOpen, setIsAddCityModalOpen] = useState(false);
 
-    const [newCityCountryCode, setNewCityCountryCode] = useState("");
-
     const [tripType, setTripType] = useState<"upcoming" | "completed">("upcoming");
-
     const [addStep, setAddStep] = useState<"type" | "form">("type");
-
-    const [city, setCity] = useState("");
-    const [country, setCountry] = useState("");
-    const [countryCode, setCountryCode] = useState("");
 
     const [title, setTitle] = useState("");
     const [startDate, setStartDate] = useState("");
@@ -122,29 +169,34 @@ export default function TravelListPage() {
 
     const [savedTrip, setSavedTrip] = useState<SavedTrip | null>(null);
 
-    // 추가 도시 위경도
-    const [newCityLatitude, setNewCityLatitude] = useState("");
-    const [newCityLongitude, setNewCityLongitude] = useState("");
+    /*
+     * ---------------------------------------------------------
+     * 다중 여행지
+     * ---------------------------------------------------------
+     */
+    const [destinations, setDestinations] = useState<TripDestination[]>([]);
 
     /*
      * ---------------------------------------------------------
      * 도시 검색
      * ---------------------------------------------------------
      */
+    const [city, setCity] = useState("");
+
     const [citySearchResults, setCitySearchResults] = useState<CitySearchResult[]>([]);
-
     const [isCitySearching, setIsCitySearching] = useState(false);
-
     const [showCityResults, setShowCityResults] = useState(false);
+
+    const isSelectingCityRef = useRef(false);
 
     /*
      * ---------------------------------------------------------
-     * 지도 좌표
+     * 수동 도시 추가
      * ---------------------------------------------------------
      */
-    const [latitude, setLatitude] = useState<number | null>(null);
-
-    const [longitude, setLongitude] = useState<number | null>(null);
+    const [newCityCountryCode, setNewCityCountryCode] = useState("");
+    const [newCityLatitude, setNewCityLatitude] = useState("");
+    const [newCityLongitude, setNewCityLongitude] = useState("");
 
     /*
      * ---------------------------------------------------------
@@ -178,8 +230,6 @@ export default function TravelListPage() {
     /*
      * ---------------------------------------------------------
      * 도시 검색 API
-     *
-     * 메인 여행 추가 모달과 동일
      * ---------------------------------------------------------
      */
     useEffect(() => {
@@ -191,6 +241,8 @@ export default function TravelListPage() {
         }
 
         if (keyword.length < 2) {
+            setCitySearchResults([]);
+            setShowCityResults(false);
             return;
         }
 
@@ -210,6 +262,9 @@ export default function TravelListPage() {
                 setShowCityResults(true);
             } catch (error) {
                 console.error("도시 검색 오류:", error);
+
+                setCitySearchResults([]);
+                setShowCityResults(true);
             } finally {
                 setIsCitySearching(false);
             }
@@ -251,24 +306,89 @@ export default function TravelListPage() {
 
     /*
      * ---------------------------------------------------------
-     * 도시 선택
+     * 여행지 도시 추가
+     *
+     * 같은 국가가 있으면 그 국가 밑에 도시 추가
+     * 없으면 새로운 국가 그룹 생성
+     * ---------------------------------------------------------
+     */
+    const addDestinationCity = async (result: CitySearchResult, countryNameOverride?: string) => {
+        const countryInfo = await getCountryInfo(result.countryCode);
+
+        const countryName = countryNameOverride || countryInfo.name || getCountryName(result.countryCode);
+
+        const newCity: TripCity = {
+            city: result.name,
+            latitude: result.latitude,
+            longitude: result.longitude,
+        };
+
+        setDestinations((prev) => {
+            const existingDestination = prev.find((destination) => destination.countryCode === result.countryCode);
+
+            if (existingDestination) {
+                const isDuplicate = existingDestination.cities.some(
+                    (existingCity) => existingCity.city.toLowerCase() === result.name.toLowerCase(),
+                );
+
+                if (isDuplicate) {
+                    return prev;
+                }
+
+                return prev.map((destination) =>
+                    destination.countryCode === result.countryCode
+                        ? {
+                              ...destination,
+                              cities: [...destination.cities, newCity],
+                          }
+                        : destination,
+                );
+            }
+
+            return [
+                ...prev,
+                {
+                    country: countryName,
+                    countryCode: result.countryCode,
+                    cities: [newCity],
+                },
+            ];
+        });
+    };
+
+    /*
+     * ---------------------------------------------------------
+     * 검색 도시 선택
      * ---------------------------------------------------------
      */
     const handleCitySelect = async (result: CitySearchResult) => {
         isSelectingCityRef.current = true;
 
-        setCity(result.name);
-        setCountryCode(result.countryCode);
+        await addDestinationCity(result);
 
-        setLatitude(result.latitude);
-        setLongitude(result.longitude);
-
+        setCity("");
         setShowCityResults(false);
         setCitySearchResults([]);
+    };
 
-        const countryInfo = await getCountryInfo(result.countryCode);
-
-        setCountry(countryInfo.name);
+    /*
+     * ---------------------------------------------------------
+     * 여행지 도시 삭제
+     * ---------------------------------------------------------
+     */
+    const removeDestinationCity = (countryCode: string, cityName: string) => {
+        setDestinations((prev) =>
+            prev
+                .map((destination) =>
+                    destination.countryCode !== countryCode
+                        ? destination
+                        : {
+                              ...destination,
+                              cities: destination.cities.filter((destinationCity) => destinationCity.city !== cityName),
+                          },
+                )
+                .filter((destination) => destination.cities.length > 0),
+        );
     };
 
     /*
@@ -278,9 +398,12 @@ export default function TravelListPage() {
      */
     const resetTripForm = () => {
         setTitle("");
+
+        setDestinations([]);
+
         setCity("");
-        setCountry("");
-        setCountryCode("");
+        setCitySearchResults([]);
+        setShowCityResults(false);
 
         setStartDate("");
         setEndDate("");
@@ -289,11 +412,9 @@ export default function TravelListPage() {
         setBudget("");
         setRating(0);
 
-        setLatitude(null);
-        setLongitude(null);
-
-        setCitySearchResults([]);
-        setShowCityResults(false);
+        setNewCityCountryCode("");
+        setNewCityLatitude("");
+        setNewCityLongitude("");
     };
 
     /*
@@ -327,8 +448,6 @@ export default function TravelListPage() {
     /*
      * ---------------------------------------------------------
      * 예정된 여행 전체
-     *
-     * 필터와 관계없이 존재 여부 확인용
      * ---------------------------------------------------------
      */
     const allUpcomingTrips = useMemo(() => {
@@ -338,8 +457,6 @@ export default function TravelListPage() {
     /*
      * ---------------------------------------------------------
      * 예정된 여행
-     *
-     * 예정된 여행에만 기간 필터 적용
      * ---------------------------------------------------------
      */
     const upcomingTrips = useMemo(() => {
@@ -354,11 +471,11 @@ export default function TravelListPage() {
         }
 
         if (upcomingFilter === "custom") {
-            if (!customStartDate || !customEndDate) {
+            if (!upcomingCustomStartDate || !upcomingCustomEndDate) {
                 return sortByStartDate(upcoming);
             }
 
-            if (customStartDate > customEndDate) {
+            if (upcomingCustomStartDate > upcomingCustomEndDate) {
                 return [];
             }
 
@@ -366,7 +483,7 @@ export default function TravelListPage() {
                 upcoming.filter((trip) => {
                     const date = trip.startDate.slice(0, 10);
 
-                    return date >= customStartDate && date <= customEndDate;
+                    return date >= upcomingCustomStartDate && date <= upcomingCustomEndDate;
                 }),
             );
         }
@@ -402,7 +519,7 @@ export default function TravelListPage() {
                 return date >= today && date <= endDate;
             }),
         );
-    }, [allUpcomingTrips, upcomingFilter, customStartDate, customEndDate]);
+    }, [allUpcomingTrips, upcomingFilter, upcomingCustomStartDate, upcomingCustomEndDate]);
 
     /*
      * ---------------------------------------------------------
@@ -423,8 +540,6 @@ export default function TravelListPage() {
     /*
      * ---------------------------------------------------------
      * 다녀온 여행 표시 개수
-     *
-     * 기본 6개
      * ---------------------------------------------------------
      */
     const displayedCompletedTrips = useMemo(() => {
@@ -450,8 +565,8 @@ export default function TravelListPage() {
      * ---------------------------------------------------------
      */
     const handleSaveTrip = async () => {
-        if (!city || !country || !countryCode || !startDate || !endDate) {
-            alert("위치와 여행 정보를 모두 입력해주세요.");
+        if (destinations.length === 0 || !startDate || !endDate) {
+            alert("여행지와 여행 정보를 모두 입력해주세요.");
             return;
         }
 
@@ -460,15 +575,26 @@ export default function TravelListPage() {
             return;
         }
 
+        const firstDestination = destinations[0];
+        const firstCity = firstDestination?.cities[0];
+
+        if (!firstDestination || !firstCity) {
+            alert("여행지를 하나 이상 추가해주세요.");
+            return;
+        }
+
         const newTrip = {
             tripType,
             title,
-            city,
-            country,
-            countryCode,
 
-            latitude,
-            longitude,
+            destinations,
+
+            // 기존 API 호환용
+            city: firstCity.city,
+            country: firstDestination.country,
+            countryCode: firstDestination.countryCode,
+            latitude: firstCity.latitude ?? null,
+            longitude: firstCity.longitude ?? null,
 
             startDate,
             endDate,
@@ -542,7 +668,7 @@ export default function TravelListPage() {
 
             {/* --------------------------------------------------
             Header
-        -------------------------------------------------- */}
+            -------------------------------------------------- */}
             <BackButtonHeader
                 href="/travel"
                 title="내 여행"
@@ -552,7 +678,7 @@ export default function TravelListPage() {
             {trips.length === 0 ? (
                 /* --------------------------------------------------
                 여행 없음
-            -------------------------------------------------- */
+                -------------------------------------------------- */
                 <div className="mt-6 rounded-3xl bg-white px-5 py-10 text-center shadow-sm">
                     <p className="text-sm font-medium text-gray-900">아직 여행 기록이 없어요</p>
 
@@ -570,7 +696,7 @@ export default function TravelListPage() {
                 <>
                     {/* ==================================================
                     예정된 여행
-                ================================================== */}
+                    ================================================== */}
                     {trips.some((trip) => trip.tripType === "upcoming") && (
                         <section className="mt-10">
                             <section className="mt-10">
@@ -694,25 +820,17 @@ export default function TravelListPage() {
                                         </div>
                                     )}
                                 </div>
-
-                                {/* 예정된 여행 카드 */}
-                                {upcomingTrips.length > 0 ? (
-                                    <div className="mt-3 space-y-3">{/* 기존 upcomingTrips.map 그대로 */}</div>
-                                ) : (
-                                    <div className="mt-3 rounded-3xl bg-white px-5 py-8 text-center shadow-sm">
-                                        <p className="text-sm font-medium text-gray-900">해당 기간의 예정된 여행이 없어요</p>
-                                        <p className="mt-1 text-xs text-gray-400">다른 기간을 선택해보세요.</p>
-                                    </div>
-                                )}
                             </section>
 
                             {/* --------------------------------------------------
                             예정된 여행 리스트
-                        -------------------------------------------------- */}
+                            -------------------------------------------------- */}
                             {upcomingTrips.length > 0 ? (
                                 <div className="mt-4 space-y-3">
                                     {upcomingTrips.map((trip) => {
                                         const nights = getNights(trip.startDate, trip.endDate);
+
+                                        const tripDestinations = normalizeDestinations(trip);
 
                                         return (
                                             <Link
@@ -728,28 +846,31 @@ export default function TravelListPage() {
                                                                     {trip.title}
                                                                 </p>
 
-                                                                <div className="mt-1 flex items-center gap-1.5">
-                                                                    <img
-                                                                        src={`https://flagcdn.com/w40/${trip.countryCode.toLowerCase()}.png`}
-                                                                        alt={trip.country}
-                                                                        className="h-3 w-auto object-cover"
-                                                                    />
-
-                                                                    <p className="truncate text-sm text-gray-400">
-                                                                        {trip.city} · {trip.countryCode}
-                                                                    </p>
-                                                                </div>
+                                                                <p className="mt-1 truncate text-sm text-gray-400">
+                                                                    {getDestinationLabel(tripDestinations)}
+                                                                </p>
                                                             </>
                                                         ) : (
                                                             <div className="flex items-center gap-2">
-                                                                <img
-                                                                    src={`https://flagcdn.com/w40/${trip.countryCode.toLowerCase()}.png`}
-                                                                    alt={trip.country}
-                                                                    className="h-3 w-auto object-cover"
-                                                                />
+                                                                <div className="flex shrink-0 -space-x-1">
+                                                                    {tripDestinations.slice(0, 3).map((destination) => (
+                                                                        <img
+                                                                            key={destination.countryCode}
+                                                                            src={`https://flagcdn.com/w40/${destination.countryCode.toLowerCase()}.png`}
+                                                                            alt={destination.country}
+                                                                            className="h-3 w-auto object-cover ring-2 ring-white"
+                                                                        />
+                                                                    ))}
+                                                                </div>
 
                                                                 <p className="truncate text-lg font-semibold text-gray-900">
-                                                                    {trip.city}
+                                                                    {getFirstCity(trip)}
+                                                                    {tripDestinations.reduce(
+                                                                        (total, destination) => total + destination.cities.length,
+                                                                        0,
+                                                                    ) > 1
+                                                                        ? " 외"
+                                                                        : ""}
                                                                 </p>
                                                             </div>
                                                         )}
@@ -793,7 +914,7 @@ export default function TravelListPage() {
 
                     {/* ==================================================
                     다녀온 여행
-                ================================================== */}
+                    ================================================== */}
                     <section className={trips.some((trip) => trip.tripType === "upcoming") ? "mt-10" : "mt-8"}>
                         <div className="rounded-3xl bg-white shadow-sm">
                             <div className="flex items-center justify-between px-5 py-4">
@@ -880,12 +1001,14 @@ export default function TravelListPage() {
 
                         {/* --------------------------------------------------
                         다녀온 여행 리스트
-                    -------------------------------------------------- */}
+                        -------------------------------------------------- */}
                         {completedTrips.length > 0 ? (
                             <>
                                 <div className="mt-4 space-y-3">
                                     {displayedCompletedTrips.map((trip) => {
                                         const nights = getNights(trip.startDate, trip.endDate);
+
+                                        const tripDestinations = normalizeDestinations(trip);
 
                                         return (
                                             <Link
@@ -897,7 +1020,7 @@ export default function TravelListPage() {
                                                     <div className="min-w-0 flex-1">
                                                         <div className="flex items-center justify-between gap-3">
                                                             <p className="truncate text-lg font-semibold text-gray-900">
-                                                                {trip.title || trip.city}
+                                                                {trip.title || getFirstCity(trip)}
                                                             </p>
 
                                                             {trip.rating > 0 && (
@@ -933,17 +1056,9 @@ export default function TravelListPage() {
                                                             )}
                                                         </div>
 
-                                                        <div className="mt-1 flex items-center gap-1.5">
-                                                            <img
-                                                                src={`https://flagcdn.com/w40/${trip.countryCode.toLowerCase()}.png`}
-                                                                alt={trip.country}
-                                                                className="h-3 w-auto object-cover"
-                                                            />
-
-                                                            <p className="truncate text-sm text-gray-400">
-                                                                {trip.city} · {trip.countryCode}
-                                                            </p>
-                                                        </div>
+                                                        <p className="mt-1 truncate text-sm text-gray-400">
+                                                            {getDestinationLabel(tripDestinations)}
+                                                        </p>
 
                                                         <p className="mt-4 text-xs text-gray-500">
                                                             {formatDate(new Date(trip.startDate))} ~{" "}
@@ -970,7 +1085,7 @@ export default function TravelListPage() {
 
                                 {/* --------------------------------------------------
                                 더보기 / 접기
-                            -------------------------------------------------- */}
+                                -------------------------------------------------- */}
                                 {completedTrips.length > 6 && (
                                     <button
                                         type="button"
@@ -1000,7 +1115,7 @@ export default function TravelListPage() {
 
             {/* ==================================================
             여행 추가 완료 팝업
-        ================================================== */}
+            ================================================== */}
             {savedTrip && (
                 <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/30 px-5">
                     <div className="w-full max-w-md rounded-3xl bg-white p-5 shadow-xl">
@@ -1009,12 +1124,10 @@ export default function TravelListPage() {
                         {savedTrip.title ? (
                             <p className="mt-4 text-2xl font-bold">{savedTrip.title}</p>
                         ) : (
-                            <p className="mt-4 text-2xl font-bold">{savedTrip.city}</p>
+                            <p className="mt-4 text-2xl font-bold">{getFirstCity(savedTrip)}</p>
                         )}
 
-                        <p className="mt-2 text-sm text-gray-500">
-                            {savedTrip.city} · {savedTrip.countryCode}
-                        </p>
+                        <p className="mt-2 text-sm text-gray-500">{getDestinationLabel(normalizeDestinations(savedTrip))}</p>
 
                         <p className="mt-1 text-sm text-gray-500">
                             {(() => {
@@ -1058,7 +1171,7 @@ export default function TravelListPage() {
 
             {/* ==================================================
             여행 추가 모달
-        ================================================== */}
+            ================================================== */}
             {isAddModalOpen && (
                 <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/30 px-4 pb-4 modal-overlay">
                     <div className="modal-content w-full max-w-md overflow-hidden rounded-3xl bg-white p-5 shadow-xl">
@@ -1083,15 +1196,15 @@ export default function TravelListPage() {
                         <div
                             className={`relative mt-5 overflow-hidden transition-[height] duration-500 ease-in-out ${
                                 addStep === "form" && tripType === "upcoming"
-                                    ? "h-[666px]"
+                                    ? "h-[720px]"
                                     : addStep === "form" && tripType === "completed"
-                                      ? "h-[650px]"
+                                      ? "h-[700px]"
                                       : "h-[210px]"
                             }`}
                         >
                             {/* ==================================================
                             여행 종류 선택
-                        ================================================== */}
+                            ================================================== */}
                             <div
                                 ref={typeRef}
                                 onScroll={() => {
@@ -1152,10 +1265,10 @@ export default function TravelListPage() {
 
                             {/* ==================================================
                             입력 폼
-                        ================================================== */}
+                            ================================================== */}
                             <div
                                 ref={formRef}
-                                className={`absolute inset-0 scrollbar-hide px-1 transition-[opacity,transform] duration-500 ease-out ${
+                                className={`absolute inset-0 overflow-y-auto scrollbar-hide px-1 transition-[opacity,transform] duration-500 ease-out ${
                                     addStep === "form"
                                         ? "translate-x-0 opacity-100"
                                         : "translate-x-3 pointer-events-none opacity-0"
@@ -1197,62 +1310,82 @@ export default function TravelListPage() {
                                         />
                                     </div>
 
-                                    {/* 위치 */}
+                                    {/* ==================================================
+                                    여행지
+                                    ================================================== */}
                                     <div className="relative">
-                                        <p className="text-sm font-medium text-gray-700">위치</p>
+                                        <p className="text-sm font-medium text-gray-700">여행지</p>
 
-                                        {countryCode ? (
-                                            <div className="mt-2 flex h-[52px] w-full items-center gap-3 rounded-2xl bg-gray-50 px-4">
-                                                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-base">
-                                                    <img
-                                                        src={`https://flagcdn.com/w40/${countryCode.toLowerCase()}.png`}
-                                                        alt={country}
-                                                        className="h-3 object-cover"
-                                                    />
-                                                </span>
+                                        {/* 선택된 여행지 */}
+                                        {destinations.length > 0 && (
+                                            <div className="mt-2 space-y-2">
+                                                {destinations.map((destination) => (
+                                                    <div key={destination.countryCode} className="rounded-2xl bg-gray-50 p-4">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white">
+                                                                <img
+                                                                    src={`https://flagcdn.com/w40/${destination.countryCode.toLowerCase()}.png`}
+                                                                    alt={destination.country}
+                                                                    className="h-3 w-auto object-cover"
+                                                                />
+                                                            </span>
 
-                                                <div className="min-w-0 flex-1">
-                                                    <p className="truncate text-sm font-medium leading-4 text-gray-900">{city}</p>
+                                                            <p className="text-sm font-semibold text-gray-900">
+                                                                {destination.country}
+                                                            </p>
+                                                        </div>
 
-                                                    <p className="mt-0.5 truncate text-xs leading-3 text-gray-400">{country}</p>
-                                                </div>
+                                                        <div className="mt-3 space-y-1.5">
+                                                            {destination.cities.map((destinationCity) => (
+                                                                <div
+                                                                    key={`${destination.countryCode}-${destinationCity.city}`}
+                                                                    className="flex items-center justify-between rounded-xl bg-white px-3 py-2.5"
+                                                                >
+                                                                    <p className="truncate text-sm text-gray-700">
+                                                                        {destinationCity.city}
+                                                                    </p>
 
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setCity("");
-                                                        setCountry("");
-                                                        setCountryCode("");
-                                                        setCitySearchResults([]);
-                                                        setShowCityResults(false);
-                                                    }}
-                                                    className="shrink-0 text-xs text-gray-400"
-                                                >
-                                                    변경
-                                                </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() =>
+                                                                            removeDestinationCity(
+                                                                                destination.countryCode,
+                                                                                destinationCity.city,
+                                                                            )
+                                                                        }
+                                                                        className="ml-3 shrink-0 text-xs text-gray-400"
+                                                                    >
+                                                                        ×
+                                                                    </button>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ))}
                                             </div>
-                                        ) : (
-                                            <input
-                                                type="text"
-                                                value={city}
-                                                onChange={(e) => {
-                                                    const value = e.target.value;
-
-                                                    setCity(value);
-                                                    setCountry("");
-                                                    setCountryCode("");
-                                                    setCitySearchResults([]);
-                                                    setShowCityResults(value.trim().length >= 2);
-                                                }}
-                                                onFocus={() => {
-                                                    if (city.trim().length >= 2 && citySearchResults.length > 0) {
-                                                        setShowCityResults(true);
-                                                    }
-                                                }}
-                                                placeholder="도시를 입력해주세요 (예: New York)"
-                                                className="mt-2 h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
-                                            />
                                         )}
+
+                                        {/* 도시 검색 입력 */}
+                                        <input
+                                            type="text"
+                                            value={city}
+                                            onChange={(e) => {
+                                                const value = e.target.value;
+
+                                                setCity(value);
+
+                                                setCitySearchResults([]);
+
+                                                setShowCityResults(value.trim().length >= 2);
+                                            }}
+                                            onFocus={() => {
+                                                if (city.trim().length >= 2 && citySearchResults.length > 0) {
+                                                    setShowCityResults(true);
+                                                }
+                                            }}
+                                            placeholder="도시를 추가해주세요 (예: New York)"
+                                            className="mt-2 h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
+                                        />
 
                                         {/* 검색 결과 */}
                                         {showCityResults && (
@@ -1286,7 +1419,7 @@ export default function TravelListPage() {
                                                                     </p>
                                                                 </div>
 
-                                                                <span className="text-xs text-gray-300">→</span>
+                                                                <span className="text-xs text-gray-300">+</span>
                                                             </button>
                                                         ))}
                                                     </div>
@@ -1298,6 +1431,9 @@ export default function TravelListPage() {
                                                             type="button"
                                                             onClick={() => {
                                                                 setNewCityCountryCode("");
+                                                                setNewCityLatitude("");
+                                                                setNewCityLongitude("");
+
                                                                 setIsAddCityModalOpen(true);
                                                             }}
                                                             className="mt-3 w-full rounded-2xl bg-gray-50 px-4 py-3 text-sm font-medium text-gray-700 transition active:bg-gray-100"
@@ -1494,8 +1630,8 @@ export default function TravelListPage() {
             )}
 
             {/* ==================================================
-                    도시 추가 모달
-                ================================================== */}
+            도시 추가 모달
+            ================================================== */}
             {isAddCityModalOpen && (
                 <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/30 px-5">
                     <div className="w-full max-w-md rounded-3xl bg-white p-5 shadow-xl">
@@ -1574,20 +1710,61 @@ export default function TravelListPage() {
                                 onClick={async () => {
                                     const countryInfo = await getCountryInfo(newCityCountryCode);
 
+                                    const newCity: TripCity = {
+                                        city: formatCityName(city),
+                                        latitude: Number(newCityLatitude),
+                                        longitude: Number(newCityLongitude),
+                                    };
+
+                                    setDestinations((prev) => {
+                                        const existingDestination = prev.find(
+                                            (destination) => destination.countryCode === newCityCountryCode,
+                                        );
+
+                                        if (existingDestination) {
+                                            const isDuplicate = existingDestination.cities.some(
+                                                (existingCity) => existingCity.city.toLowerCase() === newCity.city.toLowerCase(),
+                                            );
+
+                                            if (isDuplicate) {
+                                                return prev;
+                                            }
+
+                                            return prev.map((destination) =>
+                                                destination.countryCode === newCityCountryCode
+                                                    ? {
+                                                          ...destination,
+                                                          cities: [...destination.cities, newCity],
+                                                      }
+                                                    : destination,
+                                            );
+                                        }
+
+                                        return [
+                                            ...prev,
+                                            {
+                                                country: countryInfo.name || getCountryName(newCityCountryCode),
+                                                countryCode: newCityCountryCode,
+                                                cities: [newCity],
+                                            },
+                                        ];
+                                    });
+
                                     isSelectingCityRef.current = true;
 
-                                    setCity(formatCityName(city));
-                                    setCountryCode(newCityCountryCode);
-                                    setCountry(countryInfo.name);
-                                    setLatitude(Number(newCityLatitude));
-                                    setLongitude(Number(newCityLongitude));
-                                    setShowCityResults(false);
+                                    setCity("");
                                     setCitySearchResults([]);
+                                    setShowCityResults(false);
+
+                                    setNewCityCountryCode("");
+                                    setNewCityLatitude("");
+                                    setNewCityLongitude("");
+
                                     setIsAddCityModalOpen(false);
                                 }}
                                 className="flex-1 rounded-2xl bg-black py-4 text-sm font-medium text-white disabled:opacity-30"
                             >
-                                선택하기
+                                추가하기
                             </button>
                         </div>
                     </div>

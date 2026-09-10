@@ -21,13 +21,33 @@ import {
 } from "lucide-react";
 import { formatDate } from "@/lib/payPeriod";
 
+type TripCity = {
+    id?: number;
+    city: string;
+    latitude?: number | null;
+    longitude?: number | null;
+};
+
+type TripDestination = {
+    id?: number;
+    country: string;
+    countryCode: string;
+    cities: TripCity[];
+};
+
 type SavedTrip = {
     id: number;
     tripType: "upcoming" | "completed";
     title: string | null;
+
+    // 기존 호환 필드
     city: string;
     country: string;
     countryCode: string;
+
+    // 멀티 국가 / 멀티 도시
+    destinations?: TripDestination[];
+
     startDate: string;
     endDate: string;
     people: number;
@@ -36,9 +56,9 @@ type SavedTrip = {
     rating: number;
     totalExpense?: number;
 
-    // 🌍 지도용 좌표
-    latitude: number;
-    longitude: number;
+    // 기존 지도용 좌표
+    latitude?: number | null;
+    longitude?: number | null;
 };
 
 // 도시 검색
@@ -116,8 +136,49 @@ const calculateExpression = (value: string) => {
     }
 };
 
+// 기존 단일 여행지 데이터도 멀티 목적지 구조로 변환
+const normalizeDestinations = (trip: SavedTrip): TripDestination[] => {
+    if (trip.destinations?.length) {
+        return trip.destinations.map((destination) => ({
+            ...destination,
+            cities: destination.cities ?? [],
+        }));
+    }
+
+    if (trip.city && trip.countryCode) {
+        return [
+            {
+                country: trip.country,
+                countryCode: trip.countryCode,
+                cities: [
+                    {
+                        city: trip.city,
+                        latitude: trip.latitude ?? null,
+                        longitude: trip.longitude ?? null,
+                    },
+                ],
+            },
+        ];
+    }
+
+    return [];
+};
+
+const getFirstCity = (trip: SavedTrip) => {
+    return trip.destinations?.[0]?.cities?.[0]?.city ?? trip.city;
+};
+
+const getDestinationLabel = (destinations: TripDestination[]) => {
+    return destinations
+        .map((destination) => {
+            const cities = destination.cities.map((city) => city.city).join(", ");
+
+            return `${destination.countryCode} · ${cities}`;
+        })
+        .join(" / ");
+};
+
 export default function TravelDetailPage() {
-    const isCityInputChangedRef = useRef(false);
     const params = useParams();
 
     const [trip, setTrip] = useState<SavedTrip | null>(null);
@@ -131,8 +192,10 @@ export default function TravelDetailPage() {
     const [editStartDate, setEditStartDate] = useState("");
     const [editEndDate, setEditEndDate] = useState("");
     const [editPeople, setEditPeople] = useState("1");
-    const [editCity, setEditCity] = useState("");
     const [editRating, setEditRating] = useState<number>(0);
+
+    // 멀티 국가 / 멀티 도시
+    const [editDestinations, setEditDestinations] = useState<TripDestination[]>([]);
 
     const [expenseCells, setExpenseCells] = useState<Record<string, string>>({});
     const [selectedCell, setSelectedCell] = useState<string | null>(null);
@@ -141,19 +204,27 @@ export default function TravelDetailPage() {
     const [isCategoryLoading, setIsCategoryLoading] = useState(false);
 
     // 도시 검색
+    const isCityInputChangedRef = useRef(false);
     const isSelectingCityRef = useRef(false);
 
-    const [editCountry, setEditCountry] = useState("");
-    const [editCountryCode, setEditCountryCode] = useState("");
-
+    const [editCitySearch, setEditCitySearch] = useState("");
     const [editCitySearchResults, setEditCitySearchResults] = useState<CitySearchResult[]>([]);
     const [showEditCityResults, setShowEditCityResults] = useState(false);
     const [isEditCitySearching, setIsEditCitySearching] = useState(false);
+
+    // 수동 도시 추가
     const [isAddEditCityModalOpen, setIsAddEditCityModalOpen] = useState(false);
     const [editNewCityCountryCode, setEditNewCityCountryCode] = useState("");
+    const [editNewCityName, setEditNewCityName] = useState("");
+    const [editNewCityLatitude, setEditNewCityLatitude] = useState<string>("");
+    const [editNewCityLongitude, setEditNewCityLongitude] = useState<string>("");
 
-    const [editLatitude, setEditLatitude] = useState<number | null>(null);
-    const [editLongitude, setEditLongitude] = useState<number | null>(null);
+    // 여행지 드래그앤드랍
+    const [draggedDestinationIndex, setDraggedDestinationIndex] = useState<number | null>(null);
+    const [draggedCity, setDraggedCity] = useState<{
+        destinationIndex: number;
+        cityIndex: number;
+    } | null>(null);
 
     // 카테고리 드래그앤드랍
     const [draggedCategoryId, setDraggedCategoryId] = useState<number | null>(null);
@@ -164,6 +235,9 @@ export default function TravelDetailPage() {
     const [displayCategoryIndex, setDisplayCategoryIndex] = useState(0);
     const [animatedAmount, setAnimatedAmount] = useState(0);
     const [animatedPercentage, setAnimatedPercentage] = useState(0);
+
+    // 여행 삭제
+    const [isDeletingTrip, setIsDeletingTrip] = useState(false);
 
     useEffect(() => {
         const fetchTrip = async () => {
@@ -186,18 +260,14 @@ export default function TravelDetailPage() {
                 setTrip(foundTrip ?? null);
 
                 if (foundTrip) {
+                    const normalizedDestinations = normalizeDestinations(foundTrip);
+
                     setEditTitle(foundTrip.title ?? "");
                     setEditStartDate(foundTrip.startDate.slice(0, 10));
                     setEditEndDate(foundTrip.endDate.slice(0, 10));
                     setEditPeople(String(foundTrip.people));
                     setEditRating(Number(foundTrip.rating) || 0);
-
-                    setEditCity(foundTrip.city);
-                    setEditCountry(foundTrip.country);
-                    setEditCountryCode(foundTrip.countryCode);
-
-                    setEditLatitude(Number(foundTrip.latitude) || null);
-                    setEditLongitude(Number(foundTrip.longitude) || null);
+                    setEditDestinations(normalizedDestinations);
                 }
             } catch (error) {
                 console.error("여행 데이터를 불러오지 못했습니다.", error);
@@ -304,7 +374,7 @@ export default function TravelDetailPage() {
 
     // 위치 검색 API - 여행 정보 수정
     useEffect(() => {
-        const keyword = editCity.trim();
+        const keyword = editCitySearch.trim();
 
         if (!isEditingTrip || isAddEditCityModalOpen || !isCityInputChangedRef.current) {
             setEditCitySearchResults([]);
@@ -343,7 +413,7 @@ export default function TravelDetailPage() {
         return () => {
             window.clearTimeout(timer);
         };
-    }, [editCity, isEditingTrip, isAddEditCityModalOpen]);
+    }, [editCitySearch, isEditingTrip, isAddEditCityModalOpen]);
 
     const getCountryName = (countryCode: string) => {
         try {
@@ -381,19 +451,264 @@ export default function TravelDetailPage() {
         }
     };
 
-    const handleEditCitySelect = async (result: CitySearchResult) => {
-        setEditCity(result.name);
-        setEditCountryCode(result.countryCode);
+    // 검색 결과 도시 추가
+    const handleAddDestinationCity = async (result: CitySearchResult) => {
+        if (isSelectingCityRef.current) {
+            return;
+        }
 
-        setEditLatitude(result.latitude);
-        setEditLongitude(result.longitude);
+        isSelectingCityRef.current = true;
 
-        setShowEditCityResults(false);
+        try {
+            const countryInfo = await getCountryInfo(result.countryCode);
+
+            const cityName = result.name.trim();
+
+            if (!cityName) {
+                return;
+            }
+
+            setEditDestinations((prev) => {
+                const destinationIndex = prev.findIndex(
+                    (destination) => destination.countryCode.toUpperCase() === result.countryCode.toUpperCase(),
+                );
+
+                if (destinationIndex === -1) {
+                    return [
+                        ...prev,
+                        {
+                            country: countryInfo.name || getCountryName(result.countryCode),
+                            countryCode: result.countryCode,
+                            cities: [
+                                {
+                                    city: cityName,
+                                    latitude: Number(result.latitude),
+                                    longitude: Number(result.longitude),
+                                },
+                            ],
+                        },
+                    ];
+                }
+
+                const destination = prev[destinationIndex];
+
+                const alreadyExists = destination.cities.some(
+                    (city) => city.city.trim().toLowerCase() === cityName.toLowerCase(),
+                );
+
+                if (alreadyExists) {
+                    return prev;
+                }
+
+                return prev.map((item, index) =>
+                    index === destinationIndex
+                        ? {
+                              ...item,
+                              cities: [
+                                  ...item.cities,
+                                  {
+                                      city: cityName,
+                                      latitude: Number(result.latitude),
+                                      longitude: Number(result.longitude),
+                                  },
+                              ],
+                          }
+                        : item,
+                );
+            });
+
+            setEditCitySearch("");
+            setEditCitySearchResults([]);
+            setShowEditCityResults(false);
+        } finally {
+            isSelectingCityRef.current = false;
+        }
+    };
+
+    // 여행지 도시 삭제
+    const removeDestinationCity = (countryCode: string, cityName: string) => {
+        setEditDestinations((prev) =>
+            prev
+                .map((destination) =>
+                    destination.countryCode !== countryCode
+                        ? destination
+                        : {
+                              ...destination,
+                              cities: destination.cities.filter((city) => city.city !== cityName),
+                          },
+                )
+                .filter((destination) => destination.cities.length > 0),
+        );
+    };
+
+    // 수동 도시 추가
+    const handleAddManualDestinationCity = async () => {
+        const cityName = formatCityName(editNewCityName);
+        const countryCode = editNewCityCountryCode.trim().toUpperCase();
+
+        const latitude = editNewCityLatitude.trim() === "" ? null : Number(editNewCityLatitude);
+
+        const longitude = editNewCityLongitude.trim() === "" ? null : Number(editNewCityLongitude);
+
+        if (!cityName || !countryCode) {
+            alert("도시와 국가를 입력해주세요.");
+            return;
+        }
+
+        if (latitude === null || longitude === null || Number.isNaN(latitude) || Number.isNaN(longitude)) {
+            alert("위치 정보를 입력해주세요.");
+            return;
+        }
+
+        const countryInfo = await getCountryInfo(countryCode);
+
+        setEditDestinations((prev) => {
+            const destinationIndex = prev.findIndex((destination) => destination.countryCode.toUpperCase() === countryCode);
+
+            if (destinationIndex === -1) {
+                return [
+                    ...prev,
+                    {
+                        country: countryInfo.name || getCountryName(countryCode),
+                        countryCode,
+                        cities: [
+                            {
+                                city: cityName,
+                                latitude,
+                                longitude,
+                            },
+                        ],
+                    },
+                ];
+            }
+
+            const destination = prev[destinationIndex];
+
+            const alreadyExists = destination.cities.some((city) => city.city.trim().toLowerCase() === cityName.toLowerCase());
+
+            if (alreadyExists) {
+                return prev;
+            }
+
+            return prev.map((item, index) =>
+                index === destinationIndex
+                    ? {
+                          ...item,
+                          cities: [
+                              ...item.cities,
+                              {
+                                  city: cityName,
+                                  latitude,
+                                  longitude,
+                              },
+                          ],
+                      }
+                    : item,
+            );
+        });
+
+        setEditNewCityName("");
+        setEditNewCityCountryCode("");
+        setEditNewCityLatitude("");
+        setEditNewCityLongitude("");
+        setIsAddEditCityModalOpen(false);
+        setEditCitySearch("");
         setEditCitySearchResults([]);
+        setShowEditCityResults(false);
+    };
 
-        const countryInfo = await getCountryInfo(result.countryCode);
+    // ==============================
+    // 여행지 드래그앤드랍
+    // ==============================
 
-        setEditCountry(countryInfo.name);
+    // 국가 드래그 시작
+    const handleDestinationDragStart = (destinationIndex: number) => {
+        setDraggedDestinationIndex(destinationIndex);
+    };
+
+    // 국가 드래그 종료
+    const handleDestinationDragEnd = () => {
+        setDraggedDestinationIndex(null);
+    };
+
+    // 국가 드래그 오버
+    const handleDestinationDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+        event.preventDefault();
+    };
+
+    // 국가 드롭
+    const handleDestinationDrop = (targetIndex: number) => {
+        if (draggedDestinationIndex === null || draggedDestinationIndex === targetIndex) {
+            return;
+        }
+
+        setEditDestinations((prev) => {
+            const reordered = [...prev];
+
+            const [draggedDestination] = reordered.splice(draggedDestinationIndex, 1);
+
+            reordered.splice(targetIndex, 0, draggedDestination);
+
+            return reordered;
+        });
+
+        setDraggedDestinationIndex(null);
+    };
+
+    // 도시 드래그 시작
+    const handleCityDragStart = (destinationIndex: number, cityIndex: number) => {
+        setDraggedCity({
+            destinationIndex,
+            cityIndex,
+        });
+    };
+
+    // 도시 드래그 종료
+    const handleCityDragEnd = () => {
+        setDraggedCity(null);
+    };
+
+    // 도시 드래그 오버
+    const handleCityDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+        event.preventDefault();
+    };
+
+    // 도시 드롭
+    const handleCityDrop = (destinationIndex: number, targetCityIndex: number) => {
+        if (!draggedCity) {
+            return;
+        }
+
+        if (draggedCity.destinationIndex !== destinationIndex) {
+            setDraggedCity(null);
+            return;
+        }
+
+        if (draggedCity.cityIndex === targetCityIndex) {
+            setDraggedCity(null);
+            return;
+        }
+
+        setEditDestinations((prev) =>
+            prev.map((destination, index) => {
+                if (index !== destinationIndex) {
+                    return destination;
+                }
+
+                const cities = [...destination.cities];
+
+                const [draggedCityItem] = cities.splice(draggedCity.cityIndex, 1);
+
+                cities.splice(targetCityIndex, 0, draggedCityItem);
+
+                return {
+                    ...destination,
+                    cities,
+                };
+            }),
+        );
+
+        setDraggedCity(null);
     };
 
     useEffect(() => {
@@ -532,7 +847,9 @@ export default function TravelDetailPage() {
 
     const nights = getNights(trip.startDate, trip.endDate);
 
-    const displayTitle = trip.title?.trim() || trip.city;
+    const destinations = normalizeDestinations(trip);
+
+    const displayTitle = trip.title?.trim() || getFirstCity(trip);
 
     const handleCellChange = (categoryId: number, date: Date, value: string) => {
         const key = getCellKey(categoryId, date);
@@ -552,15 +869,14 @@ export default function TravelDetailPage() {
         setEditStartDate(trip.startDate.slice(0, 10));
         setEditEndDate(trip.endDate.slice(0, 10));
         setEditPeople(String(trip.people));
-        setEditCity(trip.city);
         setEditRating(Number(trip.rating) || 0);
+        setEditDestinations(normalizeDestinations(trip));
+
+        setEditCitySearch("");
+        setEditCitySearchResults([]);
+        setShowEditCityResults(false);
 
         setIsEditingTrip(true);
-
-        setEditCountry(trip.country);
-        setEditCountryCode(trip.countryCode);
-        setEditLatitude(Number(trip.latitude) || null);
-        setEditLongitude(Number(trip.longitude) || null);
     };
 
     const handleCancelEditTrip = () => {
@@ -570,26 +886,28 @@ export default function TravelDetailPage() {
         setEditStartDate(trip.startDate.slice(0, 10));
         setEditEndDate(trip.endDate.slice(0, 10));
         setEditPeople(String(trip.people));
-        setEditCity(trip.city);
         setEditRating(Number(trip.rating) || 0);
+        setEditDestinations(normalizeDestinations(trip));
 
+        setEditCitySearch("");
+        setEditCitySearchResults([]);
+        setShowEditCityResults(false);
+
+        setIsAddEditCityModalOpen(false);
         setIsEditingTrip(false);
-
-        setEditCountry(trip.country);
-        setEditCountryCode(trip.countryCode);
-        setEditLatitude(Number(trip.latitude) || null);
-        setEditLongitude(Number(trip.longitude) || null);
     };
 
     const handleSaveTrip = async () => {
         if (!trip) return;
 
         const title = editTitle.trim();
-        const city = editCity.trim();
         const people = Number(editPeople);
 
-        if (!city) {
-            alert("여행지를 입력해주세요.");
+        const firstDestination = editDestinations[0];
+        const firstCity = firstDestination?.cities[0];
+
+        if (!firstDestination || !firstCity) {
+            alert("여행지를 하나 이상 추가해주세요.");
             return;
         }
 
@@ -608,16 +926,8 @@ export default function TravelDetailPage() {
             return;
         }
 
-        if (
-            !editCity.trim() ||
-            !editCountry ||
-            !editCountryCode ||
-            editLatitude === null ||
-            editLongitude === null ||
-            Number.isNaN(editLatitude) ||
-            Number.isNaN(editLongitude)
-        ) {
-            alert("여행지와 위치 정보를 입력해주세요.");
+        if (!firstCity.city.trim() || !firstDestination.country || !firstDestination.countryCode) {
+            alert("여행지와 국가 정보를 입력해주세요.");
             return;
         }
 
@@ -632,18 +942,21 @@ export default function TravelDetailPage() {
                 body: JSON.stringify({
                     title: title || null,
 
-                    city: editCity,
-                    country: editCountry,
-                    countryCode: editCountryCode,
+                    // 멀티 국가 / 멀티 도시
+                    destinations: editDestinations,
+
+                    // 기존 API 호환
+                    city: firstCity.city,
+                    country: firstDestination.country,
+                    countryCode: firstDestination.countryCode,
+                    latitude: firstCity.latitude ?? null,
+                    longitude: firstCity.longitude ?? null,
 
                     startDate: editStartDate,
                     endDate: editEndDate,
                     people,
 
                     rating: trip.tripType === "completed" ? Number(editRating) || 0 : 0,
-
-                    latitude: editLatitude,
-                    longitude: editLongitude,
                 }),
             });
 
@@ -653,25 +966,55 @@ export default function TravelDetailPage() {
 
             const updatedTrip: SavedTrip = await response.json();
 
+            const normalizedUpdatedDestinations = normalizeDestinations(updatedTrip);
+
             setTrip(updatedTrip);
 
             setEditTitle(updatedTrip.title ?? "");
             setEditStartDate(updatedTrip.startDate.slice(0, 10));
             setEditEndDate(updatedTrip.endDate.slice(0, 10));
             setEditPeople(String(updatedTrip.people));
-            setEditCity(updatedTrip.city);
             setEditRating(Number(updatedTrip.rating) || 0);
-            setIsEditingTrip(false);
-            setEditLatitude(Number(updatedTrip.latitude) || null);
-            setEditLongitude(Number(updatedTrip.longitude) || null);
+            setEditDestinations(normalizedUpdatedDestinations);
 
-            setEditCountry(updatedTrip.country);
-            setEditCountryCode(updatedTrip.countryCode);
+            setEditCitySearch("");
+            setEditCitySearchResults([]);
+            setShowEditCityResults(false);
+
+            setIsEditingTrip(false);
         } catch (error) {
             console.error("여행 수정 실패:", error);
             alert("여행 정보를 수정하지 못했어요.");
         } finally {
             setIsSavingTrip(false);
+        }
+    };
+
+    const handleDeleteTrip = async () => {
+        if (!trip?.id || isDeletingTrip) return;
+
+        const confirmed = window.confirm(
+            `"${trip.title?.trim() || trip.city}" 여행을 삭제할까요?\n여행 정보와 입력한 경비가 모두 삭제됩니다.\n삭제한 내용은 복구할 수 없습니다.`,
+        );
+
+        if (!confirmed) return;
+
+        setIsDeletingTrip(true);
+
+        try {
+            const response = await fetch(`/api/trips/${trip.id}`, {
+                method: "DELETE",
+            });
+
+            if (!response.ok) {
+                throw new Error("여행 삭제 실패");
+            }
+
+            window.location.href = "/travel/list";
+        } catch (error) {
+            console.error("여행 삭제 실패:", error);
+            alert("여행을 삭제하지 못했어요. 다시 시도해주세요.");
+            setIsDeletingTrip(false);
         }
     };
 
@@ -1002,31 +1345,45 @@ export default function TravelDetailPage() {
                     {!isEditingTrip ? (
                         <>
                             <div className="flex items-start justify-between gap-4">
-                                <div className="flex items-center gap-3">
-                                    {/* Flag */}
-                                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white shadow-sm">
-                                        <img
-                                            src={`https://flagcdn.com/w40/${trip.countryCode.toLowerCase()}.png`}
-                                            alt={trip.country}
-                                            className="h-3 object-cover"
-                                        />
-                                    </div>
+                                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                    {destinations.map((destination) => (
+                                        <div
+                                            key={`${destination.countryCode}-${destination.country}`}
+                                            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white shadow-sm"
+                                        >
+                                            <img
+                                                src={`https://flagcdn.com/w40/${destination.countryCode.toLowerCase()}.png`}
+                                                alt={destination.country}
+                                                className="h-3 object-cover"
+                                            />
+                                        </div>
+                                    ))}
                                 </div>
 
-                                <button
-                                    type="button"
-                                    onClick={handleStartEditTrip}
-                                    className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-50 text-gray-500 transition hover:bg-gray-100"
-                                    aria-label="여행 정보 수정"
-                                >
-                                    <Pencil size={15} strokeWidth={1.8} />
-                                </button>
+                                <div className="flex shrink-0 items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={handleStartEditTrip}
+                                        className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-50 text-gray-500 transition hover:bg-gray-100"
+                                        aria-label="여행 정보 수정"
+                                    >
+                                        <Pencil size={15} strokeWidth={1.8} />
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={handleDeleteTrip}
+                                        disabled={isDeletingTrip}
+                                        className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-50 text-gray-500 transition hover:bg-red-50 hover:text-red-500 disabled:opacity-50"
+                                        aria-label="여행 삭제"
+                                    >
+                                        <Trash2 size={15} strokeWidth={1.8} />
+                                    </button>
+                                </div>
                             </div>
 
                             {/* Location */}
-                            <p className="mt-6 text-sm text-gray-500">
-                                {trip.city} · {trip.countryCode}
-                            </p>
+                            <p className="mt-6 text-sm leading-6 text-gray-500">{getDestinationLabel(destinations)}</p>
 
                             {/* Title */}
                             <h1 className="mt-2 text-3xl font-bold tracking-tight text-gray-950">{displayTitle}</h1>
@@ -1050,20 +1407,20 @@ export default function TravelDetailPage() {
                                     {trip.rating > 0 ? (
                                         <div className="mt-5 flex items-center py-1">
                                             <div className="flex gap-0.5">
-                                                {Array.from({ length: 5 }).map((_, index) => {
+                                                {Array.from({
+                                                    length: 5,
+                                                }).map((_, index) => {
                                                     const starValue = index + 1;
                                                     const fillAmount = Math.min(Math.max(trip.rating - index, 0), 1);
 
                                                     return (
                                                         <div key={index} className="relative h-[18px] w-[18px]">
-                                                            {/* 빈 별 */}
                                                             <Star
                                                                 size={18}
                                                                 strokeWidth={1.8}
                                                                 className="absolute left-0 top-0 text-gray-200"
                                                             />
 
-                                                            {/* 채워진 별 */}
                                                             {fillAmount > 0 && (
                                                                 <div
                                                                     className="absolute left-0 top-0 overflow-hidden"
@@ -1135,126 +1492,205 @@ export default function TravelDetailPage() {
                                     type="text"
                                     value={editTitle}
                                     onChange={(event) => setEditTitle(event.target.value)}
-                                    placeholder={trip.city}
-                                    className="mt-2 w-full rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3 text-sm text-gray-900 outline-none transition "
+                                    placeholder={getFirstCity(trip)}
+                                    className="mt-2 w-full rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3 text-sm text-gray-900 outline-none transition"
                                 />
                             </div>
 
                             {/* 여행지 */}
-                            <div className="relative mt-6">
+                            <div className="mt-6">
                                 <p className="text-xs font-medium text-gray-400">여행지</p>
 
-                                {editCountryCode ? (
-                                    <div className="mt-2 flex h-[52px] w-full items-center gap-3 rounded-2xl bg-gray-50 px-4">
-                                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-base">
-                                            <img
-                                                src={`https://flagcdn.com/w40/${editCountryCode.toLowerCase()}.png`}
-                                                alt={editCountry}
-                                                className="h-3 object-cover"
-                                            />
-                                        </span>
+                                {/* 현재 목적지 목록 */}
+                                <div className="mt-2 space-y-3">
+                                    {editDestinations.map((destination, destinationIndex) => {
+                                        const isDraggingDestination = draggedDestinationIndex === destinationIndex;
 
-                                        <div className="min-w-0 flex-1">
-                                            <p className="truncate text-sm font-medium leading-4 text-gray-900">{editCity}</p>
+                                        return (
+                                            <div
+                                                key={`${destination.countryCode}-${destination.country}-${destination.id ?? "new"}`}
+                                                onDragOver={handleDestinationDragOver}
+                                                onDrop={() => handleDestinationDrop(destinationIndex)}
+                                                className={`rounded-2xl bg-gray-50 p-4 transition ${
+                                                    isDraggingDestination ? "opacity-40" : ""
+                                                }`}
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    {/* 국가 드래그 핸들 */}
+                                                    <div
+                                                        draggable
+                                                        onDragStart={(event) => {
+                                                            event.stopPropagation();
+                                                            handleDestinationDragStart(destinationIndex);
+                                                        }}
+                                                        onDragEnd={handleDestinationDragEnd}
+                                                        className="flex h-8 w-5 shrink-0 cursor-grab items-center justify-center text-gray-300 active:cursor-grabbing"
+                                                        aria-label={`${destination.country} 순서 변경`}
+                                                        role="button"
+                                                        tabIndex={0}
+                                                    >
+                                                        <GripVertical size={16} strokeWidth={1.8} />
+                                                    </div>
 
-                                            <p className="mt-0.5 truncate text-xs leading-3 text-gray-400">{editCountry}</p>
+                                                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-base">
+                                                        <img
+                                                            src={`https://flagcdn.com/w40/${destination.countryCode.toLowerCase()}.png`}
+                                                            alt={destination.country}
+                                                            className="h-3 object-cover"
+                                                        />
+                                                    </span>
+
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="truncate text-sm font-medium text-gray-900">
+                                                            {destination.country}
+                                                        </p>
+
+                                                        <p className="mt-0.5 text-xs text-gray-400">{destination.countryCode}</p>
+                                                    </div>
+                                                </div>
+
+                                                <div className="mt-3 space-y-2">
+                                                    {destination.cities.map((city, cityIndex) => {
+                                                        const isDraggingCity =
+                                                            draggedCity?.destinationIndex === destinationIndex &&
+                                                            draggedCity?.cityIndex === cityIndex;
+
+                                                        return (
+                                                            <div
+                                                                key={`${destination.countryCode}-${city.city}`}
+                                                                onDragOver={handleCityDragOver}
+                                                                onDrop={() => handleCityDrop(destinationIndex, cityIndex)}
+                                                                className={`flex items-center gap-2 rounded-xl bg-white px-3 py-3 transition ${
+                                                                    isDraggingCity ? "opacity-40" : ""
+                                                                }`}
+                                                            >
+                                                                {/* 도시 드래그 핸들 */}
+                                                                <div
+                                                                    draggable
+                                                                    onDragStart={(event) => {
+                                                                        event.stopPropagation();
+                                                                        handleCityDragStart(destinationIndex, cityIndex);
+                                                                    }}
+                                                                    onDragEnd={handleCityDragEnd}
+                                                                    className="flex h-7 w-5 shrink-0 cursor-grab items-center justify-center text-gray-300 active:cursor-grabbing"
+                                                                    aria-label={`${city.city} 순서 변경`}
+                                                                    role="button"
+                                                                    tabIndex={0}
+                                                                >
+                                                                    <GripVertical size={15} strokeWidth={1.8} />
+                                                                </div>
+
+                                                                <div className="min-w-0 flex-1">
+                                                                    <p className="truncate text-sm text-gray-800">{city.city}</p>
+                                                                </div>
+
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() =>
+                                                                        removeDestinationCity(destination.countryCode, city.city)
+                                                                    }
+                                                                    className="shrink-0 text-xs text-gray-400 transition hover:text-gray-700"
+                                                                    aria-label={`${city.city} 삭제`}
+                                                                >
+                                                                    삭제
+                                                                </button>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+
+                                    {editDestinations.length === 0 && (
+                                        <div className="rounded-2xl bg-gray-50 px-4 py-4">
+                                            <p className="text-sm text-gray-400">여행지를 하나 이상 추가해주세요.</p>
                                         </div>
+                                    )}
+                                </div>
 
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setEditCity("");
-                                                setEditCountry("");
-                                                setEditCountryCode("");
-                                                setEditCitySearchResults([]);
-                                                setShowEditCityResults(false);
-                                                setEditLatitude(null);
-                                                setEditLongitude(null);
-                                            }}
-                                            className="shrink-0 text-xs text-gray-400"
-                                        >
-                                            변경
-                                        </button>
-                                    </div>
-                                ) : (
+                                {/* 도시 검색 */}
+                                <div className="relative mt-3">
                                     <input
                                         type="text"
-                                        value={editCity}
-                                        onChange={(e) => {
-                                            const value = e.target.value;
+                                        value={editCitySearch}
+                                        onChange={(event) => {
+                                            const value = event.target.value;
 
                                             isCityInputChangedRef.current = true;
 
-                                            setEditCity(value);
-                                            setEditCountry("");
-                                            setEditCountryCode("");
+                                            setEditCitySearch(value);
                                             setEditCitySearchResults([]);
                                             setShowEditCityResults(value.trim().length >= 2);
                                         }}
                                         onFocus={() => {
-                                            if (editCity.trim().length >= 2 && editCitySearchResults.length > 0) {
+                                            if (editCitySearch.trim().length >= 2 && editCitySearchResults.length > 0) {
                                                 setShowEditCityResults(true);
                                             }
                                         }}
-                                        placeholder="도시를 입력해주세요 (예: New York)"
-                                        className="mt-2 h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
+                                        placeholder="도시를 추가해주세요 (예: New York)"
+                                        className="h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
                                     />
-                                )}
 
-                                {/* 검색 결과 */}
-                                {showEditCityResults && (
-                                    <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-2xl bg-white shadow-lg ring-1 ring-black/5">
-                                        {isEditCitySearching ? (
-                                            <div className="px-4 py-4 text-sm text-gray-400">도시를 찾고 있어요...</div>
-                                        ) : editCitySearchResults.length > 0 ? (
-                                            <div className="max-h-64 overflow-y-auto scrollbar-hide">
-                                                {editCitySearchResults.map((result) => (
+                                    {/* 검색 결과 */}
+                                    {showEditCityResults && (
+                                        <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-2xl bg-white shadow-lg ring-1 ring-black/5">
+                                            {isEditCitySearching ? (
+                                                <div className="px-4 py-4 text-sm text-gray-400">도시를 찾고 있어요...</div>
+                                            ) : editCitySearchResults.length > 0 ? (
+                                                <div className="max-h-64 overflow-y-auto scrollbar-hide">
+                                                    {editCitySearchResults.map((result) => (
+                                                        <button
+                                                            key={`${result.name}-${result.countryCode}`}
+                                                            type="button"
+                                                            onClick={() => handleAddDestinationCity(result)}
+                                                            className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition hover:bg-gray-50 active:bg-gray-100"
+                                                        >
+                                                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-50 text-lg">
+                                                                <img
+                                                                    src={`https://flagcdn.com/w40/${result.countryCode.toLowerCase()}.png`}
+                                                                    alt={getCountryName(result.countryCode)}
+                                                                    className="h-3 object-cover"
+                                                                />
+                                                            </span>
+
+                                                            <div className="min-w-0 flex-1">
+                                                                <p className="truncate text-sm font-medium text-gray-900">
+                                                                    {result.name}
+                                                                </p>
+
+                                                                <p className="mt-0.5 truncate text-xs text-gray-400">
+                                                                    {getCountryName(result.countryCode)}
+                                                                </p>
+                                                            </div>
+
+                                                            <span className="text-xs text-gray-300">+</span>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <div className="px-4 py-4">
+                                                    <p className="text-sm text-gray-400">일치하는 도시를 찾지 못했어요.</p>
+
                                                     <button
-                                                        key={`${result.name}-${result.countryCode}`}
                                                         type="button"
-                                                        onClick={() => handleEditCitySelect(result)}
-                                                        className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition hover:bg-gray-50 active:bg-gray-100"
+                                                        onClick={() => {
+                                                            setEditNewCityName(editCitySearch);
+                                                            setEditNewCityCountryCode("");
+                                                            setEditNewCityLatitude("");
+                                                            setEditNewCityLongitude("");
+                                                            setShowEditCityResults(false);
+                                                            setIsAddEditCityModalOpen(true);
+                                                        }}
+                                                        className="mt-3 w-full rounded-2xl bg-gray-50 px-4 py-3 text-sm font-medium text-gray-700 transition active:bg-gray-100"
                                                     >
-                                                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-50 text-lg">
-                                                            <img
-                                                                src={`https://flagcdn.com/w40/${result.countryCode.toLowerCase()}.png`}
-                                                                alt={getCountryName(result.countryCode)}
-                                                                className="h-3 object-cover"
-                                                            />
-                                                        </span>
-
-                                                        <div className="min-w-0 flex-1">
-                                                            <p className="truncate text-sm font-medium text-gray-900">
-                                                                {result.name}
-                                                            </p>
-
-                                                            <p className="mt-0.5 truncate text-xs text-gray-400">
-                                                                {getCountryName(result.countryCode)}
-                                                            </p>
-                                                        </div>
-
-                                                        <span className="text-xs text-gray-300">→</span>
+                                                        ＋ 이 도시 추가하기
                                                     </button>
-                                                ))}
-                                            </div>
-                                        ) : (
-                                            <div className="px-4 py-4">
-                                                <p className="text-sm text-gray-400">일치하는 도시를 찾지 못했어요.</p>
-
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setEditNewCityCountryCode("");
-                                                        setIsAddEditCityModalOpen(true);
-                                                    }}
-                                                    className="mt-3 w-full rounded-2xl bg-gray-50 px-4 py-3 text-sm font-medium text-gray-700 transition active:bg-gray-100"
-                                                >
-                                                    ＋ 이 도시 추가하기
-                                                </button>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
 
                             {/* 일정 */}
@@ -1266,14 +1702,14 @@ export default function TravelDetailPage() {
                                         type="date"
                                         value={editStartDate}
                                         onChange={(event) => setEditStartDate(event.target.value)}
-                                        className="w-full rounded-2xl border border-gray-100 bg-gray-50 px-3 py-3 text-sm text-gray-900 outline-none transition "
+                                        className="w-full rounded-2xl border border-gray-100 bg-gray-50 px-3 py-3 text-sm text-gray-900 outline-none transition"
                                     />
 
                                     <input
                                         type="date"
                                         value={editEndDate}
                                         onChange={(event) => setEditEndDate(event.target.value)}
-                                        className="w-full rounded-2xl border border-gray-100 bg-gray-50 px-3 py-3 text-sm text-gray-900 outline-none transition "
+                                        className="w-full rounded-2xl border border-gray-100 bg-gray-50 px-3 py-3 text-sm text-gray-900 outline-none transition"
                                     />
                                 </div>
                             </div>
@@ -1310,14 +1746,12 @@ export default function TravelDetailPage() {
 
                                                 return (
                                                     <div key={star} className="relative h-8 w-8">
-                                                        {/* 기본 별 */}
                                                         <Star
                                                             size={25}
                                                             strokeWidth={1.7}
                                                             className="absolute left-0 top-0 text-gray-200"
                                                         />
 
-                                                        {/* 꽉 찬 별 */}
                                                         {isFull && (
                                                             <Star
                                                                 size={25}
@@ -1326,7 +1760,6 @@ export default function TravelDetailPage() {
                                                             />
                                                         )}
 
-                                                        {/* 0.5 별 */}
                                                         {isHalf && (
                                                             <svg
                                                                 className="absolute left-0 top-0"
@@ -1558,6 +1991,7 @@ export default function TravelDetailPage() {
                                     const categoryTotal = getCategoryTotal(category.id);
 
                                     const isSelected = selectedCategoryId === category.id;
+
                                     const isDragging = draggedCategoryId === category.id;
 
                                     return (
@@ -1633,7 +2067,7 @@ export default function TravelDetailPage() {
                                                             }
                                                         }}
                                                         onClick={(event) => event.stopPropagation()}
-                                                        className="w-[55px] min-w-0 bg-transparent text-xs font-medium text-gray-600 outline-none cursor-pointer"
+                                                        className="w-[55px] min-w-0 cursor-pointer bg-transparent text-xs font-medium text-gray-600 outline-none"
                                                     />
                                                 </div>
                                             </th>
@@ -1658,9 +2092,7 @@ export default function TravelDetailPage() {
                                                                     ? ""
                                                                     : (expenseCells[key] ?? "")
                                                             }
-                                                            onFocus={() => {
-                                                                setSelectedCell(key);
-                                                            }}
+                                                            onFocus={() => setSelectedCell(key)}
                                                             onChange={(event) => {
                                                                 handleCellChange(category.id, date, event.target.value);
                                                             }}
@@ -1671,8 +2103,8 @@ export default function TravelDetailPage() {
                                                                 handleCellBlur(category.id, date);
                                                             }}
                                                             placeholder="-"
-                                                            className={`min-h-[48px] w-full rounded-xl bg-transparent px-2 text-center text-xs text-gray-700 outline-none transition cursor-pointer ${
-                                                                selectedCell === key ? "ring-1 ring-gray-300 cursor-text" : ""
+                                                            className={`min-h-[48px] w-full cursor-pointer rounded-xl bg-transparent px-2 text-center text-xs text-gray-700 outline-none transition ${
+                                                                selectedCell === key ? "cursor-text ring-1 ring-gray-300" : ""
                                                             }`}
                                                         />
                                                     </td>
@@ -1697,10 +2129,8 @@ export default function TravelDetailPage() {
 
                                 {/* 카테고리 추가 */}
                                 <tr className="border-b border-gray-100">
-                                    {/* 드래그 영역 */}
                                     <td className="sticky left-0 z-20 w-[32px] min-w-[32px] max-w-[32px] bg-white">{""}</td>
 
-                                    {/* 카테고리 영역 */}
                                     <td
                                         onClick={handleAddCategory}
                                         className="sticky left-[32px] z-20 w-[100px] min-w-[100px] max-w-[100px] cursor-pointer bg-white py-4 px-3"
@@ -1715,12 +2145,10 @@ export default function TravelDetailPage() {
 
                             <tfoot>
                                 <tr className="border-t border-gray-100">
-                                    {/* 드래그 자리 */}
                                     <th className="sticky left-0 z-20 w-[32px] min-w-[32px] max-w-[32px] bg-white pt-4 px-0 text-left text-xs font-semibold text-gray-700">
                                         {""}
                                     </th>
 
-                                    {/* 일별 합계 */}
                                     <th className="sticky left-[32px] z-20 w-[100px] min-w-[100px] max-w-[100px] bg-white pt-4 px-3 text-left text-xs font-semibold text-gray-700">
                                         {""}
                                     </th>
@@ -1772,9 +2200,9 @@ export default function TravelDetailPage() {
 
                             <input
                                 type="text"
-                                value={editCity}
+                                value={editNewCityName}
                                 onChange={(e) => {
-                                    setEditCity(e.target.value);
+                                    setEditNewCityName(e.target.value);
                                 }}
                                 placeholder="도시명을 입력해주세요"
                                 className="mt-2 h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
@@ -1811,11 +2239,9 @@ export default function TravelDetailPage() {
                                     <input
                                         type="number"
                                         step="any"
-                                        value={editLatitude ?? ""}
+                                        value={editNewCityLatitude}
                                         onChange={(e) => {
-                                            const value = e.target.value;
-
-                                            setEditLatitude(value === "" ? null : Number(value));
+                                            setEditNewCityLatitude(e.target.value);
                                         }}
                                         placeholder="예: 50.1163"
                                         className="h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
@@ -1828,11 +2254,9 @@ export default function TravelDetailPage() {
                                     <input
                                         type="number"
                                         step="any"
-                                        value={editLongitude ?? ""}
+                                        value={editNewCityLongitude}
                                         onChange={(e) => {
-                                            const value = e.target.value;
-
-                                            setEditLongitude(value === "" ? null : Number(value));
+                                            setEditNewCityLongitude(e.target.value);
                                         }}
                                         placeholder="예: -122.9574"
                                         className="h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
@@ -1858,27 +2282,17 @@ export default function TravelDetailPage() {
                             <button
                                 type="button"
                                 disabled={
-                                    !editCity.trim() ||
+                                    !editNewCityName.trim() ||
                                     !editNewCityCountryCode ||
-                                    editLatitude === null ||
-                                    editLongitude === null ||
-                                    Number.isNaN(editLatitude) ||
-                                    Number.isNaN(editLongitude)
+                                    editNewCityLatitude.trim() === "" ||
+                                    editNewCityLongitude.trim() === "" ||
+                                    Number.isNaN(Number(editNewCityLatitude)) ||
+                                    Number.isNaN(Number(editNewCityLongitude))
                                 }
-                                onClick={async () => {
-                                    const countryInfo = await getCountryInfo(editNewCityCountryCode);
-
-                                    setEditCity(formatCityName(editCity));
-                                    setEditCountryCode(editNewCityCountryCode);
-                                    setEditCountry(countryInfo.name);
-
-                                    setShowEditCityResults(false);
-                                    setEditCitySearchResults([]);
-                                    setIsAddEditCityModalOpen(false);
-                                }}
+                                onClick={handleAddManualDestinationCity}
                                 className="flex-1 rounded-2xl bg-black py-4 text-sm font-medium text-white disabled:opacity-30"
                             >
-                                선택하기
+                                추가하기
                             </button>
                         </div>
                     </div>
