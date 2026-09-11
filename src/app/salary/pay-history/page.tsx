@@ -1636,8 +1636,14 @@ export default function PayHistoryPage() {
         }
 
         try {
-            const response = await fetch(`/api/pay-history?id=${history.id}`, {
+            const response = await fetch("/api/pay-history", {
                 method: "DELETE",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    id: history.id,
+                }),
             });
 
             const result = (await response.json()) as {

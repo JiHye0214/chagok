@@ -1056,7 +1056,12 @@ export default function SalaryPage() {
      *
      * → 예상 지급 카드
      */
-    const shouldShowPendingPay = Boolean(pendingPayPeriod) && isPendingPeriodEnded && !isPendingPayDatePassed;
+    // const shouldShowPendingPay = Boolean(pendingPayPeriod) && isPendingPeriodEnded && !isPendingPayDatePassed;
+    const shouldShowPendingPay =
+    Boolean(pendingPayPeriod) &&
+    isPendingPeriodEnded &&
+    !isPendingPayDatePassed &&
+    !pendingActualPay;
 
     /*
      * 지급일 당일은 아직 "지급일이 지났다"가 아니다.
@@ -1771,14 +1776,6 @@ export default function SalaryPage() {
                                     <span className="text-gray-400">실제 팁</span>
 
                                     <span>{formatMoney(Number(selectedPayHistory.actualTips ?? 0))}</span>
-                                </div>
-                            )}
-
-                            {selectedPayHistory.paychequeTips > 0 && (
-                                <div className="flex justify-between">
-                                    <span className="text-gray-400">급여 포함 팁</span>
-
-                                    <span>{formatMoney(Number(selectedPayHistory.paychequeTips ?? 0))}</span>
                                 </div>
                             )}
 
