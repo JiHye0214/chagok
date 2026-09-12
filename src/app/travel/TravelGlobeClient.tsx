@@ -195,7 +195,7 @@ export default function TravelGlobeClient({ trips }: TravelGlobeClientProps) {
             {/* 여행 기록 보기 */}
             <Link
                 href="/travel/list"
-                className="absolute right-5 top-5 shrink-0 rounded-full bg-white/30 px-3 py-1 text-xs text-gray-400 transition-colors"
+                className="absolute right-5 top-5 shrink-0 rounded-full bg-gray-100 px-3 py-2 text-xs font-medium text-gray-600"
             >
                 여행 기록 →
             </Link>

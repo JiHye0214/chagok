@@ -100,3 +100,14 @@ body {
 .modal-content {
     animation: modalSlideUp 0.35s ease-out;
 }
+
+/* number input 기본 스피너 제거 */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+input[type="number"] {
+    -moz-appearance: textfield;
+}

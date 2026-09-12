@@ -1282,7 +1282,7 @@ export default function SalaryPage() {
             )}
 
             {currentPayPeriod && (
-                <div className="mt-6 rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
+                <div className="mt-6 rounded-3xl bg-white p-5 shadow-sm">
                     <p className="text-xs font-medium text-blue-500">현재 급여 기간</p>
 
                     <p className="mt-1 text-sm font-semibold text-gray-900">
@@ -1472,7 +1472,7 @@ export default function SalaryPage() {
                                                             pointerEvents="none"
                                                         >
                                                             <div className="flex justify-center">
-                                                                <div className="rounded-lg bg-gray-900 px-2.5 py-1.5 text-center text-[10px] text-white shadow-md">
+                                                                <div className="rounded-lg bg-gray-900 px-2.5 py-2 text-center text-[10px] text-white shadow-md">
                                                                     <div className="font-semibold">
                                                                         예상 {formatMoney(point.value)}
                                                                     </div>

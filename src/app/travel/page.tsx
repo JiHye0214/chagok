@@ -576,7 +576,7 @@ export default function TravelPage() {
                             <p className="mt-1 text-lg font-bold text-gray-900">다음 여행까지</p>
                         </div>
 
-                        <span className="rounded-full bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-600">64%</span>
+                        <span className="rounded-full bg-gray-100 px-3 py-2 text-xs font-medium text-gray-600">64%</span>
                     </div>
 
                     <div className="mt-5">
@@ -611,7 +611,7 @@ export default function TravelPage() {
                                     <div className="flex items-center justify-between px-5 py-4">
                                         <div className="min-w-0">
                                             <div className="flex items-center gap-2">
-                                                <p className="text-xs font-medium text-gray-400">NEXT TRIP</p>
+                                                <p className="text-xs font-medium text-blue-500">NEXT TRIP</p>
 
                                                 <span className="h-1 w-1 rounded-full bg-gray-300" />
 
@@ -676,7 +676,7 @@ export default function TravelPage() {
             {/* --------------------------------------------------
             Travel Spending
             -------------------------------------------------- */}
-            <section ref={expenseSectionRef} className="mt-6 pb-8">
+            <section ref={expenseSectionRef} className="mt-6">
                 <div className="rounded-3xl bg-white p-5 shadow-sm">
                     <div className="flex items-start justify-between">
                         <div>
@@ -686,7 +686,7 @@ export default function TravelPage() {
                         </div>
 
                         {expenseCountry.name && (
-                            <span className="rounded-full bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-500">
+                            <span className="rounded-full bg-gray-100 px-3 py-2 text-xs font-medium text-gray-500">
                                 {expenseCountry.name}
                             </span>
                         )}
