@@ -158,63 +158,63 @@ export default function TravelGlobeClient({ trips }: TravelGlobeClientProps) {
     const worldProgress = Math.min(Math.round((visitedCountryCount / 195) * 100), 100);
 
     return (
-        <div className="relative h-[390px] w-full overflow-hidden rounded-3xl bg-white p-5 shadow-sm">
-            <Canvas
-                camera={{
-                    position: [-178, 173, 34],
-                    fov: 35,
-                }}
-                dpr={1}
-            >
-                <ambientLight intensity={2.8} />
+    <div className="relative h-[390px] w-full overflow-hidden rounded-3xl bg-white p-5 shadow-sm">
+        <Canvas
+            camera={{
+                position: [-178, 173, 34],
+                fov: 35,
+            }}
+            dpr={1}
+        >
+            <ambientLight intensity={2.8} />
 
-                <directionalLight position={[100, 100, 100]} intensity={1.5} />
+            <directionalLight position={[100, 100, 100]} intensity={1.5} />
 
-                <group scale={0.52}>
-                    <Globe trips={trips} geoData={geoData} />
-                </group>
+            <group scale={0.52}>
+                <Globe trips={trips} geoData={geoData} />
+            </group>
 
-                <OrbitControls
-                    enableZoom={false}
-                    enablePan={false}
-                    enableDamping
-                    dampingFactor={0.08}
-                    rotateSpeed={0.25}
-                    minPolarAngle={Math.PI * 0.2}
-                    maxPolarAngle={Math.PI * 0.8}
-                />
-            </Canvas>
+            <OrbitControls
+                enableZoom={false}
+                enablePan={false}
+                enableDamping
+                dampingFactor={0.08}
+                rotateSpeed={0.25}
+                minPolarAngle={Math.PI * 0.2}
+                maxPolarAngle={Math.PI * 0.8}
+            />
+        </Canvas>
 
-            {/* 제목 */}
-            <div className="pointer-events-none absolute left-5 top-5">
-                <p className="text-xs font-medium tracking-wide text-gray-400">MY TRAVEL WORLD</p>
+        {/* 제목 */}
+        <div className="pointer-events-none absolute left-5 top-5">
+            <p className="text-xs font-medium tracking-wide text-gray-400">MY TRAVEL WORLD</p>
 
-                <p className="mt-1 text-lg font-semibold text-gray-800">내가 가본 곳</p>
-            </div>
-
-            {/* 여행 기록 보기 */}
-            <Link
-                href="/travel/list"
-                className="absolute right-5 top-5 shrink-0 rounded-full bg-gray-100 px-3 py-2 text-xs font-medium text-gray-600"
-            >
-                여행 기록 →
-            </Link>
-
-            {/* 여행 통계 */}
-            <div className="pointer-events-none absolute bottom-5 left-5">
-                <p className="text-sm text-gray-500">
-                    {visitedCountryCount}개국 · {trips.length}개 도시
-                </p>
-
-                <p className="mt-1 text-xs text-gray-400">세계일주 {worldProgress}% 완성</p>
-            </div>
-
-            {/* 로딩 */}
-            {!geoData && (
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                    <p className="text-xs text-gray-400">세계지도를 불러오는 중...</p>
-                </div>
-            )}
+            <p className="mt-1 text-lg font-semibold text-gray-800">Places I've Been</p>
         </div>
-    );
+
+        {/* 여행 기록 보기 */}
+        <Link
+            href="/travel/list"
+            className="absolute right-5 top-5 shrink-0 rounded-full bg-gray-100 px-3 py-2 text-xs font-medium text-gray-600"
+        >
+            Travel Log →
+        </Link>
+
+        {/* 여행 통계 */}
+        <div className="pointer-events-none absolute bottom-5 left-5">
+            <p className="text-sm text-gray-500">
+                {visitedCountryCount} countries · {trips.length} cities
+            </p>
+
+            <p className="mt-1 text-xs text-gray-400">World travel {worldProgress}% complete</p>
+        </div>
+
+        {/* 로딩 */}
+        {!geoData && (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <p className="text-xs text-gray-400">Loading world map...</p>
+            </div>
+        )}
+    </div>
+);
 }

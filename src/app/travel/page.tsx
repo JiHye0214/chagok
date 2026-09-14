@@ -552,215 +552,214 @@ export default function TravelPage() {
     });
 
     return (
-        <div className="mx-auto max-w-md">
-            {/* Header */}
-            <header className="mt-5 mb-8">
-                <p className="text-sm text-gray-500">차곡</p>
+    <div className="mx-auto max-w-md">
+        {/* Header */}
+        <header className="mt-5 mb-8">
+            <p className="text-sm text-gray-500">Chagok</p>
 
-                <div className="mt-2 flex items-center justify-between">
-                    <h1 className="text-3xl font-bold tracking-tight text-gray-900">여행</h1>
+            <div className="mt-2 flex items-center justify-between">
+                <h1 className="text-3xl font-bold tracking-tight text-gray-900">Travel</h1>
+            </div>
+
+            <p className="mt-2 text-sm leading-relaxed text-gray-500">Save money for your trips and track your travel spending.</p>
+        </header>
+
+        {/* --------------------------------------------------
+        Travel Budget 
+        -------------------------------------------------- */}
+        <section>
+            <div className="rounded-3xl bg-white p-5 shadow-sm">
+                <div className="flex items-start justify-between">
+                    <div>
+                        <p className="text-xs text-gray-400">Travel Fund</p>
+
+                        <p className="mt-1 text-lg font-bold text-gray-900">Until Your Next Trip</p>
+                    </div>
+
+                    <span className="rounded-full bg-gray-100 px-3 py-2 text-xs font-medium text-gray-600">64%</span>
                 </div>
 
-                <p className="mt-2 text-sm leading-relaxed text-gray-500">여행을 위한 돈을 모으고, 여행 소비를 기록해보세요.</p>
-            </header>
+                <div className="mt-5">
+                    <p className="text-3xl font-bold tracking-tight text-gray-900">$1,280</p>
 
-            {/* --------------------------------------------------
-            Travel Budget
-            -------------------------------------------------- */}
-            <section>
-                <div className="rounded-3xl bg-white p-5 shadow-sm">
-                    <div className="flex items-start justify-between">
-                        <div>
-                            <p className="text-xs text-gray-400">여행 자금</p>
-
-                            <p className="mt-1 text-lg font-bold text-gray-900">다음 여행까지</p>
-                        </div>
-
-                        <span className="rounded-full bg-gray-100 px-3 py-2 text-xs font-medium text-gray-600">64%</span>
-                    </div>
-
-                    <div className="mt-5">
-                        <p className="text-3xl font-bold tracking-tight text-gray-900">$1,280</p>
-
-                        <p className="mt-1 text-sm text-gray-400">$2,000 목표</p>
-                    </div>
-
-                    <div className="mt-4 h-2 overflow-hidden rounded-full bg-gray-100">
-                        <div className="h-full rounded-full bg-gray-900" style={{ width: "64%" }} />
-                    </div>
-
-                    <div className="mt-4 flex items-center justify-between">
-                        <p className="text-xs text-gray-400">$720 남았어요</p>
-
-                        <p className="text-xs font-medium text-gray-700">New York ✈️</p>
-                    </div>
+                    <p className="mt-1 text-sm text-gray-400">$2,000 goal</p>
                 </div>
-            </section>
 
-            {/* Next Trip */}
-            {upcomingTrips.length > 0 &&
-                (() => {
-                    const upcomingTrip = [...upcomingTrips].sort(
-                        (a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime(),
-                    )[0];
+                <div className="mt-4 h-2 overflow-hidden rounded-full bg-gray-100">
+                    <div className="h-full rounded-full bg-gray-900" style={{ width: "64%" }} />
+                </div>
 
-                    return (
-                        <section className="mt-7">
-                            <Link href={`/travel/list/${upcomingTrip.id}`} className="block">
-                                <div className="group overflow-hidden rounded-3xl bg-white shadow-sm transition">
-                                    <div className="flex items-center justify-between px-5 py-4">
-                                        <div className="min-w-0">
-                                            <div className="flex items-center gap-2">
-                                                <p className="text-xs font-medium text-blue-500">NEXT TRIP</p>
+                <div className="mt-4 flex items-center justify-between">
+                    <p className="text-xs text-gray-400">$720 to go</p>
 
-                                                <span className="h-1 w-1 rounded-full bg-gray-300" />
+                    <p className="text-xs font-medium text-gray-700">New York ✈️</p>
+                </div>
+            </div>
+        </section>
 
-                                                <p className="text-xs text-gray-400">
-                                                    {formatDate(new Date(upcomingTrip.startDate))}
-                                                </p>
-                                            </div>
+        {/* Next Trip */}
+        {upcomingTrips.length > 0 &&
+            (() => {
+                const upcomingTrip = [...upcomingTrips].sort(
+                    (a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime(),
+                )[0];
 
-                                            <p className="mt-2 truncate text-lg font-bold text-gray-950">
-                                                {getDestinationLabel(upcomingTrip)}
-                                            </p>
+                return (
+                    <section className="mt-7">
+                        <Link href={`/travel/list/${upcomingTrip.id}`} className="block">
+                            <div className="group overflow-hidden rounded-3xl bg-white shadow-sm transition">
+                                <div className="flex items-center justify-between px-5 py-4">
+                                    <div className="min-w-0">
+                                        <div className="flex items-center gap-2">
+                                            <p className="text-xs font-medium text-blue-500">NEXT TRIP</p>
 
-                                            <p className="mt-0.5 text-sm text-gray-500">
-                                                {normalizeDestinations(upcomingTrip)
-                                                    .map((destination) => destination.country)
-                                                    .filter((value, index, array) => array.indexOf(value) === index)
-                                                    .join(" · ")}
+                                            <span className="h-1 w-1 rounded-full bg-gray-300" />
+
+                                            <p className="text-xs text-gray-400">
+                                                {formatDate(new Date(upcomingTrip.startDate))}
                                             </p>
                                         </div>
 
-                                        <div className="ml-4 flex shrink-0 flex-col items-end">
-                                            <span className="text-2xl font-bold tracking-tight text-gray-950">
-                                                D-
-                                                {Math.max(
-                                                    0,
-                                                    Math.ceil(
-                                                        (new Date(upcomingTrip.startDate).getTime() - Date.now()) /
-                                                            (1000 * 60 * 60 * 24),
-                                                    ),
-                                                )}
-                                            </span>
-
-                                            <span className="mt-1 text-[11px] text-gray-400">떠나요</span>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex items-center justify-between border-t border-gray-100 bg-gray-50/70 px-5 py-3">
-                                        <p className="text-xs text-gray-500">
-                                            {formatDate(new Date(upcomingTrip.startDate))} —{" "}
-                                            {formatDate(new Date(upcomingTrip.endDate))}
+                                        <p className="mt-2 truncate text-lg font-bold text-gray-950">
+                                            {getDestinationLabel(upcomingTrip)}
                                         </p>
 
-                                        <span className="text-xs font-medium text-gray-400 transition group-hover:text-gray-700">
-                                            보기 →
+                                        <p className="mt-0.5 text-sm text-gray-500">
+                                            {normalizeDestinations(upcomingTrip)
+                                                .map((destination) => destination.country)
+                                                .filter((value, index, array) => array.indexOf(value) === index)
+                                                .join(" · ")}
+                                        </p>
+                                    </div>
+
+                                    <div className="ml-4 flex shrink-0 flex-col items-end">
+                                        <span className="text-2xl font-bold tracking-tight text-gray-950">
+                                            D-
+                                            {Math.max(
+                                                0,
+                                                Math.ceil(
+                                                    (new Date(upcomingTrip.startDate).getTime() - Date.now()) /
+                                                        (1000 * 60 * 60 * 24),
+                                                ),
+                                            )}
                                         </span>
+
+                                        <span className="mt-1 text-[11px] text-gray-400">Until departure</span>
                                     </div>
                                 </div>
-                            </Link>
-                        </section>
-                    );
-                })()}
 
-            {/* --------------------------------------------------
-            Travel Statistics
-            -------------------------------------------------- */}
-            <section className="mt-6">
-                <div className="mt-4">
-                    <TravelGlobe trips={globeTrips} />
-                </div>
-            </section>
+                                <div className="flex items-center justify-between border-t border-gray-100 bg-gray-50/70 px-5 py-3">
+                                    <p className="text-xs text-gray-500">
+                                        {formatDate(new Date(upcomingTrip.startDate))} —{" "}
+                                        {formatDate(new Date(upcomingTrip.endDate))}
+                                    </p>
 
-            {/* --------------------------------------------------
-            Travel Spending
-            -------------------------------------------------- */}
-            <section ref={expenseSectionRef} className="mt-6">
-                <div className="rounded-3xl bg-white p-5 shadow-sm">
-                    <div className="flex items-start justify-between">
-                        <div>
-                            <p className="text-xs text-gray-400">여행 소비 분석</p>
-
-                            <h2 className="mt-1 text-lg font-bold text-gray-900">여행 소비 패턴</h2>
-                        </div>
-
-                        {expenseCountry.name && (
-                            <span className="rounded-full bg-gray-100 px-3 py-2 text-xs font-medium text-gray-500">
-                                {expenseCountry.name}
-                            </span>
-                        )}
-                    </div>
-
-                    <p className="mt-5 text-base font-medium leading-relaxed text-gray-700">
-                        나는 {expenseCountry.name || "여행"}에 가면
-                        <br />
-                        어디에 얼마나 쓸까?
-                    </p>
-
-                    {categoryData.length > 0 ? (
-                        <div className="mt-7">
-                            <div className="flex h-40 items-end gap-3">
-                                {categoryData.map((item) => {
-                                    const maxAmount = Math.max(...categoryData.map((category) => Number(category.amount)), 1);
-
-                                    const height = Math.max(8, (Number(item.amount) / maxAmount) * 100);
-
-                                    return (
-                                        <div key={item.name} className="flex min-w-0 flex-1 flex-col items-center">
-                                            <div className="flex h-32 w-full flex-col items-center justify-end">
-                                                <div className="flex h-24 w-full items-end justify-center">
-                                                    <div
-                                                        className="w-full max-w-9 origin-bottom rounded-t-lg bg-gray-900 transition-transform duration-700 ease-out"
-                                                        style={{
-                                                            height: `${height}%`,
-                                                            transform: isExpenseInView ? "scaleY(1)" : "scaleY(0)",
-                                                        }}
-                                                    />
-                                                </div>
-                                            </div>
-
-                                            <p className="mt-3 w-full truncate text-center text-[11px] font-medium text-gray-500">
-                                                {item.name}
-                                            </p>
-                                        </div>
-                                    );
-                                })}
+                                    <span className="text-xs font-medium text-gray-400 transition group-hover:text-gray-700">
+                                        View →
+                                    </span>
+                                </div>
                             </div>
-                        </div>
-                    ) : (
-                        <div className="mt-7 flex h-32 items-center justify-center rounded-2xl bg-gray-50">
-                            <p className="text-sm text-gray-400">아직 소비 기록이 없어요</p>
-                        </div>
-                    )}
+                        </Link>
+                    </section>
+                );
+            })()}
 
-                    <div className="mt-7 border-t border-gray-100 pt-5">
-                        <p className="text-xs text-gray-400">1박 평균</p>
+        {/* --------------------------------------------------
+        Travel Statistics
+        -------------------------------------------------- */}
+        <section className="mt-6">
+            <div className="mt-4">
+                <TravelGlobe trips={globeTrips} />
+            </div>
+        </section>
 
-                        <p className="mt-1 text-3xl font-bold tracking-tight text-gray-900">
-                            {expenseAnalysis.averagePerNight > 0
-                                ? `$${Math.round(expenseAnalysis.averagePerNight).toLocaleString()}`
-                                : "-"}
-                            <span className="ml-1 text-base font-normal text-gray-400">{expenseAnalysis.currency}</span>
-                        </p>
+        {/* --------------------------------------------------
+        Travel Spending
+        -------------------------------------------------- */}
+        <section ref={expenseSectionRef} className="mt-6">
+            <div className="rounded-3xl bg-white p-5 shadow-sm">
+                <div className="flex items-start justify-between">
+                    <div>
+                        <p className="text-xs text-gray-400">Travel Spending Analysis</p>
+
+                        <h2 className="mt-1 text-lg font-bold text-gray-900">Spending Patterns</h2>
                     </div>
 
-                    {categoryData.length > 0 ? (
-                        <p className="mt-4 text-sm leading-relaxed text-gray-500">
-                            나는 <span className="font-medium text-gray-900">{categoryData[0].name}</span>
-                            에 가장 많이 쓰는
-                            <br />
-                            여행자예요.
-                        </p>
-                    ) : (
-                        <p className="mt-4 text-sm leading-relaxed text-gray-400">
-                            여행 소비를 기록하면
-                            <br />
-                            나만의 소비 패턴을 알려드릴게요.
-                        </p>
+                    {expenseCountry.name && (
+                        <span className="rounded-full bg-gray-100 px-3 py-2 text-xs font-medium text-gray-500">
+                            {expenseCountry.name}
+                        </span>
                     )}
                 </div>
-            </section>
-        </div>
-    );
+
+                <p className="mt-5 text-base font-medium leading-relaxed text-gray-700">
+                    When I travel to {expenseCountry.name || "a destination"},
+                    <br />
+                    where do I spend the most?
+                </p>
+
+                {categoryData.length > 0 ? (
+                    <div className="mt-7">
+                        <div className="flex h-40 items-end gap-3">
+                            {categoryData.map((item) => {
+                                const maxAmount = Math.max(...categoryData.map((category) => Number(category.amount)), 1);
+
+                                const height = Math.max(8, (Number(item.amount) / maxAmount) * 100);
+
+                                return (
+                                    <div key={item.name} className="flex min-w-0 flex-1 flex-col items-center">
+                                        <div className="flex h-32 w-full flex-col items-center justify-end">
+                                            <div className="flex h-24 w-full items-end justify-center">
+                                                <div
+                                                    className="w-full max-w-9 origin-bottom rounded-t-lg bg-gray-900 transition-transform duration-700 ease-out"
+                                                    style={{
+                                                        height: `${height}%`,
+                                                        transform: isExpenseInView ? "scaleY(1)" : "scaleY(0)",
+                                                    }}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <p className="mt-3 w-full truncate text-center text-[11px] font-medium text-gray-500">
+                                            {item.name}
+                                        </p>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                ) : (
+                    <div className="mt-7 flex h-32 items-center justify-center rounded-2xl bg-gray-50">
+                        <p className="text-sm text-gray-400">No spending records yet</p>
+                    </div>
+                )}
+
+                <div className="mt-7 border-t border-gray-100 pt-5">
+                    <p className="text-xs text-gray-400">Average per night</p>
+
+                    <p className="mt-1 text-3xl font-bold tracking-tight text-gray-900">
+                        {expenseAnalysis.averagePerNight > 0
+                            ? `$${Math.round(expenseAnalysis.averagePerNight).toLocaleString()}`
+                            : "-"}
+                        <span className="ml-1 text-base font-normal text-gray-400">{expenseAnalysis.currency}</span>
+                    </p>
+                </div>
+
+                {categoryData.length > 0 ? (
+                    <p className="mt-4 text-sm leading-relaxed text-gray-500">
+                        I spend the most on <span className="font-medium text-gray-900">{categoryData[0].name}</span>
+                        <br />
+                        when I travel.
+                    </p>
+                ) : (
+                    <p className="mt-4 text-sm leading-relaxed text-gray-400">
+                        Record your travel spending
+                        <br />
+                        to discover your spending patterns.
+                    </p>
+                )}
+            </div>
+        </section>
+    </div>
+);
 }
