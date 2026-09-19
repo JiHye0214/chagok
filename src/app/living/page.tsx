@@ -9,6 +9,27 @@ type CategorySpending = {
     amount: number;
 };
 
+type PendingTravel = {
+    sourceId: number;
+    title: string;
+    startDate: string;
+    endDate: string;
+    amount: number;
+    status: "ready" | "missing_expense";
+};
+
+type PendingPayroll = {
+    sourceType: "payroll";
+    sourceId: number | null;
+    payrollRecordId: number;
+    actualId: number | null;
+    startDate: string;
+    endDate: string;
+    payDate: string;
+    amount: number | null;
+    status: "ready" | "missing_actual";
+};
+
 type LivingSummary = {
     balance: number;
     income: number;
@@ -20,6 +41,11 @@ type LivingSummary = {
     savings: {
         current: number;
         goal: number;
+    };
+
+    pendingIntegrations: {
+        travel: PendingTravel[];
+        payroll: PendingPayroll[];
     };
 };
 
@@ -37,27 +63,30 @@ const getCurrentMonth = () => {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 };
 
+const formatDisplayDate = (date: string) => {
+    const [year, month, day] = date.split("-");
+
+    return `${year}.${month}.${day}`;
+};
+
 function SavingsDollar({ progress }: { progress: number }) {
     const clampedProgress = Math.min(Math.max(progress, 0), 100);
 
     return (
-        <div className="relative h-28 w-28 shrink-0">
-            {/* 전체 아이콘 */}
-            <CircleDollarSign
-                size={92}
-                strokeWidth={1.5}
-                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-gray-200"
-            />
+        <div className="relative h-28 w-28 shrink-0 overflow-hidden">
+            <span className="absolute inset-0 flex items-center justify-center text-[92px] font-semibold leading-none text-gray-200">
+                $
+            </span>
 
-            {/* 진행된 부분 */}
             <div
-                className="absolute bottom-2 left-1/2 -translate-x-1/2 overflow-hidden"
+                className="absolute inset-x-0 bottom-0 overflow-hidden"
                 style={{
-                    width: 92,
-                    height: `${92 * (clampedProgress / 100)}px`,
+                    height: `${clampedProgress}%`,
                 }}
             >
-                <CircleDollarSign size={92} strokeWidth={1.5} className="absolute bottom-0 left-0 text-[#8BA47B]" />
+                <span className="absolute inset-x-0 bottom-[-1px] flex h-28 items-center justify-center text-[92px] font-semibold leading-none text-[#D9A441]">
+                    $
+                </span>
             </div>
         </div>
     );
@@ -73,6 +102,8 @@ export default function LivingPage() {
     const [isEditingSavingsGoal, setIsEditingSavingsGoal] = useState(false);
     const [savingsGoalInput, setSavingsGoalInput] = useState("");
     const [isSavingGoal, setIsSavingGoal] = useState(false);
+
+    const [isReflecting, setIsReflecting] = useState<string | null>(null);
 
     useEffect(() => {
         const loadLiving = async () => {
@@ -94,6 +125,48 @@ export default function LivingPage() {
 
         loadLiving();
     }, [month]);
+
+    const reflectIntegration = async (sourceType: "trip" | "payroll", sourceId: number | null) => {
+        if (!sourceId) return;
+
+        const key = `${sourceType}-${sourceId}`;
+
+        try {
+            setIsReflecting(key);
+
+            const response = await fetch("/api/living/integrations", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    sourceType,
+                    sourceId,
+                }),
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.error || "생활비 반영에 실패했습니다.");
+            }
+
+            const refreshResponse = await fetch(`/api/living?month=${month}`);
+
+            if (!refreshResponse.ok) {
+                throw new Error("생활 데이터를 다시 불러오지 못했습니다.");
+            }
+
+            const refreshedData = await refreshResponse.json();
+
+            setData(refreshedData);
+        } catch (error) {
+            console.error(error);
+            alert(error instanceof Error ? error.message : "생활비에 반영하지 못했어요.");
+        } finally {
+            setIsReflecting(null);
+        }
+    };
 
     const maxSpending = useMemo(() => {
         if (!data?.variableSpending?.length) return 1;
@@ -132,6 +205,165 @@ export default function LivingPage() {
                 </div>
             ) : (
                 <div className="space-y-5">
+                    {/* External data integration */}
+
+                    {data && (data.pendingIntegrations.travel.length > 0 || data.pendingIntegrations.payroll.length > 0) && (
+                        <section className="space-y-3">
+                            {data.pendingIntegrations.travel.map((travel) =>
+                                travel.status === "missing_expense" ? (
+                                    <div
+                                        key={`trip-${travel.sourceId}`}
+                                        className="rounded-3xl border border-blue-100 bg-blue-50 p-5 shadow-sm"
+                                    >
+                                        <div className="flex items-start justify-between gap-4">
+                                            <div>
+                                                <p className="text-xs text-blue-500">여행 지출</p>
+
+                                                <p className="mt-2 text-lg font-semibold text-gray-900">
+                                                    {travel.title} 여행 지출을 기록해주세요
+                                                </p>
+
+                                                <p className="mt-1 text-sm text-gray-500">
+                                                    {formatDisplayDate(travel.startDate)}
+                                                    {" ~ "}
+                                                    {formatDisplayDate(travel.endDate)}
+                                                </p>
+                                            </div>
+
+                                            <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-blue-600 shadow-sm">
+                                                기록 필요
+                                            </span>
+                                        </div>
+
+                                        <p className="mt-4 text-sm text-gray-500">
+                                            여행에서 사용한 금액을 먼저 기록하면 생활비에 반영할 수 있어요.
+                                        </p>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => router.push(`/travel/${travel.sourceId}`)}
+                                            className="mt-4 w-full rounded-2xl bg-blue-600 py-3 text-[13px] font-semibold text-white transition hover:bg-blue-700"
+                                        >
+                                            여행 지출 기록하기
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div
+                                        key={`trip-${travel.sourceId}`}
+                                        className="rounded-3xl border border-blue-100 bg-blue-50 p-5 shadow-sm"
+                                    >
+                                        <div className="flex items-start justify-between gap-4">
+                                            <div>
+                                                <p className="text-xs text-blue-500">여행 지출</p>
+
+                                                <p className="mt-2 text-lg font-semibold text-gray-900">
+                                                    {travel.title} 여행에{" "}
+                                                    <span className="text-blue-600">{formatMoney(travel.amount)}</span>을 썼어요
+                                                </p>
+
+                                                <p className="mt-1 text-sm text-gray-500">
+                                                    {formatDisplayDate(travel.startDate)}
+                                                    {" ~ "}
+                                                    {formatDisplayDate(travel.endDate)}
+                                                </p>
+                                            </div>
+
+                                            <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-blue-600 shadow-sm">
+                                                여행
+                                            </span>
+                                        </div>
+
+                                        <p className="mt-4 text-sm text-gray-500">생활비에 반영할까요?</p>
+
+                                        <div className="mt-3 flex gap-2">
+                                            <button
+                                                type="button"
+                                                className="flex-1 rounded-2xl bg-white py-3 text-[13px] font-medium text-gray-600 shadow-sm transition hover:bg-gray-50"
+                                            >
+                                                나중에
+                                            </button>
+
+                                            <button
+                                                type="button"
+                                                disabled={isReflecting === `trip-${travel.sourceId}`}
+                                                onClick={() => void reflectIntegration("trip", travel.sourceId)}
+                                                className="flex-1 rounded-2xl bg-blue-600 py-3 text-[13px] font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
+                                            >
+                                                {isReflecting === `trip-${travel.sourceId}` ? "반영 중..." : "반영하기"}
+                                            </button>
+                                        </div>
+                                    </div>
+                                ),
+                            )}
+
+                            {data.pendingIntegrations.payroll.map((payroll) =>
+                                payroll.status === "missing_actual" ? (
+                                    <div
+                                        key={`payroll-${payroll.payrollRecordId}`}
+                                        className="rounded-3xl bg-white p-5 shadow-sm"
+                                    >
+                                        <p className="text-xs text-gray-400">급여 기록</p>
+
+                                        <h2 className="mt-1 text-lg font-bold text-gray-900">실제 수령액을 먼저 입력해주세요.</h2>
+
+                                        <p className="mt-2 text-sm text-gray-500">
+                                            {formatDisplayDate(payroll.payDate)} 지급 급여의 실제 수령액이 아직 기록되지 않았어요.
+                                        </p>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => router.push("/salary/pay-history")}
+                                            className="mt-4 w-full rounded-2xl bg-gray-900 py-3 text-[13px] font-medium text-white transition-colors hover:bg-gray-800"
+                                        >
+                                            급여 기록하기
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div
+                                        key={`payroll-${payroll.sourceId}`}
+                                        className="rounded-3xl border border-blue-100 bg-blue-50 p-5 shadow-sm"
+                                    >
+                                        <div className="flex items-start justify-between gap-4">
+                                            <div>
+                                                <p className="text-xs text-blue-500">급여</p>
+
+                                                <p className="mt-2 text-lg font-semibold text-gray-900">
+                                                    이번 급여{" "}
+                                                    <span className="text-blue-600">{formatMoney(payroll.amount ?? 0)}</span>이
+                                                    입력되어 있어요
+                                                </p>
+
+                                                <p className="mt-1 text-sm text-gray-500">
+                                                    지급일 {formatDisplayDate(payroll.payDate)}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <p className="mt-4 text-sm text-gray-500">생활비에 반영할까요?</p>
+
+                                        <div className="mt-3 flex gap-2">
+                                            <button
+                                                type="button"
+                                                className="flex-1 rounded-2xl bg-white py-3 text-[13px] font-medium text-gray-600 shadow-sm transition hover:bg-gray-50"
+                                            >
+                                                나중에
+                                            </button>
+
+                                            <button
+                                                type="button"
+                                                disabled={isReflecting === `payroll-${payroll.sourceId}`}
+                                                onClick={() => void reflectIntegration("payroll", payroll.sourceId)}
+                                                className="flex-1 rounded-2xl bg-blue-600 py-3 text-[13px] font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
+                                            >
+                                                {isReflecting === `payroll-${payroll.sourceId}` ? "반영 중..." : "반영하기"}
+                                            </button>
+                                        </div>
+                                    </div>
+                                ),
+                            )}
+                        </section>
+                    )}
+
                     {/* This month's living money */}
                     <button type="button" onClick={() => router.push("/living/manage")} className="group w-full text-left">
                         <div
@@ -186,7 +418,7 @@ export default function LivingPage() {
 
                                 {/* View details */}
                                 <div className="mt-4 flex items-center justify-between border-t border-gray-100 pt-4">
-                                    <span className="text-[11px] font-medium tracking-[0.06em] text-gray-400">VIEW DETAILS</span>
+                                    <span className="text-[11px] font-medium text-gray-400">VIEW DETAILS</span>
 
                                     <ChevronRight
                                         size={15}
@@ -239,7 +471,9 @@ export default function LivingPage() {
                                                     />
 
                                                     <div className="relative z-10 flex w-full items-center justify-between px-3">
-                                                        <span className="text-sm font-medium text-gray-700">{category.name}</span>
+                                                        <span className="text-[13px] font-medium text-gray-700">
+                                                            {category.name}
+                                                        </span>
 
                                                         <div className="flex items-center gap-3">
                                                             <span className="text-sm font-medium text-gray-900">

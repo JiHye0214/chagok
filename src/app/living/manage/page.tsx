@@ -692,7 +692,7 @@ export default function LivingManagePage() {
                     <ChevronLeft size={18} />
                 </button>
 
-                <p className="text-[15px] font-semibold tracking-[-0.02em] text-gray-900">{monthLabel}</p>
+                <p className="text-[15px] font-semibold text-gray-900">{monthLabel}</p>
 
                 <button
                     type="button"
@@ -728,7 +728,7 @@ export default function LivingManagePage() {
                     <div>
                         <p className="text-xs text-gray-400">고정지출 관리</p>
 
-                        <h2 className="mt-1 text-[20px] font-semibold tracking-[-0.04em] text-gray-900">고정지출</h2>
+                        <h2 className="mt-1 text-lg font-semibold">고정지출</h2>
                     </div>
 
                     {fixedExpenses.length > 0 && (
@@ -868,7 +868,7 @@ export default function LivingManagePage() {
                     <div>
                         <p className="text-xs text-gray-400">선택한 날짜</p>
 
-                        <h2 className="mt-1 text-[21px] font-semibold tracking-[-0.04em] text-gray-900">{selectedDateLabel}</h2>
+                        <h2 className="mt-1 text-lg font-semibold">{selectedDateLabel}</h2>
                     </div>
 
                     {selectedTransactions.length > 0 && <p className="text-xs text-gray-400">{selectedTransactions.length}건</p>}
@@ -916,7 +916,7 @@ export default function LivingManagePage() {
                                         )}
                                     </div>
 
-                                    <p className="shrink-0 text-[15px] font-medium tracking-[-0.02em] text-gray-900">
+                                    <p className="shrink-0 text-[15px] font-medium text-gray-900">
                                         {net > 0 ? "+" : net < 0 ? "−" : ""}
                                         {formatMoney(net)}
                                     </p>
@@ -968,7 +968,7 @@ export default function LivingManagePage() {
                             <div>
                                 <p className="text-xs text-gray-400">기록</p>
 
-                                <h2 className="mt-1 text-xl font-semibold tracking-[-0.04em] text-gray-900">
+                                <h2 className="mt-1 text-xl font-semibold text-gray-900">
                                     {editingTransaction ? "기록 수정" : "기록 추가"}
                                 </h2>
                             </div>
@@ -1099,7 +1099,7 @@ export default function LivingManagePage() {
                                             amount: event.target.value,
                                         }))
                                     }
-                                    className="w-full bg-transparent text-xl font-semibold tracking-[-0.04em] text-gray-900 outline-none"
+                                    className="w-full bg-transparent text-xl font-semibold text-gray-900 outline-none"
                                 />
                             </div>
 
@@ -1217,7 +1217,7 @@ export default function LivingManagePage() {
                             <div>
                                 <p className="text-xs text-gray-400">고정지출</p>
 
-                                <h2 className="mt-1 text-xl font-semibold tracking-[-0.04em] text-gray-900">
+                                <h2 className="mt-1 text-xl font-semibold text-gray-900">
                                     {editingFixedExpense ? "고정지출 수정" : "고정지출 추가"}
                                 </h2>
                             </div>
@@ -1261,7 +1261,7 @@ export default function LivingManagePage() {
                                             amount: event.target.value,
                                         }))
                                     }
-                                    className="w-full bg-transparent text-xl font-semibold tracking-[-0.04em] text-gray-900 outline-none"
+                                    className="w-full bg-transparent text-xl font-semibold text-gray-900 outline-none"
                                 />
                             </div>
 
@@ -1360,7 +1360,7 @@ export default function LivingManagePage() {
                             <div>
                                 <p className="text-xs text-gray-400">카테고리</p>
 
-                                <h2 className="mt-1 text-xl font-semibold tracking-[-0.04em] text-gray-900">
+                                <h2 className="mt-1 text-xl font-semibold text-gray-900">
                                     {editingCategory ? "카테고리 수정" : "카테고리 추가"}
                                 </h2>
                             </div>

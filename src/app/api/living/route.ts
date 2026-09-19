@@ -25,7 +25,6 @@ const getMonthRange = (month?: string) => {
     if (month && /^\d{4}-\d{2}$/.test(month)) {
         const [year, monthNumber] = month.split("-").map(Number);
 
-        const start = new Date(year, monthNumber - 1, 1);
         const end = new Date(year, monthNumber, 1);
 
         return {
@@ -52,56 +51,123 @@ export async function GET(request: Request) {
 
         const currentMonth = getMonthRange(month);
 
-        const [currentTransactions, fixedExpenseResult, savingsGoalResult] = await Promise.all([
-            sql`
+        const [currentTransactions, fixedExpenseResult, savingsGoalResult, pendingTravelResult, pendingPayrollResult] =
+            await Promise.all([
+                sql`
+                SELECT
+                    lt.id,
+                    TO_CHAR(lt.transaction_date, 'YYYY-MM-DD') AS transaction_date,
+                    lt.type,
+                    lt.amount,
+                    lt.category_id,
+                    lc.name AS category_name,
+                    lc.kind AS category_kind,
+                    lt.memo,
+                    lt.transfer_direction,
+                    lt.source_type,
+                    lt.source_id
+                FROM living_transactions lt
+                LEFT JOIN living_categories lc
+                    ON lc.id = lt.category_id
+                WHERE lt.transaction_date >= ${currentMonth.start}::date
+                  AND lt.transaction_date < ${currentMonth.end}::date
+                ORDER BY
+                    lt.transaction_date DESC,
+                    lt.id DESC
+            `,
+
+                sql`
+                SELECT
+                    COALESCE(SUM(amount), 0) AS total
+                FROM living_fixed_expenses
+                WHERE is_active = TRUE
+            `,
+
+                sql`
+                SELECT
+                    id,
+                    name,
+                    target_amount
+                FROM savings_goals
+                ORDER BY id
+                LIMIT 1
+            `,
+
+                /*
+                 * 이번 달에 종료된 완료 여행 중
+                 * 아직 생활비에 반영되지 않은 여행.
+                 *
+                 * 지출 합계가 0이면 아직 입력된 여행 지출이 없는 것으로 본다.
+                 */
+                sql`
                     SELECT
-                        lt.id,
-                        TO_CHAR(lt.transaction_date, 'YYYY-MM-DD') AS transaction_date,
-                        lt.type,
-                        lt.amount,
-                        lt.category_id,
-                        lc.name AS category_name,
-                        lc.kind AS category_kind,
-                        lt.memo,
-                        lt.transfer_direction,
-                        lt.source_type,
-                        lt.source_id
-                    FROM living_transactions lt
-                    LEFT JOIN living_categories lc
-                        ON lc.id = lt.category_id
-                    WHERE lt.transaction_date >= ${currentMonth.start}::date
-                      AND lt.transaction_date < ${currentMonth.end}::date
+                        t.id,
+                        t.title,
+                        t.city,
+                        TO_CHAR(t.start_date, 'YYYY-MM-DD') AS start_date,
+                        TO_CHAR(t.end_date, 'YYYY-MM-DD') AS end_date,
+                        COALESCE(SUM(te.amount), 0) AS total_expense
+                    FROM trips t
+                    LEFT JOIN trip_expenses te
+                        ON te.trip_id = t.id
+                    WHERE t.trip_type = 'completed'
+                    AND t.end_date >= ${currentMonth.start}::date
+                    AND t.end_date < ${currentMonth.end}::date
+                    AND t.end_date <= CURRENT_DATE
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM living_transactions lt
+                        WHERE lt.source_type = 'trip'
+                            AND lt.source_id = t.id
+                    )
+                    GROUP BY
+                        t.id,
+                        t.title,
+                        t.city,
+                        t.start_date,
+                        t.end_date
                     ORDER BY
-                        lt.transaction_date DESC,
-                        lt.id DESC
+                        t.end_date ASC,
+                        t.id ASC
                 `,
 
-            sql`
+                /*
+                 * 지급일 다음 날이 이번 달에 해당하는 급여.
+                 *
+                 * actual_net_pay가 없으면 missing_actual.
+                 * 실제 수령액이 있으면 ready.
+                 *
+                 * 실제 급여가 입력된 경우에는 pay_period_actuals.id를
+                 * source_id로 사용한다.
+                 */
+                sql`
                     SELECT
-                        COALESCE(SUM(amount), 0) AS total
-                    FROM living_fixed_expenses
-                    WHERE is_active = TRUE
+                        id AS actual_id,
+                        TO_CHAR(pay_period_start_date, 'YYYY-MM-DD') AS start_date,
+                        TO_CHAR(pay_period_end_date, 'YYYY-MM-DD') AS end_date,
+                        TO_CHAR(pay_date, 'YYYY-MM-DD') AS pay_date,
+                        actual_net_pay
+                    FROM pay_period_actuals
+                    WHERE pay_date + INTERVAL '1 day' >= ${currentMonth.start}::date
+                    AND pay_date + INTERVAL '1 day' < ${currentMonth.end}::date
+                    AND pay_date + INTERVAL '1 day' <= CURRENT_DATE
+                    AND actual_net_pay IS NOT NULL
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM living_transactions lt
+                        WHERE lt.source_type = 'payroll'
+                            AND lt.source_id = pay_period_actuals.id
+                    )
+                    ORDER BY
+                        pay_date ASC,
+                        id ASC
                 `,
-
-            sql`
-                    SELECT
-                        id,
-                        name,
-                        target_amount
-                    FROM savings_goals
-                    ORDER BY id
-                    LIMIT 1
-                `,
-        ]);
+            ]);
 
         const current = currentTransactions as LivingTransactionRow[];
 
         const currentIncome = current
             .filter((item) => item.type === "income")
-            .reduce((sum, item) => sum + toNumber(item.amount), 0);
-
-        const currentTransactionExpenses = current
-            .filter((item) => item.type === "expense")
             .reduce((sum, item) => sum + toNumber(item.amount), 0);
 
         const fixedExpense = toNumber(fixedExpenseResult[0]?.total);
@@ -170,6 +236,50 @@ export async function GET(request: Request) {
                   goal: 10000,
               };
 
+        const pendingTravel = (
+            pendingTravelResult as Array<{
+                id: number;
+                title: string | null;
+                city: string;
+                start_date: string;
+                end_date: string;
+                total_expense: number | string;
+            }>
+        ).map((item) => {
+            const amount = toNumber(item.total_expense);
+
+            return {
+                sourceType: "trip" as const,
+                sourceId: item.id,
+                title: item.title || item.city,
+                startDate: item.start_date,
+                endDate: item.end_date,
+                amount,
+                status: amount > 0 ? ("ready" as const) : ("missing_expense" as const),
+            };
+        });
+
+        const pendingPayroll = (
+            pendingPayrollResult as Array<{
+                payroll_record_id: number;
+                actual_id: number | null;
+                start_date: string;
+                end_date: string;
+                pay_date: string;
+                actual_net_pay: number | string | null;
+            }>
+        ).map((item) => ({
+            sourceType: "payroll" as const,
+            sourceId: item.actual_id,
+            payrollRecordId: item.payroll_record_id,
+            actualId: item.actual_id,
+            startDate: item.start_date,
+            endDate: item.end_date,
+            payDate: item.pay_date,
+            amount: item.actual_net_pay === null ? null : toNumber(item.actual_net_pay),
+            status: item.actual_net_pay === null ? ("missing_actual" as const) : ("ready" as const),
+        }));
+
         return NextResponse.json({
             balance,
             income: currentIncome,
@@ -184,13 +294,18 @@ export async function GET(request: Request) {
             })),
 
             savings: savingsGoal,
+
+            pendingIntegrations: {
+                travel: pendingTravel,
+                payroll: pendingPayroll,
+            },
         });
     } catch (error) {
         console.error("GET /api/living error:", error);
 
         return NextResponse.json(
             {
-                error: "생활 데이터를 불러오지 못했어요.",
+                error: error instanceof Error ? error.message : String(error),
             },
             {
                 status: 500,
