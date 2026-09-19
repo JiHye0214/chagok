@@ -1,5 +1,6 @@
 import { getPayPeriodEndDate } from "@/lib/payPeriod";
 import { sql } from "@/lib/db";
+import { getCurrentUser } from "@/lib/auth/user";
 
 const getDateDifference = (fromDate: string, toDate: string) => {
     const from = new Date(`${fromDate}T00:00:00`);
@@ -14,6 +15,12 @@ const getDateDifference = (fromDate: string, toDate: string) => {
 
 export async function GET() {
     try {
+        const user = await getCurrentUser();
+
+        if (!user) {
+            return Response.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
         const result = await sql`
             SELECT
                 id,
@@ -30,7 +37,7 @@ export async function GET() {
                 semi_monthly_type,
                 custom_pay_days
             FROM salary_settings
-            WHERE id = 1
+            WHERE user_id = ${user.id}
             LIMIT 1
         `;
 
@@ -57,15 +64,18 @@ export async function GET() {
     } catch (error) {
         console.error("Salary settings GET error:", error);
 
-        return Response.json(
-            { error: "급여 설정을 불러오지 못했습니다." },
-            { status: 500 },
-        );
+        return Response.json({ error: "급여 설정을 불러오지 못했습니다." }, { status: 500 });
     }
 }
 
 export async function PUT(request: Request) {
     try {
+        const user = await getCurrentUser();
+
+        if (!user) {
+            return Response.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
         const body = await request.json();
 
         const province = body.province;
@@ -83,22 +93,14 @@ export async function PUT(request: Request) {
         let payDateOffset: number | null = null;
 
         if (payPeriodStartDate && payDate) {
-            const endDate = getPayPeriodEndDate(
-                payPeriodStartDate,
-                payFrequency,
-                semiMonthlyType,
-                customPayDays,
-            );
+            const endDate = getPayPeriodEndDate(payPeriodStartDate, payFrequency, semiMonthlyType, customPayDays);
 
-            payDateOffset = getDateDifference(
-                endDate,
-                payDate,
-            );
+            payDateOffset = getDateDifference(endDate, payDate);
         }
 
         const result = await sql`
             INSERT INTO salary_settings (
-                id,
+                user_id,
                 province,
                 pay_type,
                 pay_frequency,
@@ -113,7 +115,7 @@ export async function PUT(request: Request) {
                 custom_pay_days
             )
             VALUES (
-                1,
+                ${user.id},
                 ${province},
                 ${payType},
                 ${payFrequency},
@@ -127,7 +129,7 @@ export async function PUT(request: Request) {
                 ${semiMonthlyType},
                 ${customPayDays}
             )
-            ON CONFLICT (id)
+            ON CONFLICT (user_id)
             DO UPDATE SET
                 province = EXCLUDED.province,
                 pay_type = EXCLUDED.pay_type,
@@ -149,9 +151,6 @@ export async function PUT(request: Request) {
     } catch (error) {
         console.error("Salary settings PUT error:", error);
 
-        return Response.json(
-            { error: "급여 설정 저장에 실패했습니다." },
-            { status: 500 },
-        );
+        return Response.json({ error: "급여 설정 저장에 실패했습니다." }, { status: 500 });
     }
 }

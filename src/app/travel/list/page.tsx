@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, Plane, Star } from "lucide-react";
+import { CheckCircle2, Lock, Plane, Star } from "lucide-react";
 import { formatDate } from "@/lib/payPeriod";
 import BackButtonHeader from "@/components/BackButtonHeader";
 
@@ -312,6 +312,10 @@ export default function TravelListPage() {
      * 없으면 새로운 국가 그룹 생성
      * ---------------------------------------------------------
      */
+
+    // 무료회원은 3개까지
+    const canAddTrip = trips.length < 3;
+
     const addDestinationCity = async (result: CitySearchResult, countryNameOverride?: string) => {
         const countryInfo = await getCountryInfo(result.countryCode);
 
@@ -620,7 +624,9 @@ export default function TravelListPage() {
             });
 
             if (!response.ok) {
-                throw new Error("여행 저장에 실패했습니다.");
+                const errorData = await response.json().catch(() => null);
+
+                throw new Error(errorData?.error || "여행 저장에 실패했습니다.");
             }
 
             const newSavedTrip: SavedTrip = await response.json();
@@ -637,7 +643,9 @@ export default function TravelListPage() {
         } catch (error) {
             console.error(error);
 
-            alert("여행을 저장하지 못했어요.");
+            const message = error instanceof Error ? error.message : "여행을 저장하지 못했어요.";
+
+            alert(message);
         }
     };
 
@@ -659,11 +667,18 @@ export default function TravelListPage() {
             {/* 여행 추가 버튼 */}
             <button
                 type="button"
-                onClick={openAddTripModal}
-                aria-label="여행 추가"
-                className="fixed bottom-24 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-black text-white shadow-lg transition active:scale-95"
+                onClick={() => {
+                    if (!canAddTrip) {
+                        alert("무료 플랜에서는 여행을 최대 3개까지 저장할 수 있어요.");
+                        return;
+                    }
+
+                    openAddTripModal();
+                }}
+                aria-label={canAddTrip ? "여행 추가" : "여행 추가 잠김"}
+                className={"fixed bottom-24 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-black text-white shadow-lg transition active:scale-95"}
             >
-                <span className="text-2xl font-light leading-none">+</span>
+                {canAddTrip ? <span className="text-2xl font-light leading-none">+</span> : <Lock size={21} strokeWidth={2} />}
             </button>
 
             {/* --------------------------------------------------

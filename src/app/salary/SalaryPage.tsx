@@ -5,6 +5,7 @@ import { getPeriodsPerYear, formatDate } from "@/lib/payPeriod";
 import { calculateTaxes } from "@/lib/tax";
 import { isHoliday } from "@/lib/holiday";
 import Link from "next/link";
+import { Lock } from "lucide-react";
 
 type PayType = "hourly" | "salary" | "commission" | "other";
 
@@ -209,6 +210,8 @@ const getDdayLabel = (targetDate: string) => {
 };
 
 export default function SalaryPage() {
+    const [planCode, setPlanCode] = useState<string>("free");
+
     const [schedules, setSchedules] = useState<WorkSchedule[]>([]);
     const [isSchedulesLoading, setIsSchedulesLoading] = useState(true);
 
@@ -222,6 +225,7 @@ export default function SalaryPage() {
     const [pendingSavedTips, setPendingSavedTips] = useState<PayPeriodTips | null>(null);
 
     const [salarySettings, setSalarySettings] = useState<SalarySettings | null>(null);
+    const [isSalarySettingsLoading, setIsSalarySettingsLoading] = useState(true);
 
     const [latestActualPay, setLatestActualPay] = useState<number | null>(null);
 
@@ -286,7 +290,9 @@ export default function SalaryPage() {
 
                 setSalarySettings(data);
             } catch (error) {
-                console.error(error);
+                console.error("급여 설정 조회 실패:", error);
+            } finally {
+                setIsSalarySettingsLoading(false);
             }
         };
 
@@ -337,6 +343,32 @@ export default function SalaryPage() {
 
         loadHolidays();
     }, [salarySettings?.province, schedules]);
+
+    /*
+     * --------------------------------------------------
+     * Premium User
+     * --------------------------------------------------
+     */
+
+    useEffect(() => {
+        const loadPlan = async () => {
+            try {
+                const response = await fetch("/api/auth/me");
+
+                if (!response.ok) {
+                    return;
+                }
+
+                const data = await response.json();
+
+                setPlanCode(data.planCode ?? "free");
+            } catch (error) {
+                console.error("플랜 조회 실패:", error);
+            }
+        };
+
+        loadPlan();
+    }, []);
 
     /*
      * --------------------------------------------------
@@ -1058,10 +1090,7 @@ export default function SalaryPage() {
      */
     // const shouldShowPendingPay = Boolean(pendingPayPeriod) && isPendingPeriodEnded && !isPendingPayDatePassed;
     const shouldShowPendingPay =
-    Boolean(pendingPayPeriod) &&
-    isPendingPeriodEnded &&
-    !isPendingPayDatePassed &&
-    !pendingActualPay;
+        Boolean(pendingPayPeriod) && isPendingPeriodEnded && !isPendingPayDatePassed && !pendingActualPay;
 
     /*
      * 지급일 당일은 아직 "지급일이 지났다"가 아니다.
@@ -1193,10 +1222,33 @@ export default function SalaryPage() {
      * --------------------------------------------------
      */
 
-    if (isSchedulesLoading) {
+    if (isSchedulesLoading || isSalarySettingsLoading) {
         return (
             <div className="flex h-[calc(100vh-152px)] items-center justify-center">
-                <p className="text-sm text-gray-400">근무 기록을 불러오는 중...</p>
+                <p className="text-sm text-gray-400">불러오는 중...</p>
+            </div>
+        );
+    }
+
+    if (!salarySettings) {
+        return (
+            <div className="flex h-[calc(100vh-152px)] items-center justify-center px-6">
+                <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-8 text-center">
+                    <h2 className="text-xl font-semibold text-gray-900">Salary Settings가 필요해요</h2>
+
+                    <p className="mt-3 text-sm leading-6 text-gray-500">
+                        급여 계산과 통계를 사용하려면
+                        <br />
+                        먼저 Salary Settings를 설정해주세요.
+                    </p>
+
+                    <Link
+                        href="/salary/settings"
+                        className="mt-6 inline-flex h-11 items-center justify-center rounded-xl bg-gray-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-gray-800"
+                    >
+                        Salary Settings 설정하기
+                    </Link>
+                </div>
             </div>
         );
     }
@@ -1323,191 +1375,259 @@ export default function SalaryPage() {
             )}
 
             {/* --------------------------------------------------
-                Actual Net Pay Statistics
-            -------------------------------------------------- */}
+    Actual Net Pay Statistics
+-------------------------------------------------- */}
 
-            <section className="mt-6 rounded-3xl bg-white p-5 shadow-sm">
-                <div className="flex items-start justify-between">
-                    <div>
-                        <p className="text-xs text-gray-400">실수령액 통계</p>
+            <section className="mt-6">
+                {planCode === "pro" ? (
+                    <div className="rounded-3xl bg-white p-5 shadow-sm">
+                        <div className="flex items-start justify-between">
+                            <div>
+                                <p className="text-xs text-gray-400">실수령액 통계</p>
 
-                        <h2 className="mt-1 text-lg font-bold">평균 실수령액</h2>
+                                <h2 className="mt-1 text-lg font-bold">평균 실수령액</h2>
+                            </div>
+
+                            <Link
+                                href="/salary/pay-history"
+                                className="rounded-full bg-gray-100 px-3 py-2 text-xs font-medium text-gray-600"
+                            >
+                                기록하기 →
+                            </Link>
+                        </div>
+
+                        <p className="mt-2 text-3xl font-bold">
+                            {averageActualNetPay !== null ? formatMoney(averageActualNetPay) : "-"}
+                        </p>
+
+                        {graphPayHistory.length > 0 ? (
+                            <div className="mt-8">
+                                <div className="relative h-48 w-full">
+                                    {(() => {
+                                        const values = graphPayHistory.map((point) => point.value);
+
+                                        const allValues = [
+                                            ...values,
+                                            ...(averageActualNetPay !== null ? [averageActualNetPay] : []),
+                                        ];
+
+                                        const minValue = Math.min(...allValues);
+                                        const maxValue = Math.max(...allValues);
+                                        const range = Math.max(maxValue - minValue, 1);
+
+                                        const width = 320;
+                                        const height = 150;
+                                        const paddingX = 16;
+                                        const paddingY = 16;
+
+                                        const points = graphPayHistory.map((point, index) => {
+                                            const x =
+                                                graphPayHistory.length === 1
+                                                    ? width / 2
+                                                    : paddingX + (index / (graphPayHistory.length - 1)) * (width - paddingX * 2);
+
+                                            const y =
+                                                height - paddingY - ((point.value - minValue) / range) * (height - paddingY * 2);
+
+                                            return {
+                                                ...point,
+                                                x,
+                                                y,
+                                            };
+                                        });
+
+                                        const linePoints = points.map((point) => `${point.x},${point.y}`).join(" ");
+
+                                        const averageY =
+                                            averageActualNetPay !== null
+                                                ? height -
+                                                  paddingY -
+                                                  ((averageActualNetPay - minValue) / range) * (height - paddingY * 2)
+                                                : null;
+
+                                        return (
+                                            <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full overflow-visible">
+                                                {averageY !== null && (
+                                                    <line
+                                                        x1={paddingX}
+                                                        y1={averageY}
+                                                        x2={width - paddingX}
+                                                        y2={averageY}
+                                                        stroke="currentColor"
+                                                        strokeWidth="1"
+                                                        strokeDasharray="4 4"
+                                                        className="text-gray-300"
+                                                    />
+                                                )}
+
+                                                <polyline
+                                                    points={linePoints}
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    strokeWidth="2"
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    className="text-gray-900"
+                                                />
+
+                                                {points.map((point) => (
+                                                    <g
+                                                        key={`${point.startDate}-${point.endDate}`}
+                                                        className={point.isEstimate ? "" : "cursor-pointer"}
+                                                        onMouseEnter={() => {
+                                                            if (point.isEstimate) {
+                                                                setHoveredGraphPoint(point);
+                                                            }
+                                                        }}
+                                                        onMouseLeave={() => {
+                                                            if (point.isEstimate) {
+                                                                setHoveredGraphPoint(null);
+                                                            }
+                                                        }}
+                                                        onClick={() => {
+                                                            if (point.isEstimate) {
+                                                                return;
+                                                            }
+
+                                                            if (point.history) {
+                                                                setSelectedPayHistory(point.history);
+                                                            }
+                                                        }}
+                                                    >
+                                                        <circle cx={point.x} cy={point.y} r="12" fill="transparent" />
+
+                                                        <circle
+                                                            cx={point.x}
+                                                            cy={point.y}
+                                                            r="4"
+                                                            className={point.isEstimate ? "fill-blue-500" : "fill-gray-900"}
+                                                        />
+
+                                                        {point.isEstimate &&
+                                                            hoveredGraphPoint?.startDate === point.startDate &&
+                                                            hoveredGraphPoint?.endDate === point.endDate && (
+                                                                <foreignObject
+                                                                    x={point.x - 60}
+                                                                    y={point.y - 48}
+                                                                    width="120"
+                                                                    height="42"
+                                                                    pointerEvents="none"
+                                                                >
+                                                                    <div className="flex justify-center">
+                                                                        <div className="rounded-lg bg-gray-900 px-2.5 py-2 text-center text-[10px] text-white shadow-md">
+                                                                            <div className="font-semibold">
+                                                                                예상 {formatMoney(point.value)}
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </foreignObject>
+                                                            )}
+                                                    </g>
+                                                ))}
+                                            </svg>
+                                        );
+                                    })()}
+                                </div>
+
+                                <div className="mt-2 flex justify-between text-[10px] text-gray-400">
+                                    {graphPayHistory.map((point) => (
+                                        <span
+                                            key={`${point.startDate}-${point.endDate}`}
+                                            className={point.isEstimate ? "font-medium text-blue-500" : ""}
+                                        >
+                                            {point.payDate ? formatDisplayDate(point.payDate) : "예정"}
+                                        </span>
+                                    ))}
+                                </div>
+
+                                <div className="mt-4 flex items-center justify-end gap-2 text-xs text-gray-400">
+                                    <span className="h-px w-5 border-t border-dashed border-gray-300" />
+                                    평균
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="mt-6 rounded-2xl bg-gray-100 p-4 text-sm text-gray-500">
+                                아직 기록된 실수령액이 없어요.
+                                <br />
+                                급여 기록에서 실수령액을 기록하면 통계가 보여요.
+                            </div>
+                        )}
                     </div>
+                ) : (
+                    <div className="relative overflow-hidden rounded-3xl bg-white shadow-sm">
+                        {/* 잠긴 통계 미리보기 */}
+                        <div className="pointer-events-none select-none blur-[2px] opacity-30">
+                            <div className="p-5">
+                                <div className="flex items-start justify-between">
+                                    <div>
+                                        <p className="text-xs text-gray-400">실수령액 통계</p>
 
-                    <Link
-                        href="/salary/pay-history"
-                        className="rounded-full bg-gray-100 px-3 py-2 text-xs font-medium text-gray-600"
-                    >
-                        기록하기 →
-                    </Link>
-                </div>
+                                        <h2 className="mt-1 text-lg font-bold text-gray-900">평균 실수령액</h2>
+                                    </div>
 
-                <p className="mt-2 text-3xl font-bold">{averageActualNetPay !== null ? formatMoney(averageActualNetPay) : "-"}</p>
+                                    <span className="rounded-full bg-gray-100 px-3 py-2 text-xs font-medium text-gray-500">
+                                        Salary Statistics
+                                    </span>
+                                </div>
 
-                {graphPayHistory.length > 0 ? (
-                    <div className="mt-8">
-                        <div className="relative h-48 w-full">
-                            {(() => {
-                                const values = graphPayHistory.map((point) => point.value);
+                                <p className="mt-2 text-3xl font-bold text-gray-900">$2,450</p>
 
-                                const allValues = [...values, ...(averageActualNetPay !== null ? [averageActualNetPay] : [])];
-
-                                const minValue = Math.min(...allValues);
-
-                                const maxValue = Math.max(...allValues);
-
-                                const range = Math.max(maxValue - minValue, 1);
-
-                                const width = 320;
-                                const height = 150;
-                                const paddingX = 16;
-                                const paddingY = 16;
-
-                                const points = graphPayHistory.map((point, index) => {
-                                    const x =
-                                        graphPayHistory.length === 1
-                                            ? width / 2
-                                            : paddingX + (index / (graphPayHistory.length - 1)) * (width - paddingX * 2);
-
-                                    const y = height - paddingY - ((point.value - minValue) / range) * (height - paddingY * 2);
-
-                                    return {
-                                        ...point,
-                                        x,
-                                        y,
-                                    };
-                                });
-
-                                const linePoints = points.map((point) => `${point.x},${point.y}`).join(" ");
-
-                                const averageY =
-                                    averageActualNetPay !== null
-                                        ? height - paddingY - ((averageActualNetPay - minValue) / range) * (height - paddingY * 2)
-                                        : null;
-
-                                return (
-                                    <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full overflow-visible">
-                                        {averageY !== null && (
+                                <div className="mt-8">
+                                    <div className="relative h-48 w-full">
+                                        <svg viewBox="0 0 320 150" className="h-full w-full overflow-visible">
                                             <line
-                                                x1={paddingX}
-                                                y1={averageY}
-                                                x2={width - paddingX}
-                                                y2={averageY}
+                                                x1="16"
+                                                y1="75"
+                                                x2="304"
+                                                y2="75"
                                                 stroke="currentColor"
                                                 strokeWidth="1"
                                                 strokeDasharray="4 4"
                                                 className="text-gray-300"
                                             />
-                                        )}
 
-                                        <polyline
-                                            points={linePoints}
-                                            fill="none"
-                                            stroke="currentColor"
-                                            strokeWidth="2"
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            className="text-gray-900"
-                                        />
+                                            <polyline
+                                                points="16,105 88,80 160,92 232,50 304,65"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                strokeWidth="2"
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                className="text-gray-900"
+                                            />
 
-                                        {points.map((point) => (
-                                            <g
-                                                key={`${point.startDate}-${point.endDate}`}
-                                                className={point.isEstimate ? "" : "cursor-pointer"}
-                                                onMouseEnter={() => {
-                                                    if (point.isEstimate) {
-                                                        setHoveredGraphPoint(point);
-                                                    }
-                                                }}
-                                                onMouseLeave={() => {
-                                                    if (point.isEstimate) {
-                                                        setHoveredGraphPoint(null);
-                                                    }
-                                                }}
-                                                onClick={() => {
-                                                    if (point.isEstimate) {
-                                                        return;
-                                                    }
+                                            {[105, 80, 92, 50, 65].map((y, index) => (
+                                                <circle key={index} cx={16 + index * 72} cy={y} r="4" className="fill-gray-900" />
+                                            ))}
+                                        </svg>
+                                    </div>
 
-                                                    if (point.history) {
-                                                        setSelectedPayHistory(point.history);
-                                                    }
-                                                }}
-                                            >
-                                                {/*
-                                                 * 클릭/hover 영역
-                                                 *
-                                                 * 예상점도 hover는 가능하지만
-                                                 * 클릭은 아래 onClick에서 차단.
-                                                 */}
-                                                <circle cx={point.x} cy={point.y} r="12" fill="transparent" />
+                                    <div className="mt-2 flex justify-between text-[10px] text-gray-400">
+                                        <span>Sep 01</span>
+                                        <span>Sep 15</span>
+                                        <span>Sep 30</span>
+                                        <span>Oct 15</span>
+                                        <span>Oct 30</span>
+                                    </div>
 
-                                                {/*
-                                                 * 실제값:
-                                                 * 검은색
-                                                 *
-                                                 * 예상값:
-                                                 * 파란색
-                                                 */}
-                                                <circle
-                                                    cx={point.x}
-                                                    cy={point.y}
-                                                    r="4"
-                                                    className={point.isEstimate ? "fill-blue-500" : "fill-gray-900"}
-                                                />
-
-                                                {/*
-                                                 * 예상값 hover
-                                                 *
-                                                 * "예상 $XXX.XX"
-                                                 */}
-                                                {point.isEstimate &&
-                                                    hoveredGraphPoint?.startDate === point.startDate &&
-                                                    hoveredGraphPoint?.endDate === point.endDate && (
-                                                        <foreignObject
-                                                            x={point.x - 60}
-                                                            y={point.y - 48}
-                                                            width="120"
-                                                            height="42"
-                                                            pointerEvents="none"
-                                                        >
-                                                            <div className="flex justify-center">
-                                                                <div className="rounded-lg bg-gray-900 px-2.5 py-2 text-center text-[10px] text-white shadow-md">
-                                                                    <div className="font-semibold">
-                                                                        예상 {formatMoney(point.value)}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        </foreignObject>
-                                                    )}
-                                            </g>
-                                        ))}
-                                    </svg>
-                                );
-                            })()}
+                                    <div className="mt-4 flex items-center justify-end gap-2 text-xs text-gray-400">
+                                        <span className="h-px w-5 border-t border-dashed border-gray-300" />
+                                        평균
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
-                        <div className="mt-2 flex justify-between text-[10px] text-gray-400">
-                            {graphPayHistory.map((point) => (
-                                <span
-                                    key={`${point.startDate}-${point.endDate}`}
-                                    className={point.isEstimate ? "font-medium text-blue-500" : ""}
-                                >
-                                    {point.payDate ? formatDisplayDate(point.payDate) : "예정"}
-                                </span>
-                            ))}
-                        </div>
+                        {/* 잠금 안내 */}
+                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/65">
+                            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100">
+                                <Lock size={20} strokeWidth={2} className="text-gray-500" />
+                            </div>
 
-                        <div className="mt-4 flex items-center justify-end gap-2 text-xs text-gray-400">
-                            <span className="h-px w-5 border-t border-dashed border-gray-300" />
-                            평균
+                            <p className="mt-4 text-sm font-semibold text-gray-900">실수령액 통계</p>
+
+                            <p className="mt-1 text-xs text-gray-500">Pro에서 실수령액 통계를 확인할 수 있어요.</p>
                         </div>
-                    </div>
-                ) : (
-                    <div className="mt-6 rounded-2xl bg-gray-100 p-4 text-sm text-gray-500">
-                        아직 기록된 실수령액이 없어요.
-                        <br />
-                        급여 기록에서 실수령액을 기록하면 통계가 보여요.
                     </div>
                 )}
             </section>

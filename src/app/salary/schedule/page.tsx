@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { getPayPeriodEndDate, formatDate, getPeriodsPerYear } from "@/lib/payPeriod";
 import { getNotificationTime, subscribeToPush } from "@/lib/notification";
 import { isHoliday } from "@/lib/holiday";
 import { calculateTaxes } from "@/lib/tax";
 import BackButtonHeader from "@/components/BackButtonHeader";
+import { Lock } from "lucide-react";
 
 type PayType = "hourly" | "salary" | "commission" | "other";
 
@@ -184,6 +186,8 @@ const shiftPayPeriod = (
 };
 
 export default function SchedulePage() {
+    const [planCode, setPlanCode] = useState<"free" | "pro">("free");
+
     /*
      * --------------------------------------------------
      * Calendar
@@ -318,6 +322,32 @@ export default function SchedulePage() {
 
     /*
      * --------------------------------------------------
+     * Load Plan
+     * --------------------------------------------------
+     */
+
+    useEffect(() => {
+        const loadPlan = async () => {
+            try {
+                const response = await fetch("/api/auth/me");
+
+                if (!response.ok) {
+                    return;
+                }
+
+                const data = await response.json();
+
+                setPlanCode(data.planCode === "pro" ? "pro" : "free");
+            } catch (error) {
+                console.error("요금제 조회 실패:", error);
+            }
+        };
+
+        loadPlan();
+    }, []);
+
+    /*
+     * --------------------------------------------------
      * Load Salary Settings
      * --------------------------------------------------
      */
@@ -335,7 +365,7 @@ export default function SchedulePage() {
 
                 setSalarySettings(data);
             } catch (error) {
-                console.error(error);
+                console.error("급여 설정 조회 실패:", error);
             }
         };
 
@@ -643,6 +673,12 @@ export default function SchedulePage() {
      */
 
     const openAddModal = (date: string) => {
+        if (planCode === "free" && schedules.length >= 100) {
+            alert("무료 이용자는 근무 기록을 최대 100개까지 저장할 수 있어요.");
+
+            return;
+        }
+
         setEditingSchedule(null);
 
         setSelectedDate(date);
@@ -912,7 +948,7 @@ export default function SchedulePage() {
 
             setPaychequeTips(saved.paychequeTips > 0 ? String(saved.paychequeTips) : "");
 
-            alert("팁이 저장됐어요!");
+            // alert("팁이 저장됐어요!");
         } catch (error) {
             console.error(error);
 
@@ -943,7 +979,7 @@ export default function SchedulePage() {
     if (isSchedulesLoading) {
         return (
             <div className="flex h-[calc(100vh-152px)] items-center justify-center">
-                <p className="text-sm text-gray-400">근무 기록을 불러오는 중...</p>
+                <p className="text-sm text-gray-400">불러오는 중...</p>
             </div>
         );
     }
@@ -992,6 +1028,20 @@ export default function SchedulePage() {
                         </div>
                     </div>
                 </section>
+            )}
+
+            {planCode === "free" && schedules.length >= 100 && (
+                <div className="mb-4 flex items-center gap-3 rounded-2xl bg-gray-50 p-4">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100">
+                        <Lock size={16} className="text-gray-500" />
+                    </div>
+
+                    <div>
+                        <p className="text-sm font-semibold text-gray-900">근무 기록 100개를 모두 사용했어요.</p>
+
+                        <p className="mt-1 text-xs text-gray-500">기존 기록을 삭제하면 새로운 근무를 등록할 수 있어요.</p>
+                    </div>
+                </div>
             )}
 
             {/* Calendar */}
@@ -1650,150 +1700,137 @@ export default function SchedulePage() {
                     <p className="text-sm text-gray-400">이번예상 급여</p>
 
                     <div className="mt-2 flex items-start gap-2">
-                        <p className="text-4xl font-bold tabular-nums">${animatedNetPay.toFixed(2)}</p>
+                        <p className="text-4xl font-bold tabular-nums">
+                            {formatMoney(hasCashTips ? currentPeriodEstimate.totalIncome : currentPeriodEstimate.netPay)}
+                        </p>
                     </div>
 
-                    <div className="mt-6 space-y-3 text-sm">
-                        <div className="flex justify-between">
-                            <span className="text-gray-400">근무시간</span>
-
-                            <span>
-                                {currentPeriodEstimate.hours.toFixed(2)}
-                                시간
-                            </span>
-                        </div>
-
-                        <div className="flex justify-between">
-                            <span className="text-gray-400">기본 급여</span>
-
-                            <span>{formatMoney(currentPeriodEstimate.basePay)}</span>
-                        </div>
-
-                        {hasPaychequeTips && (
+                    {/* 세부 계산 */}
+                    {planCode === "pro" ? (
+                        <div className="mt-6 space-y-3 text-sm">
                             <div className="flex justify-between">
-                                <span className="text-gray-400">급여 포함 팁</span>
+                                <span className="text-gray-400">근무시간</span>
 
-                                <span>{formatMoney(currentPeriodEstimate.paychequeTips)}</span>
+                                <span>
+                                    {currentPeriodEstimate.hours.toFixed(2)}
+                                    시간
+                                </span>
                             </div>
-                        )}
 
-                        {currentHolidaySchedules.length > 0 && (
                             <div className="flex justify-between">
-                                <span className="text-gray-400">Holiday Pay</span>
+                                <span className="text-gray-400">기본 급여</span>
 
-                                <span>{formatMoney(currentPeriodEstimate.holidayPay)}</span>
+                                <span>{formatMoney(currentPeriodEstimate.basePay)}</span>
                             </div>
-                        )}
 
-                        <div className="flex justify-between">
-                            <span className="text-gray-400">
-                                Vacation Pay ({vacationPayRate}
-                                %)
-                            </span>
+                            {hasPaychequeTips && (
+                                <div className="flex justify-between">
+                                    <span className="text-gray-400">급여 포함 팁</span>
 
-                            <span>{formatMoney(currentPeriodEstimate.vacationPay)}</span>
-                        </div>
+                                    <span>{formatMoney(currentPeriodEstimate.paychequeTips)}</span>
+                                </div>
+                            )}
 
-                        <div className="mt-4 border-t border-gray-800 pt-4">
+                            {currentHolidaySchedules.length > 0 && (
+                                <div className="flex justify-between">
+                                    <span className="text-gray-400">Holiday Pay</span>
+
+                                    <span>{formatMoney(currentPeriodEstimate.holidayPay)}</span>
+                                </div>
+                            )}
+
                             <div className="flex justify-between">
-                                <span className="text-gray-300">세전 급여</span>
+                                <span className="text-gray-400">Vacation Pay ({vacationPayRate}%)</span>
 
-                                <span className="font-semibold">{formatMoney(currentPeriodEstimate.grossPay)}</span>
+                                <span>{formatMoney(currentPeriodEstimate.vacationPay)}</span>
                             </div>
-                        </div>
 
-                        <div className="flex justify-between">
-                            <span className="text-gray-400">예상 공제</span>
-
-                            <span>- {formatMoney(currentPeriodEstimate.deductions)}</span>
-                        </div>
-
-                        <div className="flex justify-between">
-                            <span className="text-gray-300">실수령 급여</span>
-
-                            <span className="font-semibold">{formatMoney(currentPeriodEstimate.netPay)}</span>
-                        </div>
-
-                        {hasCashTips && (
                             <div className="mt-4 border-t border-gray-800 pt-4">
                                 <div className="flex justify-between">
-                                    <span className="text-gray-400">현금 팁</span>
+                                    <span className="text-gray-300">세전 급여</span>
 
-                                    <span>{formatMoney(currentPeriodEstimate.cashTips)}</span>
+                                    <span className="font-semibold">{formatMoney(currentPeriodEstimate.grossPay)}</span>
                                 </div>
                             </div>
-                        )}
 
-                        <div className="my-6 flex items-center justify-between rounded-2xl bg-white p-3 text-black">
-                            <span className="text-sm font-medium">{hasCashTips ? "예상 총 수령액" : "예상 실수령액"}</span>
+                            <div className="flex justify-between">
+                                <span className="text-gray-400">예상 공제</span>
 
-                            <span className="text-xl font-bold">
-                                {formatMoney(hasCashTips ? currentPeriodEstimate.totalIncome : currentPeriodEstimate.netPay)}
-                            </span>
+                                <span>- {formatMoney(currentPeriodEstimate.deductions)}</span>
+                            </div>
+
+                            <div className="flex justify-between">
+                                <span className="text-gray-300">실수령 급여</span>
+
+                                <span className="font-semibold">{formatMoney(currentPeriodEstimate.netPay)}</span>
+                            </div>
+
+                            {hasCashTips && (
+                                <div className="mt-4 border-t border-gray-800 pt-4">
+                                    <div className="flex justify-between">
+                                        <span className="text-gray-400">현금 팁</span>
+
+                                        <span>{formatMoney(currentPeriodEstimate.cashTips)}</span>
+                                    </div>
+                                </div>
+                            )}
                         </div>
-                    </div>
+                    ) : (
+                        <div className="relative mt-6 overflow-hidden rounded-2xl">
+                            {/* 잠긴 세부사항 미리보기 */}
+                            <div className="pointer-events-none select-none blur-[3px] opacity-40">
+                                <div className="space-y-3 text-sm">
+                                    <div className="flex justify-between">
+                                        <span className="text-gray-400">근무시간</span>
+                                        <span>32.50시간</span>
+                                    </div>
 
-                    <div className="mt-5 rounded-2xl bg-white/5 p-4">
-                        <p className="text-xs font-medium text-gray-300">예상 공제 내역</p>
+                                    <div className="flex justify-between">
+                                        <span className="text-gray-400">기본 급여</span>
+                                        <span>$570.03</span>
+                                    </div>
 
-                        <div className="mt-3 space-y-2 text-xs">
-                            <div className="flex justify-between">
-                                <span className="text-gray-500">CPP</span>
+                                    <div className="flex justify-between">
+                                        <span className="text-gray-400">Holiday Pay</span>
+                                        <span>$28.50</span>
+                                    </div>
 
-                                <span className="text-gray-300">
-                                    -$
-                                    {currentPeriodEstimate.cpp.toFixed(2)}
-                                </span>
-                            </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-gray-400">Vacation Pay</span>
+                                        <span>$24.85</span>
+                                    </div>
 
-                            <div className="flex justify-between">
-                                <span className="text-gray-500">CPP2</span>
+                                    <div className="border-t border-gray-800 pt-4">
+                                        <div className="flex justify-between">
+                                            <span className="text-gray-300">세전 급여</span>
+                                            <span>$623.38</span>
+                                        </div>
+                                    </div>
 
-                                <span className="text-gray-300">
-                                    -$
-                                    {currentPeriodEstimate.cpp2.toFixed(2)}
-                                </span>
-                            </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-gray-400">예상 공제</span>
+                                        <span>-$123.42</span>
+                                    </div>
 
-                            <div className="flex justify-between">
-                                <span className="text-gray-500">EI</span>
-
-                                <span className="text-gray-300">
-                                    -$
-                                    {currentPeriodEstimate.ei.toFixed(2)}
-                                </span>
-                            </div>
-
-                            <div className="flex justify-between">
-                                <span className="text-gray-500">연방 소득세</span>
-
-                                <span className="text-gray-300">
-                                    -$
-                                    {currentPeriodEstimate.federalTax.toFixed(2)}
-                                </span>
-                            </div>
-
-                            <div className="flex justify-between">
-                                <span className="text-gray-500">{currentPeriodEstimate.provinceName} 소득세</span>
-
-                                <span className="text-gray-300">
-                                    -$
-                                    {currentPeriodEstimate.provincialTax.toFixed(2)}
-                                </span>
-                            </div>
-
-                            <div className="mt-3 border-t border-white/10 pt-3">
-                                <div className="flex justify-between">
-                                    <span className="text-gray-300">총 공제</span>
-
-                                    <span className="font-medium text-white">
-                                        -$
-                                        {currentPeriodEstimate.deductions.toFixed(2)}
-                                    </span>
+                                    <div className="flex justify-between">
+                                        <span className="text-gray-300">실수령 급여</span>
+                                        <span>$499.96</span>
+                                    </div>
                                 </div>
                             </div>
+
+                            {/* Lock */}
+                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50">
+                                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10">
+                                    <Lock size={19} strokeWidth={2} className="text-gray-300" />
+                                </div>
+
+                                <p className="mt-3 text-sm font-semibold text-white">급여 계산 상세</p>
+
+                                <p className="mt-1 text-xs text-gray-400">Pro에서 세부 계산 내역을 확인할 수 있어요.</p>
+                            </div>
                         </div>
-                    </div>
+                    )}
 
                     {salarySettings?.payType === "hourly" && (
                         <p className="mt-5 text-xs text-gray-400">${hourlyWage.toFixed(2)} / 시간 기준</p>

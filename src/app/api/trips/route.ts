@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
+import { getCurrentUser } from "@/lib/auth/user";
 
 type DestinationCity = {
     city: string;
@@ -15,6 +16,12 @@ type Destination = {
 
 export async function GET() {
     try {
+        const user = await getCurrentUser();
+
+        if (!user) {
+            return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+        }
+
         const trips = await sql`
             SELECT
                 t.id,
@@ -74,6 +81,7 @@ export async function GET() {
                 ) AS "totalExpense"
 
             FROM trips t
+            WHERE t.user_id = ${user.id}
             ORDER BY t.start_date DESC
         `;
 
@@ -81,28 +89,56 @@ export async function GET() {
     } catch (error) {
         console.error("여행 목록 조회 실패:", error);
 
-        return NextResponse.json(
-            { error: "여행 목록을 불러오지 못했습니다." },
-            { status: 500 },
-        );
+        return NextResponse.json({ error: "여행 목록을 불러오지 못했습니다." }, { status: 500 });
     }
 }
 
 export async function POST(request: Request) {
     try {
+        const user = await getCurrentUser();
+
+        if (!user) {
+            return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+        }
+
+        const subscription = await sql`
+            SELECT
+                s.plan_id,
+                p.code AS plan_code
+            FROM subscriptions s
+            JOIN plans p
+                ON p.id = s.plan_id
+            WHERE s.user_id = ${user.id}
+            LIMIT 1
+        `;
+
+        if (subscription.length === 0) {
+            return NextResponse.json({ error: "구독 정보를 찾을 수 없습니다." }, { status: 403 });
+        }
+
+        const planCode = subscription[0].plan_code;
+
+        if (planCode === "free") {
+            const tripCount = await sql`
+        SELECT COUNT(*)::int AS count
+        FROM trips
+        WHERE user_id = ${user.id}
+    `;
+
+            if (tripCount[0].count >= 3) {
+                return NextResponse.json(
+                    {
+                        error: "무료 플랜에서는 여행을 최대 3개까지 저장할 수 있어요.",
+                        code: "TRIP_LIMIT_REACHED",
+                    },
+                    { status: 403 },
+                );
+            }
+        }
+
         const body = await request.json();
 
-        const {
-            tripType,
-            title,
-            destinations,
-            startDate,
-            endDate,
-            people,
-            budget,
-            currency,
-            rating,
-        } = body as {
+        const { tripType, title, destinations, startDate, endDate, people, budget, currency, rating } = body as {
             tripType: "upcoming" | "completed";
             title?: string;
             destinations?: Destination[];
@@ -119,33 +155,21 @@ export async function POST(request: Request) {
         // ----------------------------------------
 
         if (tripType !== "upcoming" && tripType !== "completed") {
-            return NextResponse.json(
-                { error: "잘못된 여행 유형입니다." },
-                { status: 400 },
-            );
+            return NextResponse.json({ error: "잘못된 여행 유형입니다." }, { status: 400 });
         }
 
         if (!startDate || !endDate) {
-            return NextResponse.json(
-                { error: "여행 일정을 입력해주세요." },
-                { status: 400 },
-            );
+            return NextResponse.json({ error: "여행 일정을 입력해주세요." }, { status: 400 });
         }
 
         if (new Date(endDate) < new Date(startDate)) {
-            return NextResponse.json(
-                { error: "여행 종료일은 시작일보다 빠를 수 없습니다." },
-                { status: 400 },
-            );
+            return NextResponse.json({ error: "여행 종료일은 시작일보다 빠를 수 없습니다." }, { status: 400 });
         }
 
         const parsedPeople = Number(people);
 
         if (!Number.isInteger(parsedPeople) || parsedPeople < 1) {
-            return NextResponse.json(
-                { error: "인원은 1명 이상이어야 합니다." },
-                { status: 400 },
-            );
+            return NextResponse.json({ error: "인원은 1명 이상이어야 합니다." }, { status: 400 });
         }
 
         // ----------------------------------------
@@ -153,10 +177,7 @@ export async function POST(request: Request) {
         // ----------------------------------------
 
         if (!Array.isArray(destinations) || destinations.length === 0) {
-            return NextResponse.json(
-                { error: "여행지를 하나 이상 추가해주세요." },
-                { status: 400 },
-            );
+            return NextResponse.json({ error: "여행지를 하나 이상 추가해주세요." }, { status: 400 });
         }
 
         const normalizedDestinations: Destination[] = [];
@@ -169,16 +190,10 @@ export async function POST(request: Request) {
                 .toUpperCase();
 
             if (!country || !countryCode) {
-                return NextResponse.json(
-                    { error: "국가 정보를 확인해주세요." },
-                    { status: 400 },
-                );
+                return NextResponse.json({ error: "국가 정보를 확인해주세요." }, { status: 400 });
             }
 
-            if (
-                !Array.isArray(destination.cities) ||
-                destination.cities.length === 0
-            ) {
+            if (!Array.isArray(destination.cities) || destination.cities.length === 0) {
                 return NextResponse.json(
                     {
                         error: `${country}에 도시를 하나 이상 추가해주세요.`,
@@ -193,30 +208,16 @@ export async function POST(request: Request) {
                 const city = String(cityData?.city ?? "").trim();
 
                 if (!city) {
-                    return NextResponse.json(
-                        { error: "도시 이름을 확인해주세요." },
-                        { status: 400 },
-                    );
+                    return NextResponse.json({ error: "도시 이름을 확인해주세요." }, { status: 400 });
                 }
 
                 const latitude =
-                    cityData?.latitude === null ||
-                    cityData?.latitude === undefined
-                        ? null
-                        : Number(cityData.latitude);
+                    cityData?.latitude === null || cityData?.latitude === undefined ? null : Number(cityData.latitude);
 
                 const longitude =
-                    cityData?.longitude === null ||
-                    cityData?.longitude === undefined
-                        ? null
-                        : Number(cityData.longitude);
+                    cityData?.longitude === null || cityData?.longitude === undefined ? null : Number(cityData.longitude);
 
-                if (
-                    latitude !== null &&
-                    (!Number.isFinite(latitude) ||
-                        latitude < -90 ||
-                        latitude > 90)
-                ) {
+                if (latitude !== null && (!Number.isFinite(latitude) || latitude < -90 || latitude > 90)) {
                     return NextResponse.json(
                         {
                             error: `${city}의 위도 값이 올바르지 않습니다.`,
@@ -225,12 +226,7 @@ export async function POST(request: Request) {
                     );
                 }
 
-                if (
-                    longitude !== null &&
-                    (!Number.isFinite(longitude) ||
-                        longitude < -180 ||
-                        longitude > 180)
-                ) {
+                if (longitude !== null && (!Number.isFinite(longitude) || longitude < -180 || longitude > 180)) {
                     return NextResponse.json(
                         {
                             error: `${city}의 경도 값이 올바르지 않습니다.`,
@@ -266,6 +262,7 @@ export async function POST(request: Request) {
 
         const [trip] = await sql`
             INSERT INTO trips (
+                user_id,
                 trip_type,
                 title,
                 city,
@@ -281,6 +278,7 @@ export async function POST(request: Request) {
                 rating
             )
             VALUES (
+                ${user.id},
                 ${tripType},
                 ${title?.trim() || null},
 
@@ -313,10 +311,7 @@ export async function POST(request: Request) {
         `;
 
         if (!trip) {
-            return NextResponse.json(
-                { error: "여행 저장에 실패했습니다." },
-                { status: 500 },
-            );
+            return NextResponse.json({ error: "여행 저장에 실패했습니다." }, { status: 500 });
         }
 
         // ----------------------------------------
@@ -325,11 +320,7 @@ export async function POST(request: Request) {
 
         const savedDestinations = [];
 
-        for (
-            let destinationIndex = 0;
-            destinationIndex < normalizedDestinations.length;
-            destinationIndex++
-        ) {
+        for (let destinationIndex = 0; destinationIndex < normalizedDestinations.length; destinationIndex++) {
             const destination = normalizedDestinations[destinationIndex];
 
             const [savedDestination] = await sql`
@@ -358,11 +349,7 @@ export async function POST(request: Request) {
 
             const savedCities = [];
 
-            for (
-                let cityIndex = 0;
-                cityIndex < destination.cities.length;
-                cityIndex++
-            ) {
+            for (let cityIndex = 0; cityIndex < destination.cities.length; cityIndex++) {
                 const city = destination.cities[cityIndex];
 
                 const [savedCity] = await sql`
@@ -420,9 +407,6 @@ export async function POST(request: Request) {
     } catch (error) {
         console.error("여행 저장 실패:", error);
 
-        return NextResponse.json(
-            { error: "여행을 저장하지 못했습니다." },
-            { status: 500 },
-        );
+        return NextResponse.json({ error: "여행을 저장하지 못했습니다." }, { status: 500 });
     }
 }

@@ -1,19 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
+import { getCurrentUser } from "@/lib/auth/user";
 
-export async function GET(
-    request: NextRequest,
-    { params }: { params: Promise<{ id: string }> },
-) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
+        const user = await getCurrentUser();
+
+        if (!user) {
+            return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+        }
+
         const { id } = await params;
         const tripId = Number(id);
 
         if (!Number.isInteger(tripId)) {
-            return NextResponse.json(
-                { error: "잘못된 여행 ID입니다." },
-                { status: 400 },
-            );
+            return NextResponse.json({ error: "잘못된 여행 ID입니다." }, { status: 400 });
+        }
+
+        const [trip] = await sql`
+            SELECT id
+            FROM trips
+            WHERE id = ${tripId}
+              AND user_id = ${user.id}
+        `;
+
+        if (!trip) {
+            return NextResponse.json({ error: "해당 여행을 찾을 수 없습니다." }, { status: 404 });
         }
 
         const categories = await sql`
@@ -31,25 +43,60 @@ export async function GET(
     } catch (error) {
         console.error("여행 경비 카테고리 조회 실패:", error);
 
-        return NextResponse.json(
-            { error: "여행 경비 카테고리 조회에 실패했습니다." },
-            { status: 500 },
-        );
+        return NextResponse.json({ error: "여행 경비 카테고리 조회에 실패했습니다." }, { status: 500 });
     }
 }
 
-export async function POST(
-    request: NextRequest,
-    { params }: { params: Promise<{ id: string }> },
-) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
+        const user = await getCurrentUser();
+
+        if (!user) {
+            return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+        }
+
         const { id } = await params;
         const tripId = Number(id);
 
         if (!Number.isInteger(tripId)) {
+            return NextResponse.json({ error: "잘못된 여행 ID입니다." }, { status: 400 });
+        }
+
+        const [trip] = await sql`
+            SELECT id
+            FROM trips
+            WHERE id = ${tripId}
+              AND user_id = ${user.id}
+        `;
+
+        if (!trip) {
+            return NextResponse.json({ error: "해당 여행을 찾을 수 없습니다." }, { status: 404 });
+        }
+
+        // 여행 경비 커스텀 카테고리 추가는 Pro 전용
+        const subscription = await sql`
+            SELECT
+                p.code AS plan_code
+            FROM subscriptions s
+            JOIN plans p
+                ON p.id = s.plan_id
+            WHERE s.user_id = ${user.id}
+            LIMIT 1
+        `;
+
+        if (subscription.length === 0) {
+            return NextResponse.json({ error: "구독 정보를 찾을 수 없습니다." }, { status: 403 });
+        }
+
+        const planCode = subscription[0].plan_code;
+
+        if (planCode === "free") {
             return NextResponse.json(
-                { error: "잘못된 여행 ID입니다." },
-                { status: 400 },
+                {
+                    error: "여행 경비 카테고리 추가는 Pro에서 사용할 수 있어요.",
+                    code: "TRIP_EXPENSE_CATEGORY_PRO_ONLY",
+                },
+                { status: 403 },
             );
         }
 
@@ -57,10 +104,7 @@ export async function POST(
         const name = String(body.name ?? "").trim();
 
         if (!name) {
-            return NextResponse.json(
-                { error: "카테고리 이름을 입력해주세요." },
-                { status: 400 },
-            );
+            return NextResponse.json({ error: "카테고리 이름을 입력해주세요." }, { status: 400 });
         }
 
         const [lastCategory] = await sql`
@@ -71,9 +115,7 @@ export async function POST(
             LIMIT 1
         `;
 
-        const sortOrder = lastCategory
-            ? Number(lastCategory.sort_order) + 1
-            : 0;
+        const sortOrder = lastCategory ? Number(lastCategory.sort_order) + 1 : 0;
 
         const [category] = await sql`
             INSERT INTO trip_expense_categories (
@@ -97,56 +139,52 @@ export async function POST(
     } catch (error) {
         console.error("여행 경비 카테고리 추가 실패:", error);
 
-        return NextResponse.json(
-            { error: "여행 경비 카테고리 추가에 실패했습니다." },
-            { status: 500 },
-        );
+        return NextResponse.json({ error: "여행 경비 카테고리 추가에 실패했습니다." }, { status: 500 });
     }
 }
 
-export async function PUT(
-    request: NextRequest,
-    { params }: { params: Promise<{ id: string }> },
-) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
+        const user = await getCurrentUser();
+
+        if (!user) {
+            return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+        }
+
         const { id } = await params;
         const tripId = Number(id);
 
         if (!Number.isInteger(tripId)) {
-            return NextResponse.json(
-                { error: "잘못된 여행 ID입니다." },
-                { status: 400 },
-            );
+            return NextResponse.json({ error: "잘못된 여행 ID입니다." }, { status: 400 });
+        }
+
+        const [trip] = await sql`
+            SELECT id
+            FROM trips
+            WHERE id = ${tripId}
+              AND user_id = ${user.id}
+        `;
+
+        if (!trip) {
+            return NextResponse.json({ error: "해당 여행을 찾을 수 없습니다." }, { status: 404 });
         }
 
         const body = await request.json();
+
         const categoryId = Number(body.categoryId);
-        const name = body.name !== undefined
-            ? String(body.name).trim()
-            : undefined;
-        const sortOrder = body.sortOrder !== undefined
-            ? Number(body.sortOrder)
-            : undefined;
+        const name = body.name !== undefined ? String(body.name).trim() : undefined;
+        const sortOrder = body.sortOrder !== undefined ? Number(body.sortOrder) : undefined;
 
         if (!Number.isInteger(categoryId)) {
-            return NextResponse.json(
-                { error: "잘못된 카테고리 ID입니다." },
-                { status: 400 },
-            );
+            return NextResponse.json({ error: "잘못된 카테고리 ID입니다." }, { status: 400 });
         }
 
         if (name !== undefined && !name) {
-            return NextResponse.json(
-                { error: "카테고리 이름을 입력해주세요." },
-                { status: 400 },
-            );
+            return NextResponse.json({ error: "카테고리 이름을 입력해주세요." }, { status: 400 });
         }
 
         if (sortOrder !== undefined && !Number.isInteger(sortOrder)) {
-            return NextResponse.json(
-                { error: "잘못된 순서입니다." },
-                { status: 400 },
-            );
+            return NextResponse.json({ error: "잘못된 순서입니다." }, { status: 400 });
         }
 
         const [category] = await sql`
@@ -164,48 +202,50 @@ export async function PUT(
         `;
 
         if (!category) {
-            return NextResponse.json(
-                { error: "카테고리를 찾을 수 없습니다." },
-                { status: 404 },
-            );
+            return NextResponse.json({ error: "카테고리를 찾을 수 없습니다." }, { status: 404 });
         }
 
         return NextResponse.json(category);
     } catch (error) {
         console.error("여행 경비 카테고리 수정 실패:", error);
 
-        return NextResponse.json(
-            { error: "여행 경비 카테고리 수정에 실패했습니다." },
-            { status: 500 },
-        );
+        return NextResponse.json({ error: "여행 경비 카테고리 수정에 실패했습니다." }, { status: 500 });
     }
 }
 
-export async function DELETE(
-    request: NextRequest,
-    { params }: { params: Promise<{ id: string }> },
-) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
+        const user = await getCurrentUser();
+
+        if (!user) {
+            return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+        }
+
         const { id } = await params;
         const tripId = Number(id);
 
         if (!Number.isInteger(tripId)) {
-            return NextResponse.json(
-                { error: "잘못된 여행 ID입니다." },
-                { status: 400 },
-            );
+            return NextResponse.json({ error: "잘못된 여행 ID입니다." }, { status: 400 });
+        }
+
+        const [trip] = await sql`
+            SELECT id
+            FROM trips
+            WHERE id = ${tripId}
+              AND user_id = ${user.id}
+        `;
+
+        if (!trip) {
+            return NextResponse.json({ error: "해당 여행을 찾을 수 없습니다." }, { status: 404 });
         }
 
         const categoryId = Number(request.nextUrl.searchParams.get("categoryId"));
 
         if (!Number.isInteger(categoryId)) {
-            return NextResponse.json(
-                { error: "잘못된 카테고리 ID입니다." },
-                { status: 400 },
-            );
+            return NextResponse.json({ error: "잘못된 카테고리 ID입니다." }, { status: 400 });
         }
 
-        await sql`
+        const result = await sql`
             DELETE FROM trip_expense_categories
             WHERE id = ${categoryId}
               AND trip_id = ${tripId}
@@ -215,9 +255,6 @@ export async function DELETE(
     } catch (error) {
         console.error("여행 경비 카테고리 삭제 실패:", error);
 
-        return NextResponse.json(
-            { error: "여행 경비 카테고리 삭제에 실패했습니다." },
-            { status: 500 },
-        );
+        return NextResponse.json({ error: "여행 경비 카테고리 삭제에 실패했습니다." }, { status: 500 });
     }
 }

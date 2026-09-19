@@ -209,92 +209,84 @@ export default function LivingPage() {
 
                     {data && (data.pendingIntegrations.travel.length > 0 || data.pendingIntegrations.payroll.length > 0) && (
                         <section className="space-y-3">
-                            {data.pendingIntegrations.travel.map((travel) =>
-                                travel.status === "missing_expense" ? (
-                                    <div
-                                        key={`trip-${travel.sourceId}`}
-                                        className="rounded-3xl border border-blue-100 bg-blue-50 p-5 shadow-sm"
-                                    >
-                                        <div className="flex items-start justify-between gap-4">
-                                            <div>
-                                                <p className="text-xs text-blue-500">여행 지출</p>
+                            {data.pendingIntegrations.travel.map((travel) => (
+                                <div
+                                    key={`trip-${travel.sourceId}`}
+                                    className="mt-4 overflow-hidden rounded-3xl bg-white shadow-sm"
+                                >
+                                    <div className="flex items-center justify-between px-5 py-4">
+                                        <div className="min-w-0">
+                                            <div className="flex items-center gap-2">
+                                                <p className="text-xs font-medium text-blue-500">TRAVEL EXPENSE</p>
 
-                                                <p className="mt-2 text-lg font-semibold text-gray-900">
-                                                    {travel.title} 여행 지출을 기록해주세요
-                                                </p>
+                                                <span className="h-1 w-1 rounded-full bg-gray-300" />
 
-                                                <p className="mt-1 text-sm text-gray-500">
-                                                    {formatDisplayDate(travel.startDate)}
-                                                    {" ~ "}
-                                                    {formatDisplayDate(travel.endDate)}
-                                                </p>
+                                                <p className="text-xs text-gray-400">{formatDisplayDate(travel.startDate)}</p>
                                             </div>
 
-                                            <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-blue-600 shadow-sm">
-                                                기록 필요
-                                            </span>
+                                            <p className="mt-2 truncate text-lg font-bold text-gray-950">{travel.title}</p>
+
+                                            {travel.status === "missing_expense" ? (
+                                                <p className="mt-0.5 text-sm text-gray-500">여행 지출을 기록해주세요</p>
+                                            ) : (
+                                                <p className="mt-0.5 text-sm text-gray-500">
+                                                    여행 지출{" "}
+                                                    <span className="font-medium text-gray-900">
+                                                        {formatMoney(travel.amount)}
+                                                    </span>
+                                                </p>
+                                            )}
                                         </div>
 
-                                        <p className="mt-4 text-sm text-gray-500">
-                                            여행에서 사용한 금액을 먼저 기록하면 생활비에 반영할 수 있어요.
+                                        <div className="ml-4 shrink-0 text-right">
+                                            {travel.status === "missing_expense" ? (
+                                                <span className="text-xs font-medium text-gray-400">기록 필요</span>
+                                            ) : (
+                                                <span className="text-lg font-bold tracking-tight text-gray-950">
+                                                    {formatMoney(travel.amount)}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center justify-between border-t border-gray-100 bg-gray-50/70 px-5 py-3">
+                                        <p className="text-xs text-gray-500">
+                                            {formatDisplayDate(travel.startDate)} — {formatDisplayDate(travel.endDate)}
                                         </p>
 
-                                        <button
-                                            type="button"
-                                            onClick={() => router.push(`/travel/${travel.sourceId}`)}
-                                            className="mt-4 w-full rounded-2xl bg-blue-600 py-3 text-[13px] font-semibold text-white transition hover:bg-blue-700"
-                                        >
-                                            여행 지출 기록하기
-                                        </button>
-                                    </div>
-                                ) : (
-                                    <div
-                                        key={`trip-${travel.sourceId}`}
-                                        className="rounded-3xl border border-blue-100 bg-blue-50 p-5 shadow-sm"
-                                    >
-                                        <div className="flex items-start justify-between gap-4">
-                                            <div>
-                                                <p className="text-xs text-blue-500">여행 지출</p>
+                                        {travel.status === "missing_expense" ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => router.push(`/travel/list/${travel.sourceId}`)}
+                                                className="text-xs font-medium text-gray-400 transition hover:text-gray-700"
+                                            >
+                                                기록하기 →
+                                            </button>
+                                        ) : (
+                                            <div className="flex items-center gap-3">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => router.push(`/travel/list/${travel.sourceId}`)}
+                                                    className="text-xs font-medium text-gray-400 transition hover:text-gray-700"
+                                                >
+                                                    지출 수정
+                                                </button>
 
-                                                <p className="mt-2 text-lg font-semibold text-gray-900">
-                                                    {travel.title} 여행에{" "}
-                                                    <span className="text-blue-600">{formatMoney(travel.amount)}</span>을 썼어요
-                                                </p>
-
-                                                <p className="mt-1 text-sm text-gray-500">
-                                                    {formatDisplayDate(travel.startDate)}
-                                                    {" ~ "}
-                                                    {formatDisplayDate(travel.endDate)}
-                                                </p>
+                                                <button
+                                                    type="button"
+                                                    disabled={isReflecting === `trip-${travel.sourceId}`}
+                                                    onClick={() => void reflectIntegration("trip", travel.sourceId)}
+                                                    className="text-xs font-semibold text-blue-600 transition hover:text-blue-700 disabled:opacity-50"
+                                                >
+                                                    {isReflecting === `trip-${travel.sourceId}`
+                                                        ? "반영 중..."
+                                                        : "생활비에 반영 →"}
+                                                </button>
                                             </div>
-
-                                            <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-blue-600 shadow-sm">
-                                                여행
-                                            </span>
-                                        </div>
-
-                                        <p className="mt-4 text-sm text-gray-500">생활비에 반영할까요?</p>
-
-                                        <div className="mt-3 flex gap-2">
-                                            <button
-                                                type="button"
-                                                className="flex-1 rounded-2xl bg-white py-3 text-[13px] font-medium text-gray-600 shadow-sm transition hover:bg-gray-50"
-                                            >
-                                                나중에
-                                            </button>
-
-                                            <button
-                                                type="button"
-                                                disabled={isReflecting === `trip-${travel.sourceId}`}
-                                                onClick={() => void reflectIntegration("trip", travel.sourceId)}
-                                                className="flex-1 rounded-2xl bg-blue-600 py-3 text-[13px] font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
-                                            >
-                                                {isReflecting === `trip-${travel.sourceId}` ? "반영 중..." : "반영하기"}
-                                            </button>
-                                        </div>
+                                        )}
                                     </div>
-                                ),
-                            )}
+                                </div>
+                            ))}
 
                             {data.pendingIntegrations.payroll.map((payroll) =>
                                 payroll.status === "missing_actual" ? (

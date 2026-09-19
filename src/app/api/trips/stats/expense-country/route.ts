@@ -31,19 +31,43 @@ export async function GET(request: Request) {
             ORDER BY amount DESC
         `;
 
-        const topFive = categories.slice(0, 5);
-        const rest = categories.slice(5);
+        // --------------------------------------------------
+        // 카테고리 정리
+        // --------------------------------------------------
 
-        const otherAmount = rest.reduce((sum, item) => sum + Number(item.amount), 0);
+        // 이미 존재하는 "기타" 금액
+        const existingOther = categories.find((item) => item.category === "기타");
+
+        const existingOtherAmount = existingOther ? Number(existingOther.amount) : 0;
+
+        // "기타"를 제외한 실제 카테고리
+        const normalCategories = categories.filter((item) => item.category !== "기타");
+
+        // 상위 5개 카테고리
+        const topFive = normalCategories.slice(0, 5);
+
+        // 상위 5개에 포함되지 않은 나머지
+        const rest = normalCategories.slice(5);
+
+        // 나머지 카테고리는 모두 "기타"로 합침
+        const restOtherAmount = rest.reduce((sum, item) => sum + Number(item.amount), 0);
+
+        // 기존 "기타" + 나머지 카테고리의 금액
+        const otherAmount = existingOtherAmount + restOtherAmount;
 
         const result = [...topFive];
 
+        // 기타는 항상 한 번만 추가
         if (otherAmount > 0) {
             result.push({
                 category: "기타",
                 amount: otherAmount,
             });
         }
+
+        // --------------------------------------------------
+        // 비율 계산
+        // --------------------------------------------------
 
         const totalExpense = result.reduce((sum, item) => sum + Number(item.amount), 0);
 
@@ -52,6 +76,10 @@ export async function GET(request: Request) {
             amount: Number(item.amount),
             percentage: totalExpense > 0 ? Number(((Number(item.amount) / totalExpense) * 100).toFixed(1)) : 0,
         }));
+
+        // --------------------------------------------------
+        // 여행별 숙박일수 / 평균 지출
+        // --------------------------------------------------
 
         const trips = await sql`
             SELECT
@@ -80,6 +108,10 @@ export async function GET(request: Request) {
         }, 0);
 
         const averagePerNight = totalNights > 0 ? totalExpense / totalNights : 0;
+
+        // --------------------------------------------------
+        // 국가 정보
+        // --------------------------------------------------
 
         const country = await sql`
             SELECT

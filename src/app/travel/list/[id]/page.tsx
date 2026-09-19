@@ -18,6 +18,7 @@ import {
     Trash2,
     Check,
     X,
+    Lock,
 } from "lucide-react";
 import { formatDate } from "@/lib/payPeriod";
 
@@ -1093,6 +1094,14 @@ export default function TravelDetailPage() {
             });
 
             if (!response.ok) {
+                const data = await response.json().catch(() => null);
+
+                if (data?.code === "TRIP_EXPENSE_LIMIT_REACHED") {
+                    alert("무료 플랜에서는 여행 하나당 지출을 최대 30개까지 저장할 수 있어요.");
+
+                    return;
+                }
+
                 throw new Error("여행 경비 저장 실패");
             }
         } catch (error) {
@@ -1106,6 +1115,12 @@ export default function TravelDetailPage() {
         event.preventDefault();
         event.currentTarget.blur();
     };
+
+    const expenseCount = Object.values(expenseCells).filter(
+        (value) => value !== undefined && value !== "" && value !== "0" && value !== "0.00",
+    ).length;
+
+    const isExpenseLimitReached = expenseCount >= 30;
 
     // ==============================
     // 카테고리 추가
@@ -1126,6 +1141,13 @@ export default function TravelDetailPage() {
             });
 
             if (!response.ok) {
+                const data = await response.json().catch(() => null);
+
+                if (data?.code === "TRIP_EXPENSE_CATEGORY_PRO_ONLY") {
+                    alert("여행 경비 카테고리 추가는 Pro에서 사용할 수 있어요.");
+                    return;
+                }
+
                 throw new Error("카테고리 추가 실패");
             }
 
@@ -2075,6 +2097,13 @@ export default function TravelDetailPage() {
                                             {/* 날짜별 비용 */}
                                             {tripDates.map((date) => {
                                                 const key = getCellKey(category.id, date);
+                                                const hasExpense =
+                                                    expenseCells[key] !== undefined &&
+                                                    expenseCells[key] !== "" &&
+                                                    expenseCells[key] !== "0" &&
+                                                    expenseCells[key] !== "0.00";
+
+                                                const isLocked = isExpenseLimitReached && !hasExpense;
 
                                                 return (
                                                     <td
@@ -2082,31 +2111,45 @@ export default function TravelDetailPage() {
                                                         className={`w-[100px] min-w-[100px] max-w-[100px] px-2 py-2 text-center ${
                                                             isSelected ? "bg-gray-50" : ""
                                                         }`}
-                                                        onClick={(event) => event.stopPropagation()}
-                                                    >
-                                                        <input
-                                                            type="text"
-                                                            inputMode="decimal"
-                                                            value={
-                                                                expenseCells[key] === "0.00" || expenseCells[key] === "0"
-                                                                    ? ""
-                                                                    : (expenseCells[key] ?? "")
+                                                        onClick={(event) => {
+                                                            event.stopPropagation();
+
+                                                            if (isLocked) {
+                                                                alert(
+                                                                    "무료 플랜에서는 여행 하나당 지출을 최대 30개까지 저장할 수 있어요.",
+                                                                );
                                                             }
-                                                            onFocus={() => setSelectedCell(key)}
-                                                            onChange={(event) => {
-                                                                handleCellChange(category.id, date, event.target.value);
-                                                            }}
-                                                            onKeyDown={(event) => {
-                                                                handleCellKeyDown(event);
-                                                            }}
-                                                            onBlur={() => {
-                                                                handleCellBlur(category.id, date);
-                                                            }}
-                                                            placeholder="-"
-                                                            className={`min-h-[48px] w-full cursor-pointer rounded-xl bg-transparent px-2 text-center text-xs text-gray-700 outline-none transition ${
-                                                                selectedCell === key ? "cursor-text ring-1 ring-gray-300" : ""
-                                                            }`}
-                                                        />
+                                                        }}
+                                                    >
+                                                        {isLocked ? (
+                                                            <div className="flex min-h-[48px] w-full items-center justify-center rounded-xl bg-gray-50 text-gray-300">
+                                                                <Lock size={15} strokeWidth={1.8} />
+                                                            </div>
+                                                        ) : (
+                                                            <input
+                                                                type="text"
+                                                                inputMode="decimal"
+                                                                value={
+                                                                    expenseCells[key] === "0.00" || expenseCells[key] === "0"
+                                                                        ? ""
+                                                                        : (expenseCells[key] ?? "")
+                                                                }
+                                                                onFocus={() => setSelectedCell(key)}
+                                                                onChange={(event) => {
+                                                                    handleCellChange(category.id, date, event.target.value);
+                                                                }}
+                                                                onKeyDown={(event) => {
+                                                                    handleCellKeyDown(event);
+                                                                }}
+                                                                onBlur={() => {
+                                                                    handleCellBlur(category.id, date);
+                                                                }}
+                                                                placeholder="-"
+                                                                className={`min-h-[48px] w-full cursor-pointer rounded-xl bg-transparent px-2 text-center text-xs text-gray-700 outline-none transition ${
+                                                                    selectedCell === key ? "cursor-text ring-1 ring-gray-300" : ""
+                                                                }`}
+                                                            />
+                                                        )}
                                                     </td>
                                                 );
                                             })}
@@ -2133,11 +2176,11 @@ export default function TravelDetailPage() {
 
                                     <td
                                         onClick={handleAddCategory}
-                                        className="sticky left-[32px] z-20 w-[100px] min-w-[100px] max-w-[100px] cursor-pointer bg-white py-4 px-3"
+                                        className="sticky left-[32px] z-20 w-[100px] min-w-[100px] max-w-[100px] cursor-pointer bg-white px-3 py-4"
                                     >
                                         <div className="flex w-[76px] items-center gap-2 text-xs font-medium text-gray-400">
-                                            <Plus size={15} strokeWidth={1.8} />
-                                            <span>추가</span>
+                                            <Lock size={15} strokeWidth={1.8} />
+                                            <span>Pro</span>
                                         </div>
                                     </td>
                                 </tr>

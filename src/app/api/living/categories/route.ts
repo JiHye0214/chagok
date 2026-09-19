@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
+import { getCurrentUser } from "@/lib/auth/user";
 
 type CategoryKind = "fixed" | "variable" | "income";
 
@@ -17,6 +18,12 @@ const isCategoryKind = (value: unknown): value is CategoryKind => {
 
 export async function GET() {
     try {
+        const user = await getCurrentUser();
+
+        if (!user) {
+            return NextResponse.json({ error: "로그인이 필요해요." }, { status: 401 });
+        }
+
         const rows = await sql`
             SELECT
                 id,
@@ -24,7 +31,8 @@ export async function GET() {
                 kind,
                 sort_order
             FROM living_categories
-            WHERE is_active = TRUE
+            WHERE user_id = ${user.id}
+              AND is_active = TRUE
             ORDER BY
                 kind,
                 sort_order,
@@ -55,6 +63,12 @@ export async function GET() {
 
 export async function POST(request: Request) {
     try {
+        const user = await getCurrentUser();
+
+        if (!user) {
+            return NextResponse.json({ error: "로그인이 필요해요." }, { status: 401 });
+        }
+
         const body = await request.json();
 
         const { name, kind } = body as {
@@ -87,7 +101,8 @@ export async function POST(request: Request) {
                 id,
                 is_active
             FROM living_categories
-            WHERE name = ${trimmedName}
+            WHERE user_id = ${user.id}
+              AND name = ${trimmedName}
               AND kind = ${kind}
             LIMIT 1
         `;
@@ -102,10 +117,51 @@ export async function POST(request: Request) {
                 );
             }
 
+            // 비활성화된 기존 카테고리를 다시 활성화하는 경우
+            // 현재 활성 카테고리가 5개인지 먼저 확인
+            const categoryCount = await sql`
+                SELECT COUNT(*)::int AS count
+                FROM living_categories
+                WHERE user_id = ${user.id}
+                  AND is_active = TRUE
+            `;
+
+            const subscription = await sql`
+                SELECT
+                    p.code AS plan_code
+                FROM subscriptions s
+                JOIN plans p
+                    ON p.id = s.plan_id
+                WHERE s.user_id = ${user.id}
+                LIMIT 1
+            `;
+
+            if (subscription.length === 0) {
+                return NextResponse.json(
+                    {
+                        error: "구독 정보를 찾을 수 없습니다.",
+                    },
+                    { status: 403 },
+                );
+            }
+
+            const planCode = subscription[0].plan_code;
+
+            if (planCode === "free" && categoryCount[0].count >= 5) {
+                return NextResponse.json(
+                    {
+                        error: "무료 플랜에서는 생활 카테고리를 최대 5개까지 만들 수 있어요.",
+                        code: "LIVING_CATEGORY_LIMIT_REACHED",
+                    },
+                    { status: 403 },
+                );
+            }
+
             const sortResult = await sql`
                 SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_sort_order
                 FROM living_categories
-                WHERE kind = ${kind}
+                WHERE user_id = ${user.id}
+                  AND kind = ${kind}
             `;
 
             const nextSortOrder = Number(sortResult[0]?.next_sort_order ?? 0);
@@ -116,6 +172,7 @@ export async function POST(request: Request) {
                     is_active = TRUE,
                     sort_order = ${nextSortOrder}
                 WHERE id = ${existing[0].id}
+                  AND user_id = ${user.id}
                 RETURNING
                     id,
                     name,
@@ -136,22 +193,66 @@ export async function POST(request: Request) {
             });
         }
 
+        // 새로운 카테고리 추가
+        const subscription = await sql`
+            SELECT
+                p.code AS plan_code
+            FROM subscriptions s
+            JOIN plans p
+                ON p.id = s.plan_id
+            WHERE s.user_id = ${user.id}
+            LIMIT 1
+        `;
+
+        if (subscription.length === 0) {
+            return NextResponse.json(
+                {
+                    error: "구독 정보를 찾을 수 없습니다.",
+                },
+                { status: 403 },
+            );
+        }
+
+        const planCode = subscription[0].plan_code;
+
+        if (planCode === "free") {
+            const categoryCount = await sql`
+                SELECT COUNT(*)::int AS count
+                FROM living_categories
+                WHERE user_id = ${user.id}
+                  AND is_active = TRUE
+            `;
+
+            if (categoryCount[0].count >= 5) {
+                return NextResponse.json(
+                    {
+                        error: "무료 플랜에서는 생활 카테고리를 최대 5개까지 만들 수 있어요.",
+                        code: "LIVING_CATEGORY_LIMIT_REACHED",
+                    },
+                    { status: 403 },
+                );
+            }
+        }
+
         const sortResult = await sql`
             SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_sort_order
             FROM living_categories
-            WHERE kind = ${kind}
+            WHERE user_id = ${user.id}
+              AND kind = ${kind}
         `;
 
         const nextSortOrder = Number(sortResult[0]?.next_sort_order ?? 0);
 
         const result = await sql`
             INSERT INTO living_categories (
+                user_id,
                 name,
                 kind,
                 sort_order,
                 is_active
             )
             VALUES (
+                ${user.id},
                 ${trimmedName},
                 ${kind},
                 ${nextSortOrder},
@@ -192,6 +293,12 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
     try {
+        const user = await getCurrentUser();
+
+        if (!user) {
+            return NextResponse.json({ error: "로그인이 필요해요." }, { status: 401 });
+        }
+
         const body = await request.json();
 
         const { id, name } = body as {
@@ -217,6 +324,7 @@ export async function PATCH(request: Request) {
                 kind
             FROM living_categories
             WHERE id = ${categoryId}
+              AND user_id = ${user.id}
             LIMIT 1
         `;
 
@@ -232,7 +340,8 @@ export async function PATCH(request: Request) {
         const duplicate = await sql`
             SELECT id
             FROM living_categories
-            WHERE name = ${trimmedName}
+            WHERE user_id = ${user.id}
+              AND name = ${trimmedName}
               AND kind = ${existing[0].kind}
               AND id <> ${categoryId}
               AND is_active = TRUE
@@ -252,6 +361,7 @@ export async function PATCH(request: Request) {
             UPDATE living_categories
             SET name = ${trimmedName}
             WHERE id = ${categoryId}
+              AND user_id = ${user.id}
             RETURNING
                 id,
                 name,
@@ -284,6 +394,12 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
     try {
+        const user = await getCurrentUser();
+
+        if (!user) {
+            return NextResponse.json({ error: "로그인이 필요해요." }, { status: 401 });
+        }
+
         const { searchParams } = new URL(request.url);
         const id = Number(searchParams.get("id"));
 
@@ -300,6 +416,7 @@ export async function DELETE(request: Request) {
             UPDATE living_categories
             SET is_active = FALSE
             WHERE id = ${id}
+              AND user_id = ${user.id}
             RETURNING id
         `;
 
