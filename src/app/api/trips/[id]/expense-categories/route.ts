@@ -73,8 +73,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             return NextResponse.json({ error: "해당 여행을 찾을 수 없습니다." }, { status: 404 });
         }
 
-        // 여행 경비 커스텀 카테고리 추가는 Pro 전용
-        const subscription = await sql`
+        const [subscription] = await sql`
             SELECT
                 p.code AS plan_code
             FROM subscriptions s
@@ -84,11 +83,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             LIMIT 1
         `;
 
-        if (subscription.length === 0) {
-            return NextResponse.json({ error: "구독 정보를 찾을 수 없습니다." }, { status: 403 });
-        }
-
-        const planCode = subscription[0].plan_code;
+        const planCode = subscription?.plan_code ?? "free";
 
         if (planCode === "free") {
             return NextResponse.json(
@@ -101,6 +96,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         }
 
         const body = await request.json();
+
         const name = String(body.name ?? "").trim();
 
         if (!name) {
@@ -169,10 +165,35 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
             return NextResponse.json({ error: "해당 여행을 찾을 수 없습니다." }, { status: 404 });
         }
 
+        // 여행 경비 커스텀 카테고리 수정은 Pro 전용
+        const [subscription] = await sql`
+            SELECT
+                p.code AS plan_code
+            FROM subscriptions s
+            JOIN plans p
+                ON p.id = s.plan_id
+            WHERE s.user_id = ${user.id}
+            LIMIT 1
+        `;
+
+        const planCode = subscription?.plan_code ?? "free";
+
+        if (planCode === "free") {
+            return NextResponse.json(
+                {
+                    error: "여행 경비 카테고리 수정은 Pro에서 사용할 수 있어요.",
+                    code: "TRIP_EXPENSE_CATEGORY_PRO_ONLY",
+                },
+                { status: 403 },
+            );
+        }
+
         const body = await request.json();
 
         const categoryId = Number(body.categoryId);
+
         const name = body.name !== undefined ? String(body.name).trim() : undefined;
+
         const sortOrder = body.sortOrder !== undefined ? Number(body.sortOrder) : undefined;
 
         if (!Number.isInteger(categoryId)) {
@@ -190,8 +211,14 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         const [category] = await sql`
             UPDATE trip_expense_categories
             SET
-                name = COALESCE(${name ?? null}, name),
-                sort_order = COALESCE(${sortOrder ?? null}, sort_order)
+                name = COALESCE(
+                    ${name ?? null},
+                    name
+                ),
+                sort_order = COALESCE(
+                    ${sortOrder ?? null},
+                    sort_order
+                )
             WHERE id = ${categoryId}
               AND trip_id = ${tripId}
             RETURNING
@@ -239,6 +266,29 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
             return NextResponse.json({ error: "해당 여행을 찾을 수 없습니다." }, { status: 404 });
         }
 
+        // 여행 경비 커스텀 카테고리 삭제는 Pro 전용
+        const [subscription] = await sql`
+            SELECT
+                p.code AS plan_code
+            FROM subscriptions s
+            JOIN plans p
+                ON p.id = s.plan_id
+            WHERE s.user_id = ${user.id}
+            LIMIT 1
+        `;
+
+        const planCode = subscription?.plan_code ?? "free";
+
+        if (planCode === "free") {
+            return NextResponse.json(
+                {
+                    error: "여행 경비 카테고리 삭제는 Pro에서 사용할 수 있어요.",
+                    code: "TRIP_EXPENSE_CATEGORY_PRO_ONLY",
+                },
+                { status: 403 },
+            );
+        }
+
         const categoryId = Number(request.nextUrl.searchParams.get("categoryId"));
 
         if (!Number.isInteger(categoryId)) {
@@ -249,9 +299,17 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
             DELETE FROM trip_expense_categories
             WHERE id = ${categoryId}
               AND trip_id = ${tripId}
+            RETURNING id
         `;
 
-        return NextResponse.json({ success: true });
+        if (!result[0]) {
+            return NextResponse.json({ error: "카테고리를 찾을 수 없습니다." }, { status: 404 });
+        }
+
+        return NextResponse.json({
+            success: true,
+            id: Number(result[0].id),
+        });
     } catch (error) {
         console.error("여행 경비 카테고리 삭제 실패:", error);
 

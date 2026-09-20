@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, X, GripVertical } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, X, GripVertical, Lock } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import BackButtonHeader from "@/components/BackButtonHeader";
 
@@ -76,6 +76,13 @@ const getTransactionLabel = (transaction: LivingTransaction) => {
     return transaction.transferDirection === "living_to_savings" ? "저축" : "저축에서 가져옴";
 };
 
+const ProBadge = () => (
+    <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-1 text-[10px] font-semibold text-gray-400">
+        <Lock size={10} strokeWidth={2} />
+        Pro
+    </span>
+);
+
 export default function LivingManagePage() {
     const searchParams = useSearchParams();
 
@@ -87,6 +94,10 @@ export default function LivingManagePage() {
 
     const [loading, setLoading] = useState(true);
     const [fixedLoading, setFixedLoading] = useState(true);
+
+    const [planCode, setPlanCode] = useState("free");
+    const [totalTransactionCount, setTotalTransactionCount] = useState(0);
+    const [totalFixedExpenseCount, setTotalFixedExpenseCount] = useState(0);
 
     const [selectedDate, setSelectedDate] = useState<string>(formatDate(new Date()));
 
@@ -124,6 +135,15 @@ export default function LivingManagePage() {
         paymentDay: "1",
         memo: "",
     });
+
+    const FREE_LIVING_TRANSACTION_LIMIT = 300;
+    const FREE_FIXED_EXPENSE_LIMIT = 5;
+
+    const isFree = planCode === "free";
+
+    const isLivingTransactionLimitReached = isFree && totalTransactionCount >= FREE_LIVING_TRANSACTION_LIMIT;
+
+    const isFixedExpenseLimitReached = isFree && totalFixedExpenseCount >= FREE_FIXED_EXPENSE_LIMIT;
 
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
@@ -216,6 +236,7 @@ export default function LivingManagePage() {
             const data = await response.json();
 
             setTransactions(data.transactions ?? []);
+            setTotalTransactionCount(Number(data.totalCount ?? 0));
         } catch (error) {
             console.error(error);
         } finally {
@@ -252,12 +273,33 @@ export default function LivingManagePage() {
             const data = await response.json();
 
             setFixedExpenses(data.fixedExpenses ?? []);
+            setTotalFixedExpenseCount(Number(data.totalCount ?? 0));
         } catch (error) {
             console.error(error);
         } finally {
             setFixedLoading(false);
         }
     };
+
+    useEffect(() => {
+        const loadPlan = async () => {
+            try {
+                const response = await fetch("/api/auth/me");
+
+                if (!response.ok) {
+                    return;
+                }
+
+                const data = await response.json();
+
+                setPlanCode(data.planCode ?? "free");
+            } catch (error) {
+                console.error(error);
+            }
+        };
+
+        loadPlan();
+    }, []);
 
     useEffect(() => {
         loadTransactions();
@@ -288,6 +330,11 @@ export default function LivingManagePage() {
     };
 
     const openAddForm = (date?: string, transferDirection?: "living_to_savings" | "savings_to_living") => {
+        if (isLivingTransactionLimitReached) {
+            alert("무료 플랜에서는 생활 기록을 최대 300개까지 저장할 수 있어요.\n기존 기록을 삭제하면 다시 추가할 수 있어요.");
+            return;
+        }
+
         setEditingTransaction(null);
 
         setForm({
@@ -409,6 +456,11 @@ export default function LivingManagePage() {
     };
 
     const openAddFixedForm = () => {
+        if (isFixedExpenseLimitReached) {
+            alert("무료 플랜에서는 고정지출을 최대 5개까지 저장할 수 있어요.\n기존 고정지출을 삭제하면 다시 추가할 수 있어요.");
+            return;
+        }
+
         setEditingFixedExpense(null);
 
         setFixedForm({
@@ -553,6 +605,11 @@ export default function LivingManagePage() {
     };
 
     const openAddCategoryForm = (kind: CategoryKind) => {
+        if (isFree) {
+            alert("카테고리 관리는 Pro 플랜에서 사용할 수 있어요.");
+            return;
+        }
+
         setEditingCategory(null);
 
         setCategoryForm({
@@ -564,6 +621,11 @@ export default function LivingManagePage() {
     };
 
     const openEditCategoryForm = (category: LivingCategory) => {
+        if (isFree) {
+            alert("카테고리 관리는 Pro 플랜에서 사용할 수 있어요.");
+            return;
+        }
+
         setEditingCategory(category);
 
         setCategoryForm({
@@ -575,6 +637,11 @@ export default function LivingManagePage() {
     };
 
     const saveCategory = async () => {
+        if (isFree) {
+            alert("카테고리 관리는 Pro 플랜에서 사용할 수 있어요.");
+            return;
+        }
+
         const name = categoryForm.name.trim();
 
         if (!name) {
@@ -641,6 +708,11 @@ export default function LivingManagePage() {
     };
 
     const deleteCategory = async (category: LivingCategory) => {
+        if (isFree) {
+            alert("카테고리 관리는 Pro 플랜에서 사용할 수 있어요.");
+            return;
+        }
+
         if (!window.confirm(`"${category.name}" 카테고리를 삭제할까요?`)) {
             return;
         }
@@ -728,10 +800,19 @@ export default function LivingManagePage() {
                     <div>
                         <p className="text-xs text-gray-400">고정지출 관리</p>
 
-                        <h2 className="mt-1 text-lg font-semibold">고정지출</h2>
+                        <div className="mt-1 flex items-center gap-2">
+                            <h2 className="text-lg font-semibold">고정지출</h2>
+
+                            {planCode === "free" && (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-1 text-[10px] font-semibold text-gray-400">
+                                    <Lock size={10} strokeWidth={2} />
+                                    Pro
+                                </span>
+                            )}
+                        </div>
                     </div>
 
-                    {fixedExpenses.length > 0 && (
+                    {planCode !== "free" && fixedExpenses.length > 0 && (
                         <p className="text-[13px] font-medium text-gray-500">
                             {formatMoney(fixedExpenseTotal)}
                             /월
@@ -739,70 +820,86 @@ export default function LivingManagePage() {
                     )}
                 </div>
 
-                <div className="mt-5">
-                    {fixedLoading ? (
-                        <div className="space-y-3">
-                            <div className="h-14 animate-pulse rounded-2xl bg-gray-50" />
-                            <div className="h-14 animate-pulse rounded-2xl bg-gray-50" />
-                        </div>
-                    ) : fixedExpenses.length === 0 ? (
-                        <div className="rounded-2xl bg-[#F7F7F5] px-5 py-7 text-center">
-                            <p className="text-sm font-medium text-gray-600">등록된 고정지출이 없어요.</p>
+                {planCode === "free" ? (
+                    <div className="mt-5 rounded-2xl bg-[#F7F7F5] px-5 py-7 text-center">
+                        <Lock size={18} className="mx-auto text-gray-300" />
 
-                            <p className="mt-1 text-xs text-gray-400">매달 반복되는 지출을 추가해보세요.</p>
-                        </div>
-                    ) : (
-                        <div className="space-y-2">
-                            {fixedExpenses.map((expense) => (
-                                <div
-                                    key={expense.id}
-                                    draggable
-                                    onDragStart={() => setDraggedFixedId(expense.id)}
-                                    onDragOver={(event) => event.preventDefault()}
-                                    onDrop={() => {
-                                        if (draggedFixedId !== null) {
-                                            reorderFixedExpenses(draggedFixedId, expense.id);
-                                        }
+                        <p className="mt-3 text-sm font-medium text-gray-600">고정지출 관리는 Pro에서 사용할 수 있어요.</p>
 
-                                        setDraggedFixedId(null);
-                                    }}
-                                    className="group flex items-center gap-3 rounded-2xl bg-[#F7F7F5] px-3.5 py-3"
-                                >
-                                    <GripVertical size={16} className="shrink-0 cursor-grab text-gray-300" />
-
-                                    <div className="min-w-0 flex-1">
-                                        <div className="flex items-center gap-2">
-                                            <p className="truncate text-sm font-medium text-gray-800">{expense.name}</p>
-
-                                            <span className="shrink-0 text-[10px] text-gray-400">{expense.paymentDay}일</span>
-                                        </div>
-
-                                        <p className="mt-0.5 text-xs text-gray-400">{expense.categoryName}</p>
-                                    </div>
-
-                                    <p className="shrink-0 text-sm font-medium text-gray-900">{formatMoney(expense.amount)}</p>
-
-                                    <button
-                                        type="button"
-                                        onClick={() => openEditFixedForm(expense)}
-                                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-300 transition-all hover:bg-white hover:text-gray-600 group-hover:opacity-100 md:opacity-0"
-                                    >
-                                        <Pencil size={14} />
-                                    </button>
+                        <p className="mt-1 text-xs text-gray-400">매달 반복되는 지출을 관리해보세요.</p>
+                    </div>
+                ) : (
+                    <>
+                        <div className="mt-5">
+                            {fixedLoading ? (
+                                <div className="space-y-3">
+                                    <div className="h-14 animate-pulse rounded-2xl bg-gray-50" />
+                                    <div className="h-14 animate-pulse rounded-2xl bg-gray-50" />
                                 </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
+                            ) : fixedExpenses.length === 0 ? (
+                                <div className="rounded-2xl bg-[#F7F7F5] px-5 py-7 text-center">
+                                    <p className="text-sm font-medium text-gray-600">등록된 고정지출이 없어요.</p>
 
-                <button
-                    type="button"
-                    onClick={openAddFixedForm}
-                    className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-gray-200 py-3 text-[13px] font-medium text-gray-500 transition-colors hover:border-gray-300 hover:bg-gray-50"
-                >
-                    <Plus size={16} />
-                    고정지출 추가
-                </button>
+                                    <p className="mt-1 text-xs text-gray-400">매달 반복되는 지출을 추가해보세요.</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {fixedExpenses.map((expense) => (
+                                        <div
+                                            key={expense.id}
+                                            draggable
+                                            onDragStart={() => setDraggedFixedId(expense.id)}
+                                            onDragOver={(event) => event.preventDefault()}
+                                            onDrop={() => {
+                                                if (draggedFixedId !== null) {
+                                                    reorderFixedExpenses(draggedFixedId, expense.id);
+                                                }
+
+                                                setDraggedFixedId(null);
+                                            }}
+                                            className="group flex items-center gap-3 rounded-2xl bg-[#F7F7F5] px-3.5 py-3"
+                                        >
+                                            <GripVertical size={16} className="shrink-0 cursor-grab text-gray-300" />
+
+                                            <div className="min-w-0 flex-1">
+                                                <div className="flex items-center gap-2">
+                                                    <p className="truncate text-sm font-medium text-gray-800">{expense.name}</p>
+
+                                                    <span className="shrink-0 text-[10px] text-gray-400">
+                                                        {expense.paymentDay}일
+                                                    </span>
+                                                </div>
+
+                                                <p className="mt-0.5 text-xs text-gray-400">{expense.categoryName}</p>
+                                            </div>
+
+                                            <p className="shrink-0 text-sm font-medium text-gray-900">
+                                                {formatMoney(expense.amount)}
+                                            </p>
+
+                                            <button
+                                                type="button"
+                                                onClick={() => openEditFixedForm(expense)}
+                                                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-300 transition-all hover:bg-white hover:text-gray-600 group-hover:opacity-100 md:opacity-0"
+                                            >
+                                                <Pencil size={14} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        <button
+                            type="button"
+                            onClick={openAddFixedForm}
+                            className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-gray-200 py-3 text-[13px] font-medium text-gray-500 transition-colors hover:border-gray-300 hover:bg-gray-50"
+                        >
+                            <Plus size={16} />
+                            고정지출 추가
+                        </button>
+                    </>
+                )}
             </section>
 
             {/* Calendar */}
@@ -930,15 +1027,27 @@ export default function LivingManagePage() {
                     <button
                         type="button"
                         onClick={() => openAddForm(selectedDate)}
-                        className="flex items-center justify-center gap-1.5 rounded-2xl bg-gray-900 py-3.5 text-[13px] font-medium text-white transition-colors hover:bg-gray-800"
+                        className={`flex items-center justify-center gap-1.5 rounded-2xl py-3.5 text-[13px] font-medium transition-colors ${
+                            isLivingTransactionLimitReached
+                                ? "bg-gray-100 text-gray-400"
+                                : "bg-gray-900 text-white hover:bg-gray-800"
+                        }`}
                     >
-                        <Plus size={16} />
-                        지출 기록
+                        {isLivingTransactionLimitReached ? <Lock size={15} /> : <Plus size={16} />}
+
+                        {isLivingTransactionLimitReached ? "기록 한도 도달" : "지출 기록"}
                     </button>
 
                     <button
                         type="button"
                         onClick={() => {
+                            if (isLivingTransactionLimitReached) {
+                                alert(
+                                    "무료 플랜에서는 생활 기록을 최대 300개까지 저장할 수 있어요.\n기존 기록을 삭제하면 다시 추가할 수 있어요.",
+                                );
+                                return;
+                            }
+
                             setEditingTransaction(null);
 
                             setForm({
@@ -952,10 +1061,15 @@ export default function LivingManagePage() {
 
                             setIsFormOpen(true);
                         }}
-                        className="flex items-center justify-center gap-1.5 rounded-2xl bg-[#F7F7F5] py-3.5 text-[13px] font-medium text-gray-700 transition-colors hover:bg-gray-100"
+                        className={`flex items-center justify-center gap-1.5 rounded-2xl py-3.5 text-[13px] font-medium transition-colors ${
+                            isLivingTransactionLimitReached
+                                ? "bg-gray-100 text-gray-400"
+                                : "bg-[#F7F7F5] text-gray-700 hover:bg-gray-100"
+                        }`}
                     >
-                        <Plus size={16} />
-                        수입 기록
+                        {isLivingTransactionLimitReached ? <Lock size={15} /> : <Plus size={16} />}
+
+                        {isLivingTransactionLimitReached ? "기록 한도 도달" : "수입 기록"}
                     </button>
                 </div>
             </section>
@@ -1129,10 +1243,15 @@ export default function LivingManagePage() {
                                     <button
                                         type="button"
                                         onClick={() => openAddCategoryForm("variable")}
-                                        className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-gray-200 py-3 text-[13px] font-medium text-gray-500 transition-colors hover:border-gray-300 hover:bg-gray-50"
+                                        className={`mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed py-3 text-[13px] font-medium transition-colors ${
+                                            isFree
+                                                ? "border-gray-100 bg-gray-50 text-gray-300"
+                                                : "border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-gray-50"
+                                        }`}
                                     >
-                                        <Plus size={15} />
+                                        {isFree ? <Lock size={14} /> : <Plus size={15} />}
                                         카테고리 추가하기
+                                        {isFree && <ProBadge />}
                                     </button>
                                 </div>
                             )}
@@ -1163,10 +1282,15 @@ export default function LivingManagePage() {
                                     <button
                                         type="button"
                                         onClick={() => openAddCategoryForm("income")}
-                                        className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-gray-200 py-3 text-[13px] font-medium text-gray-500 transition-colors hover:border-gray-300 hover:bg-gray-50"
+                                        className={`mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed py-3 text-[13px] font-medium transition-colors ${
+                                            isFree
+                                                ? "border-gray-100 bg-gray-50 text-gray-300"
+                                                : "border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-gray-50"
+                                        }`}
                                     >
-                                        <Plus size={15} />
+                                        {isFree ? <Lock size={14} /> : <Plus size={15} />}
                                         카테고리 추가하기
+                                        {isFree && <ProBadge />}
                                     </button>
                                 </div>
                             )}
@@ -1309,10 +1433,15 @@ export default function LivingManagePage() {
                                 <button
                                     type="button"
                                     onClick={() => openAddCategoryForm("fixed")}
-                                    className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-gray-200 py-3 text-[13px] font-medium text-gray-500 transition-colors hover:border-gray-300 hover:bg-gray-50"
+                                    className={`mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed py-3 text-[13px] font-medium transition-colors ${
+                                        isFree
+                                            ? "border-gray-100 bg-gray-50 text-gray-300"
+                                            : "border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-gray-50"
+                                    }`}
                                 >
-                                    <Plus size={15} />
+                                    {isFree ? <Lock size={14} /> : <Plus size={15} />}
                                     카테고리 추가하기
+                                    {isFree && <ProBadge />}
                                 </button>
                             </div>
 
@@ -1402,7 +1531,11 @@ export default function LivingManagePage() {
 
                             {categoryModalCategories.length > 0 && (
                                 <div>
-                                    <p className="mb-2 text-xs text-gray-400">현재 카테고리</p>
+                                    <div className="mb-2 flex items-center justify-between">
+                                        <p className="text-xs text-gray-400">현재 카테고리</p>
+
+                                        {isFree && <ProBadge />}
+                                    </div>
 
                                     <div className="space-y-2">
                                         {categoryModalCategories.map((category) => (
@@ -1417,17 +1550,25 @@ export default function LivingManagePage() {
                                                 <button
                                                     type="button"
                                                     onClick={() => openEditCategoryForm(category)}
-                                                    className="flex h-8 w-8 items-center justify-center rounded-full text-gray-300 transition-colors hover:bg-white hover:text-gray-600"
+                                                    className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
+                                                        isFree
+                                                            ? "text-gray-200"
+                                                            : "text-gray-300 hover:bg-white hover:text-gray-600"
+                                                    }`}
                                                 >
-                                                    <Pencil size={14} />
+                                                    {isFree ? <Lock size={13} /> : <Pencil size={14} />}
                                                 </button>
 
                                                 <button
                                                     type="button"
                                                     onClick={() => deleteCategory(category)}
-                                                    className="flex h-8 w-8 items-center justify-center rounded-full text-gray-300 transition-colors hover:bg-white hover:text-red-500"
+                                                    className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
+                                                        isFree
+                                                            ? "text-gray-200"
+                                                            : "text-gray-300 hover:bg-white hover:text-red-500"
+                                                    }`}
                                                 >
-                                                    <Trash2 size={14} />
+                                                    {isFree ? <Lock size={13} /> : <Trash2 size={14} />}
                                                 </button>
                                             </div>
                                         ))}

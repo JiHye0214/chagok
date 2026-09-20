@@ -336,9 +336,10 @@ export default function LivingPage() {
                                         <div className="mt-3 flex gap-2">
                                             <button
                                                 type="button"
+                                                onClick={() => router.push(`/salary/pay-history`)}
                                                 className="flex-1 rounded-2xl bg-white py-3 text-[13px] font-medium text-gray-600 shadow-sm transition hover:bg-gray-50"
                                             >
-                                                나중에
+                                                급여 수정
                                             </button>
 
                                             <button

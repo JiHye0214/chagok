@@ -5,7 +5,7 @@ import { getPeriodsPerYear, formatDate } from "@/lib/payPeriod";
 import { calculateTaxes } from "@/lib/tax";
 import { isHoliday } from "@/lib/holiday";
 import Link from "next/link";
-import { Lock } from "lucide-react";
+import { ClipboardList, Lock, Settings } from "lucide-react";
 
 type PayType = "hourly" | "salary" | "commission" | "other";
 
@@ -210,7 +210,7 @@ const getDdayLabel = (targetDate: string) => {
 };
 
 export default function SalaryPage() {
-    const [planCode, setPlanCode] = useState<string>("free");
+    const [planCode, setPlanCode] = useState<"free" | "pro">("free");
 
     const [schedules, setSchedules] = useState<WorkSchedule[]>([]);
     const [isSchedulesLoading, setIsSchedulesLoading] = useState(true);
@@ -361,9 +361,9 @@ export default function SalaryPage() {
 
                 const data = await response.json();
 
-                setPlanCode(data.planCode ?? "free");
+                setPlanCode(data.planCode === "pro" ? "pro" : "free");
             } catch (error) {
-                console.error("플랜 조회 실패:", error);
+                console.error("요금제 조회 실패:", error);
             }
         };
 
@@ -1052,21 +1052,6 @@ export default function SalaryPage() {
 
     /*
      * --------------------------------------------------
-     * Pending Actual Record
-     * --------------------------------------------------
-     */
-
-    const pendingActualPay = pendingPayPeriod
-        ? (payHistory.find(
-              (history) =>
-                  history.startDate === pendingPayPeriod.startDate &&
-                  history.endDate === pendingPayPeriod.endDate &&
-                  history.actualNetPay !== null,
-          ) ?? null)
-        : null;
-
-    /*
-     * --------------------------------------------------
      * Pending Status
      * --------------------------------------------------
      */
@@ -1088,18 +1073,9 @@ export default function SalaryPage() {
      *
      * → 예상 지급 카드
      */
-    // const shouldShowPendingPay = Boolean(pendingPayPeriod) && isPendingPeriodEnded && !isPendingPayDatePassed;
-    const shouldShowPendingPay =
-        Boolean(pendingPayPeriod) && isPendingPeriodEnded && !isPendingPayDatePassed && !pendingActualPay;
+    const shouldShowPendingPay = Boolean(pendingPayPeriod) && isPendingPeriodEnded && !isPendingPayDatePassed;
 
-    /*
-     * 지급일 당일은 아직 "지급일이 지났다"가 아니다.
-     *
-     * 따라서 오늘은 D-day "오늘"로 보여준다.
-     *
-     * 지급일 다음날부터 기록하기 화면으로 이동.
-     */
-    const shouldGoToPayHistory = Boolean(pendingPayPeriod) && isPendingPeriodEnded && isPendingPayDatePassed && !pendingActualPay;
+    const shouldGoToPayHistory = Boolean(pendingPayPeriod) && isPendingPeriodEnded && isPendingPayDatePassed;
 
     useEffect(() => {
         if (!shouldShowPendingPay) {
@@ -1267,13 +1243,23 @@ export default function SalaryPage() {
                 <div className="mt-2 flex items-center justify-between">
                     <h1 className="text-3xl font-bold">급여</h1>
 
-                    <Link
-                        href="/salary/settings"
-                        className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-gray-500 shadow-sm"
-                        aria-label="급여 설정"
-                    >
-                        ⚙
-                    </Link>
+                    <div className="flex items-center gap-2">
+                        <Link
+                            href="/salary/pay-history"
+                            className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-gray-500 shadow-sm transition hover:bg-gray-50"
+                            aria-label="급여 기록"
+                        >
+                            <ClipboardList size={18} strokeWidth={1.8} />
+                        </Link>
+
+                        <Link
+                            href="/salary/settings"
+                            className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-gray-500 shadow-sm transition hover:bg-gray-50"
+                            aria-label="급여 설정"
+                        >
+                            <Settings size={18} strokeWidth={1.8} />
+                        </Link>
+                    </div>
                 </div>
 
                 <p className="mt-2 text-sm text-gray-500">이번 급여는 얼마나 받을까요?</p>
@@ -1375,8 +1361,8 @@ export default function SalaryPage() {
             )}
 
             {/* --------------------------------------------------
-    Actual Net Pay Statistics
--------------------------------------------------- */}
+                Actual Net Pay Statistics
+            -------------------------------------------------- */}
 
             <section className="mt-6">
                 {planCode === "pro" ? (

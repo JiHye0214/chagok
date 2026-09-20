@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
+import { getCurrentUser } from "@/lib/auth/user";
 
 type FixedExpenseRow = {
     id: number;
@@ -29,8 +30,47 @@ const toFixedExpense = (row: FixedExpenseRow) => {
     };
 };
 
+async function getPlanCode(userId: string) {
+    const [subscription] = await sql`
+        SELECT
+            p.code AS plan_code
+        FROM subscriptions s
+        JOIN plans p
+            ON p.id = s.plan_id
+        WHERE s.user_id = ${userId}
+        LIMIT 1
+    `;
+
+    return subscription?.plan_code ?? "free";
+}
+
+const isPro = (planCode: string) => planCode !== "free";
+
 export async function GET() {
     try {
+        const user = await getCurrentUser();
+
+        if (!user) {
+            return NextResponse.json(
+                {
+                    error: "Unauthorized",
+                },
+                { status: 401 },
+            );
+        }
+
+        const planCode = await getPlanCode(user.id);
+
+        if (!isPro(planCode)) {
+            return NextResponse.json(
+                {
+                    error: "고정지출은 Pro 플랜에서 사용할 수 있어요.",
+                    code: "FIXED_EXPENSE_PRO_ONLY",
+                },
+                { status: 403 },
+            );
+        }
+
         const rows = await sql`
             SELECT
                 lfe.id,
@@ -44,7 +84,9 @@ export async function GET() {
             FROM living_fixed_expenses lfe
             INNER JOIN living_categories lc
                 ON lc.id = lfe.category_id
-            WHERE lfe.is_active = TRUE
+               AND lc.user_id = ${user.id}
+            WHERE lfe.user_id = ${user.id}
+              AND lfe.is_active = TRUE
             ORDER BY
                 lfe.sort_order,
                 lfe.id
@@ -52,8 +94,16 @@ export async function GET() {
 
         const fixedExpenses = (rows as FixedExpenseRow[]).map(toFixedExpense);
 
+        const [countResult] = await sql`
+            SELECT COUNT(*)::int AS count
+            FROM living_fixed_expenses
+            WHERE user_id = ${user.id}
+              AND is_active = TRUE
+        `;
+
         return NextResponse.json({
             fixedExpenses,
+            totalCount: Number(countResult?.count ?? 0),
         });
     } catch (error) {
         console.error("GET /api/living/fixed-expenses error:", error);
@@ -69,6 +119,29 @@ export async function GET() {
 
 export async function POST(request: Request) {
     try {
+        const user = await getCurrentUser();
+
+        if (!user) {
+            return NextResponse.json(
+                {
+                    error: "Unauthorized",
+                },
+                { status: 401 },
+            );
+        }
+
+        const planCode = await getPlanCode(user.id);
+
+        if (!isPro(planCode)) {
+            return NextResponse.json(
+                {
+                    error: "고정지출은 Pro 플랜에서 사용할 수 있어요.",
+                    code: "FIXED_EXPENSE_PRO_ONLY",
+                },
+                { status: 403 },
+            );
+        }
+
         const body = await request.json();
 
         const { name, amount, categoryId, paymentDay, memo } = body as {
@@ -124,6 +197,7 @@ export async function POST(request: Request) {
             SELECT id
             FROM living_categories
             WHERE id = ${numericCategoryId}
+              AND user_id = ${user.id}
               AND kind = 'fixed'
               AND is_active = TRUE
             LIMIT 1
@@ -141,13 +215,15 @@ export async function POST(request: Request) {
         const sortResult = await sql`
             SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_sort_order
             FROM living_fixed_expenses
-            WHERE is_active = TRUE
+            WHERE user_id = ${user.id}
+              AND is_active = TRUE
         `;
 
         const nextSortOrder = Number(sortResult[0]?.next_sort_order ?? 0);
 
         const result = await sql`
             INSERT INTO living_fixed_expenses (
+                user_id,
                 name,
                 amount,
                 category_id,
@@ -157,6 +233,7 @@ export async function POST(request: Request) {
                 sort_order
             )
             VALUES (
+                ${user.id},
                 ${trimmedName},
                 ${numericAmount},
                 ${numericCategoryId},
@@ -183,7 +260,9 @@ export async function POST(request: Request) {
             FROM living_fixed_expenses lfe
             INNER JOIN living_categories lc
                 ON lc.id = lfe.category_id
+               AND lc.user_id = ${user.id}
             WHERE lfe.id = ${insertedId}
+              AND lfe.user_id = ${user.id}
             LIMIT 1
         `;
 
@@ -208,6 +287,29 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
     try {
+        const user = await getCurrentUser();
+
+        if (!user) {
+            return NextResponse.json(
+                {
+                    error: "Unauthorized",
+                },
+                { status: 401 },
+            );
+        }
+
+        const planCode = await getPlanCode(user.id);
+
+        if (!isPro(planCode)) {
+            return NextResponse.json(
+                {
+                    error: "고정지출은 Pro 플랜에서 사용할 수 있어요.",
+                    code: "FIXED_EXPENSE_PRO_ONLY",
+                },
+                { status: 403 },
+            );
+        }
+
         const body = await request.json();
 
         const { id, name, amount, categoryId, paymentDay, memo } = body as {
@@ -274,6 +376,7 @@ export async function PATCH(request: Request) {
             SELECT id
             FROM living_categories
             WHERE id = ${numericCategoryId}
+              AND user_id = ${user.id}
               AND kind = 'fixed'
               AND is_active = TRUE
             LIMIT 1
@@ -298,6 +401,7 @@ export async function PATCH(request: Request) {
                 memo = ${memo?.trim() || null},
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ${numericId}
+              AND user_id = ${user.id}
               AND is_active = TRUE
             RETURNING id
         `;
@@ -324,7 +428,9 @@ export async function PATCH(request: Request) {
             FROM living_fixed_expenses lfe
             INNER JOIN living_categories lc
                 ON lc.id = lfe.category_id
+               AND lc.user_id = ${user.id}
             WHERE lfe.id = ${numericId}
+              AND lfe.user_id = ${user.id}
             LIMIT 1
         `;
 
@@ -346,8 +452,30 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
     try {
-        const { searchParams } = new URL(request.url);
+        const user = await getCurrentUser();
 
+        if (!user) {
+            return NextResponse.json(
+                {
+                    error: "Unauthorized",
+                },
+                { status: 401 },
+            );
+        }
+
+        const planCode = await getPlanCode(user.id);
+
+        if (!isPro(planCode)) {
+            return NextResponse.json(
+                {
+                    error: "고정지출은 Pro 플랜에서 사용할 수 있어요.",
+                    code: "FIXED_EXPENSE_PRO_ONLY",
+                },
+                { status: 403 },
+            );
+        }
+
+        const { searchParams } = new URL(request.url);
         const id = Number(searchParams.get("id"));
 
         if (!Number.isInteger(id) || id <= 0) {
@@ -365,6 +493,7 @@ export async function DELETE(request: Request) {
                 is_active = FALSE,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ${id}
+              AND user_id = ${user.id}
               AND is_active = TRUE
             RETURNING id
         `;

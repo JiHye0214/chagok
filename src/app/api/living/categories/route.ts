@@ -16,6 +16,20 @@ const isCategoryKind = (value: unknown): value is CategoryKind => {
     return value === "fixed" || value === "variable" || value === "income";
 };
 
+async function getPlanCode(userId: string) {
+    const subscription = await sql`
+        SELECT
+            p.code AS plan_code
+        FROM subscriptions s
+        JOIN plans p
+            ON p.id = s.plan_id
+        WHERE s.user_id = ${userId}
+        LIMIT 1
+    `;
+
+    return subscription[0]?.plan_code ?? "free";
+}
+
 export async function GET() {
     try {
         const user = await getCurrentUser();
@@ -69,6 +83,18 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "로그인이 필요해요." }, { status: 401 });
         }
 
+        const planCode = await getPlanCode(user.id);
+
+        if (planCode === "free") {
+            return NextResponse.json(
+                {
+                    error: "카테고리 관리는 Pro 플랜에서 사용할 수 있어요.",
+                    code: "LIVING_CATEGORY_PRO_ONLY",
+                },
+                { status: 403 },
+            );
+        }
+
         const body = await request.json();
 
         const { name, kind } = body as {
@@ -117,46 +143,6 @@ export async function POST(request: Request) {
                 );
             }
 
-            // 비활성화된 기존 카테고리를 다시 활성화하는 경우
-            // 현재 활성 카테고리가 5개인지 먼저 확인
-            const categoryCount = await sql`
-                SELECT COUNT(*)::int AS count
-                FROM living_categories
-                WHERE user_id = ${user.id}
-                  AND is_active = TRUE
-            `;
-
-            const subscription = await sql`
-                SELECT
-                    p.code AS plan_code
-                FROM subscriptions s
-                JOIN plans p
-                    ON p.id = s.plan_id
-                WHERE s.user_id = ${user.id}
-                LIMIT 1
-            `;
-
-            if (subscription.length === 0) {
-                return NextResponse.json(
-                    {
-                        error: "구독 정보를 찾을 수 없습니다.",
-                    },
-                    { status: 403 },
-                );
-            }
-
-            const planCode = subscription[0].plan_code;
-
-            if (planCode === "free" && categoryCount[0].count >= 5) {
-                return NextResponse.json(
-                    {
-                        error: "무료 플랜에서는 생활 카테고리를 최대 5개까지 만들 수 있어요.",
-                        code: "LIVING_CATEGORY_LIMIT_REACHED",
-                    },
-                    { status: 403 },
-                );
-            }
-
             const sortResult = await sql`
                 SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_sort_order
                 FROM living_categories
@@ -191,47 +177,6 @@ export async function POST(request: Request) {
                     sortOrder: category.sort_order,
                 },
             });
-        }
-
-        // 새로운 카테고리 추가
-        const subscription = await sql`
-            SELECT
-                p.code AS plan_code
-            FROM subscriptions s
-            JOIN plans p
-                ON p.id = s.plan_id
-            WHERE s.user_id = ${user.id}
-            LIMIT 1
-        `;
-
-        if (subscription.length === 0) {
-            return NextResponse.json(
-                {
-                    error: "구독 정보를 찾을 수 없습니다.",
-                },
-                { status: 403 },
-            );
-        }
-
-        const planCode = subscription[0].plan_code;
-
-        if (planCode === "free") {
-            const categoryCount = await sql`
-                SELECT COUNT(*)::int AS count
-                FROM living_categories
-                WHERE user_id = ${user.id}
-                  AND is_active = TRUE
-            `;
-
-            if (categoryCount[0].count >= 5) {
-                return NextResponse.json(
-                    {
-                        error: "무료 플랜에서는 생활 카테고리를 최대 5개까지 만들 수 있어요.",
-                        code: "LIVING_CATEGORY_LIMIT_REACHED",
-                    },
-                    { status: 403 },
-                );
-            }
         }
 
         const sortResult = await sql`
@@ -297,6 +242,18 @@ export async function PATCH(request: Request) {
 
         if (!user) {
             return NextResponse.json({ error: "로그인이 필요해요." }, { status: 401 });
+        }
+
+        const planCode = await getPlanCode(user.id);
+
+        if (planCode === "free") {
+            return NextResponse.json(
+                {
+                    error: "카테고리 관리는 Pro 플랜에서 사용할 수 있어요.",
+                    code: "LIVING_CATEGORY_PRO_ONLY",
+                },
+                { status: 403 },
+            );
         }
 
         const body = await request.json();
@@ -398,6 +355,18 @@ export async function DELETE(request: Request) {
 
         if (!user) {
             return NextResponse.json({ error: "로그인이 필요해요." }, { status: 401 });
+        }
+
+        const planCode = await getPlanCode(user.id);
+
+        if (planCode === "free") {
+            return NextResponse.json(
+                {
+                    error: "카테고리 관리는 Pro 플랜에서 사용할 수 있어요.",
+                    code: "LIVING_CATEGORY_PRO_ONLY",
+                },
+                { status: 403 },
+            );
         }
 
         const { searchParams } = new URL(request.url);

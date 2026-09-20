@@ -1,3 +1,4 @@
+import { getCurrentUser } from "@/lib/auth/user";
 import { sql } from "@/lib/db";
 
 /* ============================================================
@@ -7,6 +8,12 @@ import { sql } from "@/lib/db";
 
 export async function GET() {
     try {
+        const user = await getCurrentUser();
+
+        if (!user) {
+            return Response.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
         const result = await sql`
             SELECT
                 id,
@@ -37,6 +44,8 @@ export async function GET() {
                 updated_at
 
             FROM pay_period_actuals
+
+            WHERE user_id = ${user.id}
 
             ORDER BY
                 pay_period_start_date DESC
@@ -121,6 +130,12 @@ export async function GET() {
 
 export async function POST(request: Request) {
     try {
+        const user = await getCurrentUser();
+
+        if (!user) {
+            return Response.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
         const body = await request.json();
 
         const {
@@ -146,6 +161,56 @@ export async function POST(request: Request) {
                 },
                 { status: 400 },
             );
+        }
+
+        // --------------------------------------------------------
+        // Free 급여 기록 최대 5개
+        //
+        // 이미 존재하는 같은 기간의 기록은 UPDATE이므로
+        // 5개 제한을 적용하지 않는다.
+        // --------------------------------------------------------
+
+        const [subscription] = await sql`
+            SELECT
+                p.code AS plan_code
+            FROM subscriptions s
+            JOIN plans p
+                ON p.id = s.plan_id
+            WHERE s.user_id = ${user.id}
+            LIMIT 1
+        `;
+
+        const planCode = subscription?.plan_code ?? "free";
+
+        if (planCode === "free") {
+            const [existingPeriod] = await sql`
+                SELECT id
+                FROM pay_period_actuals
+                WHERE user_id = ${user.id}
+                  AND pay_period_start_date = ${payPeriodStart}
+                  AND pay_period_end_date = ${payPeriodEnd}
+                LIMIT 1
+            `;
+
+            if (!existingPeriod) {
+                const [countResult] = await sql`
+                    SELECT COUNT(*)::int AS count
+                    FROM pay_period_actuals
+                    WHERE user_id = ${user.id}
+                `;
+
+                const currentCount = Number(countResult?.count ?? 0);
+
+                if (currentCount >= 5) {
+                    return Response.json(
+                        {
+                            error: "급여 기록은 최대 5개까지 저장할 수 있습니다.",
+                            code: "PAY_HISTORY_LIMIT_REACHED",
+                        },
+                        { status: 403 },
+                    );
+                }
+            }
         }
 
         // --------------------------------------------------------
@@ -231,11 +296,6 @@ export async function POST(request: Request) {
 
         // --------------------------------------------------------
         // cash / paycheque tip 분리
-        //
-        // 실제 입력한 actualTips를 총 팁으로 저장하고,
-        // 현재 설정에 따라 cash/paycheque 값을 분리한다.
-        //
-        // 만약 화면에서 별도로 전달한다면 그 값을 우선한다.
         // --------------------------------------------------------
 
         const actualCashTips = Number(body.actualCashTips);
@@ -256,11 +316,13 @@ export async function POST(request: Request) {
         // --------------------------------------------------------
         // 저장
         //
-        // 같은 기간이 이미 있으면 UPDATE
+        // 같은 사용자의 같은 기간이 이미 있으면 UPDATE
         // --------------------------------------------------------
 
         const result = await sql`
             INSERT INTO pay_period_actuals (
+                user_id,
+
                 pay_period_start_date,
                 pay_period_end_date,
                 pay_date,
@@ -278,6 +340,8 @@ export async function POST(request: Request) {
                 updated_at
             )
             VALUES (
+                ${user.id},
+
                 ${payPeriodStart},
                 ${payPeriodEnd},
                 ${payDate || null},
@@ -295,10 +359,8 @@ export async function POST(request: Request) {
                 CURRENT_TIMESTAMP
             )
 
-            ON CONFLICT (
-                pay_period_start_date,
-                pay_period_end_date
-            )
+            ON CONFLICT ON CONSTRAINT
+                pay_period_actuals_user_period_unique
 
             DO UPDATE SET
                 pay_date =
@@ -423,6 +485,12 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
     try {
+        const user = await getCurrentUser();
+
+        if (!user) {
+            return Response.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
         const body = await request.json();
 
         const { id, payPeriodStart, payPeriodEnd, payDate, actualHours, actualPay, actualTips, actualDeductions, adjustments } =
@@ -514,9 +582,6 @@ export async function PUT(request: Request) {
 
         // --------------------------------------------------------
         // 실제 실수령액
-        //
-        // 수정할 때도 사용자가 입력한 actualNetPay를
-        // 그대로 저장한다.
         // --------------------------------------------------------
 
         const actualNetPay = Number(body.actualNetPay);
@@ -587,6 +652,7 @@ export async function PUT(request: Request) {
                     CURRENT_TIMESTAMP
 
             WHERE id = ${Number(id)}
+              AND user_id = ${user.id}
 
             RETURNING
                 id,
@@ -686,6 +752,12 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
     try {
+        const user = await getCurrentUser();
+
+        if (!user) {
+            return Response.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
         const body = await request.json();
 
         const id = Number(body.id);
@@ -703,6 +775,7 @@ export async function DELETE(request: Request) {
             DELETE FROM pay_period_actuals
 
             WHERE id = ${id}
+              AND user_id = ${user.id}
 
             RETURNING id
         `;

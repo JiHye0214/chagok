@@ -180,6 +180,9 @@ const getDestinationLabel = (destinations: TripDestination[]) => {
 };
 
 export default function TravelDetailPage() {
+    const [planCode, setPlanCode] = useState<"free" | "pro">("free");
+    const isPro = planCode === "pro";
+
     const params = useParams();
 
     const [trip, setTrip] = useState<SavedTrip | null>(null);
@@ -239,6 +242,27 @@ export default function TravelDetailPage() {
 
     // 여행 삭제
     const [isDeletingTrip, setIsDeletingTrip] = useState(false);
+
+    // User Plan
+    useEffect(() => {
+        const loadPlan = async () => {
+            try {
+                const response = await fetch("/api/auth/me");
+
+                if (!response.ok) {
+                    return;
+                }
+
+                const data = await response.json();
+
+                setPlanCode(data.planCode === "pro" ? "pro" : "free");
+            } catch (error) {
+                console.error("플랜 정보를 불러오지 못했습니다.", error);
+            }
+        };
+
+        loadPlan();
+    }, []);
 
     useEffect(() => {
         const fetchTrip = async () => {
@@ -329,6 +353,8 @@ export default function TravelDetailPage() {
                 }
 
                 const data: ExpenseCategory[] = await response.json();
+
+                console.log("여행 경비 카테고리:", trip.id, data);
 
                 // 기존 카테고리가 하나도 없는 여행이면 기본 카테고리 생성
                 if (data.length === 0) {
@@ -1166,6 +1192,10 @@ export default function TravelDetailPage() {
     // ==============================
 
     const handleCategoryNameChange = (categoryId: number, name: string) => {
+        if (!isPro) {
+            return;
+        }
+
         setCategories((prev) =>
             prev.map((category) =>
                 category.id === categoryId
@@ -1179,6 +1209,8 @@ export default function TravelDetailPage() {
     };
 
     const handleCategoryNameSave = async (categoryId: number) => {
+        if (!isPro) return;
+
         if (!trip?.id) return;
 
         const category = categories.find((item) => item.id === categoryId);
@@ -1234,6 +1266,11 @@ export default function TravelDetailPage() {
     // ==============================
 
     const handleDeleteCategory = async (categoryId: number) => {
+        if (!isPro) {
+            alert("여행 경비 카테고리 관리는 Pro 플랜에서 사용할 수 있어요.");
+            return;
+        }
+
         if (!trip?.id) return;
 
         const category = categories.find((item) => item.id === categoryId);
@@ -1280,6 +1317,7 @@ export default function TravelDetailPage() {
     // ==============================
 
     const handleCategoryDragStart = (categoryId: number) => {
+        if (!isPro) return;
         setDraggedCategoryId(categoryId);
     };
 
@@ -1292,6 +1330,7 @@ export default function TravelDetailPage() {
     };
 
     const handleCategoryDrop = async (targetCategoryId: number) => {
+        if (!isPro) return;
         if (draggedCategoryId === null || draggedCategoryId === targetCategoryId || !trip?.id) {
             return;
         }
@@ -2041,17 +2080,21 @@ export default function TravelDetailPage() {
                                                 onClick={(event) => event.stopPropagation()}
                                             >
                                                 {isSelected ? (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleDeleteCategory(category.id)}
-                                                        className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:text-gray-700"
-                                                        aria-label="카테고리 삭제"
-                                                    >
-                                                        <Trash2 size={15} strokeWidth={1.8} />
-                                                    </button>
+                                                    isPro ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleDeleteCategory(category.id)}
+                                                            className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:text-gray-700"
+                                                            aria-label="카테고리 삭제"
+                                                        >
+                                                            <Trash2 size={15} strokeWidth={1.8} />
+                                                        </button>
+                                                    ) : (
+                                                        <div className="h-8 w-8" />
+                                                    )
                                                 ) : (
                                                     <div
-                                                        draggable
+                                                        draggable={isPro}
                                                         onDragStart={() => handleCategoryDragStart(category.id)}
                                                         onDragEnd={handleCategoryDragEnd}
                                                         className="flex h-8 w-8 cursor-grab items-center justify-center rounded-lg text-gray-300 active:cursor-grabbing"
@@ -2070,6 +2113,7 @@ export default function TravelDetailPage() {
                                             >
                                                 <div className="flex w-[76px] items-center gap-2">
                                                     <input
+                                                        readOnly={!isPro}
                                                         type="text"
                                                         value={category.name}
                                                         autoFocus={newCategoryId === category.id}
@@ -2089,7 +2133,9 @@ export default function TravelDetailPage() {
                                                             }
                                                         }}
                                                         onClick={(event) => event.stopPropagation()}
-                                                        className="w-[55px] min-w-0 cursor-pointer bg-transparent text-xs font-medium text-gray-600 outline-none"
+                                                        className={`w-[55px] min-w-0 bg-transparent text-xs font-medium text-gray-600 outline-none ${
+                                                            isPro ? "cursor-pointer" : "cursor-default"
+                                                        }`}
                                                     />
                                                 </div>
                                             </th>

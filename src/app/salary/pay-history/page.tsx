@@ -7,6 +7,7 @@ import { getPayPeriodEndDate, formatDate } from "@/lib/payPeriod";
 import { calculateTaxes } from "@/lib/tax";
 import { isHoliday } from "@/lib/holiday";
 import { calculateExpectedSalary } from "@/lib/payroll/calculateExpectedSalary";
+import { Lock } from "lucide-react";
 
 type AdjustmentType = "add" | "subtract";
 
@@ -269,6 +270,8 @@ const getPresetDateRange = (filter: Exclude<HistoryFilter, "custom">) => {
 };
 
 export default function PayHistoryPage() {
+    const [planCode, setPlanCode] = useState<"free" | "pro">("free");
+
     const [payHistory, setPayHistory] = useState<PayHistory[]>([]);
 
     const [isLoading, setIsLoading] = useState(true);
@@ -497,6 +500,30 @@ export default function PayHistoryPage() {
             return [];
         }
     };
+
+    /*
+     * 프리미엄 유저
+     * 플랜
+     */
+    useEffect(() => {
+        const loadPlan = async () => {
+            try {
+                const response = await fetch("/api/auth/me");
+
+                if (!response.ok) {
+                    return;
+                }
+
+                const data = await response.json();
+
+                setPlanCode(data.planCode === "pro" ? "pro" : "free");
+            } catch (error) {
+                console.error("요금제 조회 실패:", error);
+            }
+        };
+
+        void loadPlan();
+    }, []);
 
     useEffect(() => {
         const load = async () => {
@@ -963,18 +990,20 @@ export default function PayHistoryPage() {
 
         /*
          * 지급일은 아직 지나지 않은 급여
+         *
+         * 급여기간은 이미 끝났지만
+         * 지급일은 아직 오지 않은 가장 가까운 급여기간
          */
-        const upcomingPeriods = uniquePeriods
+        const upcomingPeriod = uniquePeriods
             .filter((period) => {
                 const endDate = parseDate(period.endDate);
-
                 const payDate = parseDate(period.payDate);
 
-                return endDate <= today && payDate > today;
+                return endDate.getTime() <= today.getTime() && payDate.getTime() > today.getTime();
             })
-            .sort((a, b) => parseDate(a.payDate).getTime() - parseDate(b.payDate).getTime());
-
-        const upcomingPeriod = upcomingPeriods[0];
+            .sort((a, b) => {
+                return parseDate(a.payDate).getTime() - parseDate(b.payDate).getTime();
+            })[0];
 
         if (upcomingPeriod) {
             const payDate = parseDate(upcomingPeriod.payDate);
@@ -1347,6 +1376,11 @@ export default function PayHistoryPage() {
      * 새 급여 기록
      */
     const openCreateForm = () => {
+        if (planCode === "free" && payHistory.length >= 5) {
+            alert("무료 이용자는 급여 기록을 최대 5개까지 저장할 수 있어요.");
+            return;
+        }
+
         setSelectedHistory(null);
 
         setForm({
@@ -1690,27 +1724,49 @@ export default function PayHistoryPage() {
                 {/* 급여 상태 */}
                 {pendingPayPeriod && (
                     <>
+                        {/* 지급일이 지난 급여 기록 */}
                         {shouldGoToPayHistory && (
-                            <Link
-                                href="/salary/pay-history"
-                                className="mt-5 block w-full rounded-3xl bg-gray-900 p-5 text-left shadow-sm transition hover:shadow-md"
-                            >
-                                <p className="text-xs text-gray-400">급여 기록</p>
+                            <>
+                                {planCode === "free" && payHistory.length >= 5 ? (
+                                    <div className="mt-5 flex items-center gap-3 rounded-2xl bg-gray-50 p-4">
+                                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100">
+                                            <Lock size={16} className="text-gray-500" />
+                                        </div>
 
-                                <p className="mt-1 text-lg font-bold text-white">지급일이 지났어요</p>
+                                        <div>
+                                            <p className="text-sm font-semibold text-gray-900">
+                                                급여 기록 5개를 모두 사용했어요.
+                                            </p>
 
-                                <p className="mt-1 text-sm text-gray-500">아직 기록되지 않은 급여가 있어요.</p>
+                                            <p className="mt-1 text-xs text-gray-500">
+                                                기존 기록을 삭제하면 새로운 급여를 등록할 수 있어요.
+                                            </p>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <Link
+                                        href="/salary/pay-history"
+                                        className="mt-5 block w-full rounded-3xl bg-gray-900 p-5 text-left shadow-sm transition hover:shadow-md"
+                                    >
+                                        <p className="text-xs text-gray-400">급여 기록</p>
 
-                                <p className="mt-4 text-xs text-gray-400">
-                                    {formatDisplayDate(pendingPayPeriod.startDate)}
-                                    {" ~ "}
-                                    {formatDisplayDate(pendingPayPeriod.endDate)}
-                                </p>
+                                        <p className="mt-1 text-lg font-bold text-white">지급일이 지났어요</p>
 
-                                <p className="mt-3 text-xs font-medium text-gray-500">급여 기록에서 확인하기 →</p>
-                            </Link>
+                                        <p className="mt-1 text-sm text-gray-500">아직 기록되지 않은 급여가 있어요.</p>
+
+                                        <p className="mt-4 text-xs text-gray-400">
+                                            {formatDisplayDate(pendingPayPeriod.startDate)}
+                                            {" ~ "}
+                                            {formatDisplayDate(pendingPayPeriod.endDate)}
+                                        </p>
+
+                                        <p className="mt-3 text-xs font-medium text-gray-500">급여 기록에서 확인하기 →</p>
+                                    </Link>
+                                )}
+                            </>
                         )}
 
+                        {/* 급여 예정 */}
                         {shouldShowPendingPay && pendingPayPeriod && (
                             <button
                                 type="button"
@@ -1747,19 +1803,36 @@ export default function PayHistoryPage() {
                 )}
 
                 {/* 기록 추가 */}
-                <button
-                    type="button"
-                    onClick={openCreateForm}
-                    className="mt-6 flex w-full items-center justify-between rounded-3xl bg-white p-5 text-left shadow-sm transition hover:shadow-md"
-                >
-                    <div>
-                        <p className="font-semibold">급여 기록 추가</p>
+                {planCode === "free" && payHistory.length >= 5 ? (
+                    // 위에서 이미 제한 안내가 표시된 경우 중복 표시하지 않음
+                    !shouldGoToPayHistory && (
+                        <div className="mt-4 flex items-center gap-3 rounded-2xl bg-gray-50 p-4">
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100">
+                                <Lock size={16} className="text-gray-500" />
+                            </div>
 
-                        <p className="mt-1 text-sm text-gray-400">지난 급여를 직접 기록할 수 있어요.</p>
-                    </div>
+                            <div>
+                                <p className="text-sm font-semibold text-gray-900">급여 기록 5개를 모두 사용했어요.</p>
 
-                    <span className="text-xl">+</span>
-                </button>
+                                <p className="mt-1 text-xs text-gray-500">기존 기록을 삭제하면 새로운 급여를 등록할 수 있어요.</p>
+                            </div>
+                        </div>
+                    )
+                ) : (
+                    <button
+                        type="button"
+                        onClick={openCreateForm}
+                        className="mt-6 flex w-full items-center justify-between rounded-3xl bg-white p-5 text-left shadow-sm transition hover:shadow-md"
+                    >
+                        <div>
+                            <p className="font-semibold">급여 기록 추가</p>
+
+                            <p className="mt-1 text-sm text-gray-400">지난 급여를 직접 기록할 수 있어요.</p>
+                        </div>
+
+                        <span className="text-xl">+</span>
+                    </button>
+                )}
 
                 {/* --------------------------------------------------
                     급여 기록 기간 필터

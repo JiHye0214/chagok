@@ -609,7 +609,7 @@ export default function SchedulePage() {
     const [animatedNetPay, setAnimatedNetPay] = useState(0);
 
     useEffect(() => {
-        const target = currentPeriodEstimate.netPay;
+        const target = hasCashTips ? currentPeriodEstimate.totalIncome : currentPeriodEstimate.netPay;
 
         let startTime: number | null = null;
 
@@ -640,7 +640,7 @@ export default function SchedulePage() {
         animationFrame = requestAnimationFrame(animate);
 
         return () => cancelAnimationFrame(animationFrame);
-    }, [currentPeriodEstimate.netPay]);
+    }, [currentPeriodEstimate.netPay, currentPeriodEstimate.totalIncome, hasCashTips]);
 
     /*
      * --------------------------------------------------
@@ -1031,7 +1031,7 @@ export default function SchedulePage() {
             )}
 
             {planCode === "free" && schedules.length >= 100 && (
-                <div className="mb-4 flex items-center gap-3 rounded-2xl bg-gray-50 p-4">
+                <div className="my-4 flex items-center gap-3 rounded-2xl bg-gray-50 p-4">
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100">
                         <Lock size={16} className="text-gray-500" />
                     </div>
@@ -1700,9 +1700,7 @@ export default function SchedulePage() {
                     <p className="text-sm text-gray-400">이번예상 급여</p>
 
                     <div className="mt-2 flex items-start gap-2">
-                        <p className="text-4xl font-bold tabular-nums">
-                            {formatMoney(hasCashTips ? currentPeriodEstimate.totalIncome : currentPeriodEstimate.netPay)}
-                        </p>
+                        <p className="text-4xl font-bold tabular-nums">${animatedNetPay.toFixed(2)}</p>
                     </div>
 
                     {/* 세부 계산 */}

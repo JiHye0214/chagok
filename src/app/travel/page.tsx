@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { formatDate } from "@/lib/payPeriod";
 import TravelGlobe from "./TravelGlobe";
-import { Lock } from "lucide-react";
+import { Lock, NotebookTabs } from "lucide-react";
 
 type TripCity = {
     id?: number;
@@ -586,6 +586,14 @@ export default function TravelPage() {
 
                 <div className="mt-2 flex items-center justify-between">
                     <h1 className="text-3xl font-bold tracking-tight text-gray-900">Travel</h1>
+
+                    <Link
+                        href="/travel/list"
+                        className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-gray-500 shadow-sm transition hover:bg-gray-50"
+                        aria-label="Travel records"
+                    >
+                        <NotebookTabs size={18} strokeWidth={1.8} />
+                    </Link>
                 </div>
 
                 <p className="mt-2 text-sm leading-relaxed text-gray-500">

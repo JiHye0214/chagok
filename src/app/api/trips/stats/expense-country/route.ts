@@ -1,9 +1,56 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
+import { getCurrentUser } from "@/lib/auth/user";
 
 export async function GET(request: Request) {
     try {
+        // --------------------------------------------------
+        // 인증
+        // --------------------------------------------------
+
+        const user = await getCurrentUser();
+
+        if (!user) {
+            return NextResponse.json(
+                {
+                    error: "로그인이 필요합니다.",
+                },
+                { status: 401 },
+            );
+        }
+
+        // --------------------------------------------------
+        // Pro 플랜 확인
+        // --------------------------------------------------
+
+        const [subscription] = await sql`
+            SELECT
+                p.code AS plan_code
+            FROM subscriptions s
+            JOIN plans p
+                ON p.id = s.plan_id
+            WHERE s.user_id = ${user.id}
+            LIMIT 1
+        `;
+
+        const planCode = subscription?.plan_code ?? "free";
+
+        if (planCode === "free") {
+            return NextResponse.json(
+                {
+                    error: "여행 소비 분석은 Pro 플랜에서 사용할 수 있어요.",
+                    code: "TRIP_EXPENSE_ANALYSIS_PRO_ONLY",
+                },
+                { status: 403 },
+            );
+        }
+
+        // --------------------------------------------------
+        // 국가 코드
+        // --------------------------------------------------
+
         const { searchParams } = new URL(request.url);
+
         const countryCode = searchParams.get("countryCode");
 
         if (!countryCode) {
@@ -15,19 +62,33 @@ export async function GET(request: Request) {
             );
         }
 
+        // --------------------------------------------------
+        // 국가별 카테고리 소비
+        // --------------------------------------------------
+
         const categories = await sql`
             SELECT
                 tec.name AS category,
-                COALESCE(SUM(te.amount), 0) AS amount
+                COALESCE(
+                    SUM(te.amount),
+                    0
+                ) AS amount
+
             FROM trip_expenses te
+
             JOIN trip_expense_categories tec
                 ON te.category_id = tec.id
+
             JOIN trips t
                 ON te.trip_id = t.id
-            WHERE t.trip_type = 'completed'
+
+            WHERE t.user_id = ${user.id}
+              AND t.trip_type = 'completed'
               AND t.country_code = ${countryCode}
               AND tec.name <> '총지출'
+
             GROUP BY tec.name
+
             ORDER BY amount DESC
         `;
 
@@ -35,29 +96,22 @@ export async function GET(request: Request) {
         // 카테고리 정리
         // --------------------------------------------------
 
-        // 이미 존재하는 "기타" 금액
         const existingOther = categories.find((item) => item.category === "기타");
 
         const existingOtherAmount = existingOther ? Number(existingOther.amount) : 0;
 
-        // "기타"를 제외한 실제 카테고리
         const normalCategories = categories.filter((item) => item.category !== "기타");
 
-        // 상위 5개 카테고리
         const topFive = normalCategories.slice(0, 5);
 
-        // 상위 5개에 포함되지 않은 나머지
         const rest = normalCategories.slice(5);
 
-        // 나머지 카테고리는 모두 "기타"로 합침
         const restOtherAmount = rest.reduce((sum, item) => sum + Number(item.amount), 0);
 
-        // 기존 "기타" + 나머지 카테고리의 금액
         const otherAmount = existingOtherAmount + restOtherAmount;
 
         const result = [...topFive];
 
-        // 기타는 항상 한 번만 추가
         if (otherAmount > 0) {
             result.push({
                 category: "기타",
@@ -73,7 +127,9 @@ export async function GET(request: Request) {
 
         const stats = result.map((item) => ({
             category: item.category,
+
             amount: Number(item.amount),
+
             percentage: totalExpense > 0 ? Number(((Number(item.amount) / totalExpense) * 100).toFixed(1)) : 0,
         }));
 
@@ -85,21 +141,28 @@ export async function GET(request: Request) {
             SELECT
                 t.start_date AS "startDate",
                 t.end_date AS "endDate",
+
                 COALESCE(
                     (
-                        SELECT SUM(te2.amount)
+                        SELECT SUM(
+                            te2.amount
+                        )
                         FROM trip_expenses te2
                         WHERE te2.trip_id = t.id
                     ),
                     0
                 ) AS "totalExpense"
+
             FROM trips t
-            WHERE t.trip_type = 'completed'
+
+            WHERE t.user_id = ${user.id}
+              AND t.trip_type = 'completed'
               AND t.country_code = ${countryCode}
         `;
 
         const totalNights = trips.reduce((sum, trip) => {
             const startDate = new Date(trip.startDate);
+
             const endDate = new Date(trip.endDate);
 
             const nights = Math.max(1, Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
@@ -117,16 +180,27 @@ export async function GET(request: Request) {
             SELECT
                 country AS "country",
                 country_code AS "countryCode"
+
             FROM trips
-            WHERE trip_type = 'completed'
+
+            WHERE user_id = ${user.id}
+              AND trip_type = 'completed'
               AND country_code = ${countryCode}
+
             LIMIT 1
         `;
 
+        // --------------------------------------------------
+        // 응답
+        // --------------------------------------------------
+
         return NextResponse.json({
             country: country[0]?.country ?? countryCode,
+
             countryCode,
+
             categories: stats,
+
             summary: {
                 totalExpense,
                 totalNights,
