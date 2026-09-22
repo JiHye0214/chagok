@@ -34,6 +34,15 @@ export const auth = betterAuth({
         kakao: {
             clientId: process.env.AUTH_KAKAO_ID as string,
             clientSecret: process.env.AUTH_KAKAO_SECRET as string,
+
+            disableDefaultScope: true,
+            scope: [],
+
+            mapProfileToUser: (profile) => ({
+                email: `kakao_${profile.id}@users.chagok.invalid`,
+                name: "",
+                emailVerified: false,
+            }),
         },
     },
 });

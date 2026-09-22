@@ -23,11 +23,16 @@ export default function CountryPage() {
         localStorage.setItem("chagok_country", countryCode);
 
         if (countryCode === "CA") {
+            localStorage.removeItem("chagok_region");
+            localStorage.removeItem("chagok_timezone");
+
             router.push("/onboarding/region");
             return;
         }
 
+        localStorage.removeItem("chagok_region");
         localStorage.setItem("chagok_timezone", "Asia/Seoul");
+
         router.push("/auth/login");
     };
 
@@ -35,9 +40,7 @@ export default function CountryPage() {
         <div className="h-full w-full">
             <div className="relative mx-auto h-full w-full max-w-md px-6">
                 {/* Brand */}
-                <p className="absolute left-6 top-8 text-2xl font-semibold tracking-[-0.05em] text-gray-900">
-                    차곡
-                </p>
+                <p className="absolute left-6 top-8 text-2xl font-semibold tracking-[-0.05em] text-gray-900">차곡</p>
 
                 {/* Content */}
                 <main className="flex h-full w-full items-center justify-center">

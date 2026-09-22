@@ -63,9 +63,15 @@ export async function GET(request: Request) {
 
         const currentMonth = getMonthRange(month);
 
-        const [currentTransactions, fixedExpenseResult, savingsGoalResult, pendingTravelResult, pendingPayrollResult] =
-            await Promise.all([
-                sql`
+        const [
+            currentTransactions,
+            fixedExpenseResult,
+            savingsGoalResult,
+            pendingTravelResult,
+            pendingPayrollResult,
+            profileResult,
+        ] = await Promise.all([
+            sql`
                 SELECT
                     lt.id,
                     TO_CHAR(lt.transaction_date, 'YYYY-MM-DD') AS transaction_date,
@@ -90,7 +96,7 @@ export async function GET(request: Request) {
                     lt.id DESC
             `,
 
-                sql`
+            sql`
                 SELECT
                     COALESCE(SUM(amount), 0) AS total
                 FROM living_fixed_expenses
@@ -98,7 +104,7 @@ export async function GET(request: Request) {
                   AND is_active = TRUE
             `,
 
-                sql`
+            sql`
                 SELECT
                     id,
                     name,
@@ -109,13 +115,13 @@ export async function GET(request: Request) {
                 LIMIT 1
             `,
 
-                /*
-                 * 이번 달에 종료된 완료 여행 중
-                 * 아직 생활비에 반영되지 않은 현재 사용자의 여행.
-                 *
-                 * 지출 합계가 0이면 아직 입력된 여행 지출이 없는 것으로 본다.
-                 */
-                sql`
+            /*
+             * 이번 달에 종료된 완료 여행 중
+             * 아직 생활비에 반영되지 않은 현재 사용자의 여행.
+             *
+             * 지출 합계가 0이면 아직 입력된 여행 지출이 없는 것으로 본다.
+             */
+            sql`
                 SELECT
                     t.id,
                     t.title,
@@ -149,17 +155,17 @@ export async function GET(request: Request) {
                     t.id ASC
             `,
 
-                /*
-                 * 지급일 다음 날이 이번 달에 해당하는 현재 사용자의 급여.
-                 *
-                 * actual_net_pay가 없으면 missing_actual.
-                 * 실제 수령액이 있으면 ready.
-                 *
-                 * 실제 급여가 입력된 경우에는 pay_period_actuals.id를
-                 * source_id로 사용한다.
-                 */
-                sql`
-                SELECT
+            /*
+             * 지급일 다음 날이 이번 달에 해당하는 현재 사용자의 급여.
+             *
+             * actual_net_pay가 없으면 missing_actual.
+             * 실제 수령액이 있으면 ready.
+             *
+             * 실제 급여가 입력된 경우에는 pay_period_actuals.id를
+             * source_id로 사용한다.
+             */
+            sql`
+                SELECT 
                     ppa.id AS actual_id,
                     TO_CHAR(ppa.pay_period_start_date, 'YYYY-MM-DD') AS start_date,
                     TO_CHAR(ppa.pay_period_end_date, 'YYYY-MM-DD') AS end_date,
@@ -182,7 +188,14 @@ export async function GET(request: Request) {
                     ppa.pay_date ASC,
                     ppa.id ASC
             `,
-            ]);
+
+            sql`
+                SELECT currency
+                FROM user_profiles
+                WHERE user_id = ${user.id}
+                LIMIT 1
+            `,
+        ]);
 
         const current = currentTransactions as LivingTransactionRow[];
 
@@ -319,6 +332,8 @@ export async function GET(request: Request) {
                 travel: pendingTravel,
                 payroll: pendingPayroll,
             },
+
+            currency: profileResult[0]?.currency ?? "CAD",
         });
     } catch (error) {
         console.error("GET /api/living error:", error);

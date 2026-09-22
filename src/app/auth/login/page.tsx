@@ -13,6 +13,8 @@ export default function LoginPage() {
     }, []);
 
     const handleGoogleLogin = async () => {
+        sessionStorage.setItem("chagok_login_splash", "true");
+
         await authClient.signIn.social({
             provider: "google",
             callbackURL: "/",
@@ -20,11 +22,15 @@ export default function LoginPage() {
     };
 
     const handleKakaoLogin = async () => {
+        sessionStorage.setItem("chagok_login_splash", "true");
+
         await authClient.signIn.social({
             provider: "kakao",
             callbackURL: "/",
         });
     };
+
+    const stepNumber = country === "CA" ? "04" : "03";
 
     return (
         <main className="h-[100dvh] w-full overflow-hidden bg-gray-50">
@@ -37,7 +43,7 @@ export default function LoginPage() {
                     <div className="w-full">
                         {/* Question */}
                         <div className="opacity-0 animate-[onboardingFadeUp_0.6s_ease-out_0.2s_forwards]">
-                            <p className="text-xs text-gray-400">03</p>
+                            <p className="text-xs text-gray-400">{stepNumber}</p>
 
                             <h1 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-gray-900">로그인해 주세요</h1>
 

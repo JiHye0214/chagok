@@ -42,20 +42,23 @@ type LivingSummary = {
         current: number;
         goal: number;
     };
-
     pendingIntegrations: {
         travel: PendingTravel[];
         payroll: PendingPayroll[];
     };
+    currency: "CAD" | "KRW" | "USD";
 };
 
-const formatMoney = (amount: number) =>
-    new Intl.NumberFormat("en-CA", {
+const formatMoney = (amount: number, currency: "CAD" | "KRW" | "USD") => {
+    const locale = currency === "KRW" ? "ko-KR" : currency === "USD" ? "en-US" : "en-CA";
+
+    return new Intl.NumberFormat(locale, {
         style: "currency",
-        currency: "CAD",
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
+        currency,
+        minimumFractionDigits: currency === "KRW" ? 0 : 2,
+        maximumFractionDigits: currency === "KRW" ? 0 : 2,
     }).format(amount);
+};
 
 const getCurrentMonth = () => {
     const now = new Date();
@@ -232,7 +235,7 @@ export default function LivingPage() {
                                                 <p className="mt-0.5 text-sm text-gray-500">
                                                     여행 지출{" "}
                                                     <span className="font-medium text-gray-900">
-                                                        {formatMoney(travel.amount)}
+                                                        {formatMoney(travel.amount, data?.currency ?? "CAD")}
                                                     </span>
                                                 </p>
                                             )}
@@ -243,7 +246,7 @@ export default function LivingPage() {
                                                 <span className="text-xs font-medium text-gray-400">기록 필요</span>
                                             ) : (
                                                 <span className="text-lg font-bold tracking-tight text-gray-950">
-                                                    {formatMoney(travel.amount)}
+                                                    {formatMoney(travel.amount, data?.currency ?? "CAD")}
                                                 </span>
                                             )}
                                         </div>
@@ -321,8 +324,10 @@ export default function LivingPage() {
 
                                                 <p className="mt-2 text-lg font-semibold text-gray-900">
                                                     이번 급여{" "}
-                                                    <span className="text-blue-600">{formatMoney(payroll.amount ?? 0)}</span>이
-                                                    입력되어 있어요
+                                                    <span className="text-blue-600">
+                                                        {formatMoney(payroll.amount ?? 0, data?.currency ?? "CAD")}
+                                                    </span>
+                                                    이 입력되어 있어요
                                                 </p>
 
                                                 <p className="mt-1 text-sm text-gray-500">
@@ -367,7 +372,7 @@ export default function LivingPage() {
                         >
                             {/* Receipt body */}
                             <div
-                                className="bg-white p-5  rounded-t-3xl"
+                                className="rounded-t-3xl bg-white p-5"
                                 style={{
                                     clipPath:
                                         "polygon(0 0, 100% 0, 100% 98%, 97.5% 100%, 95% 98%, 92.5% 100%, 90% 98%, 87.5% 100%, 85% 98%, 82.5% 100%, 80% 98%, 77.5% 100%, 75% 98%, 72.5% 100%, 70% 98%, 67.5% 100%, 65% 98%, 62.5% 100%, 60% 98%, 57.5% 100%, 55% 98%, 52.5% 100%, 50% 98%, 47.5% 100%, 45% 98%, 42.5% 100%, 40% 98%, 37.5% 100%, 35% 98%, 32.5% 100%, 30% 98%, 27.5% 100%, 25% 98%, 22.5% 100%, 20% 98%, 17.5% 100%, 15% 98%, 12.5% 100%, 10% 98%, 7.5% 100%, 5% 98%, 2.5% 100%, 0 98%)",
@@ -382,7 +387,9 @@ export default function LivingPage() {
                                 <div>
                                     <h2 className="mt-1 text-lg font-bold">이번 달 남은 금액</h2>
 
-                                    <p className="mt-2 text-3xl font-bold">{formatMoney(data?.balance ?? 0)}</p>
+                                    <p className="mt-2 text-3xl font-bold">
+                                        {formatMoney(data?.balance ?? 0, data?.currency ?? "CAD")}
+                                    </p>
                                 </div>
 
                                 {/* Divider */}
@@ -393,19 +400,25 @@ export default function LivingPage() {
                                     <div className="flex items-center justify-between">
                                         <span>수입</span>
 
-                                        <span>+ {formatMoney(data?.income ?? 0)}</span>
+                                        <span>+ {formatMoney(data?.income ?? 0, data?.currency ?? "CAD")}</span>
                                     </div>
 
                                     <div className="flex items-center justify-between">
                                         <span>지출</span>
 
-                                        <span>- {formatMoney((data?.expense ?? 0) - (data?.fixedExpense ?? 0))}</span>
+                                        <span>
+                                            -{" "}
+                                            {formatMoney(
+                                                (data?.expense ?? 0) - (data?.fixedExpense ?? 0),
+                                                data?.currency ?? "CAD",
+                                            )}
+                                        </span>
                                     </div>
 
                                     <div className="flex items-center justify-between">
                                         <span>고정 지출</span>
 
-                                        <span>- {formatMoney(data?.fixedExpense ?? 0)}</span>
+                                        <span>- {formatMoney(data?.fixedExpense ?? 0, data?.currency ?? "CAD")}</span>
                                     </div>
                                 </div>
 
@@ -430,8 +443,12 @@ export default function LivingPage() {
                                     <p className="text-xs text-gray-400">이번 달 지출</p>
                                     <h2 className="mt-1 text-lg font-bold">변동지출</h2>
                                 </div>
+
                                 <p className="text-md font-medium text-gray-900">
-                                    {formatMoney(data?.variableSpending?.reduce((sum, item) => sum + item.amount, 0) ?? 0)}
+                                    {formatMoney(
+                                        data?.variableSpending?.reduce((sum, item) => sum + item.amount, 0) ?? 0,
+                                        data?.currency ?? "CAD",
+                                    )}
                                 </p>
                             </div>
                         </div>
@@ -470,8 +487,9 @@ export default function LivingPage() {
 
                                                         <div className="flex items-center gap-3">
                                                             <span className="text-sm font-medium text-gray-900">
-                                                                {formatMoney(category.amount)}
+                                                                {formatMoney(category.amount, data?.currency ?? "CAD")}
                                                             </span>
+
                                                             <span className="text-xs text-gray-400">
                                                                 {percentage.toFixed(0)}%
                                                             </span>
@@ -515,24 +533,29 @@ export default function LivingPage() {
 
                         <div className="mt-2 flex items-start justify-between gap-3">
                             <div>
-                                <p className="text-3xl font-bold">{formatMoney(data?.savings.current ?? 0)}</p>
+                                <p className="text-3xl font-bold">
+                                    {formatMoney(data?.savings.current ?? 0, data?.currency ?? "CAD")}
+                                </p>
 
                                 <div className="mt-5 space-y-1.5">
                                     <div className="flex items-center justify-between gap-8">
                                         <span className="text-xs text-gray-400">목표</span>
 
                                         <span className="text-sm font-medium text-gray-900">
-                                            {formatMoney(data?.savings.goal ?? 0)}
+                                            {formatMoney(data?.savings.goal ?? 0, data?.currency ?? "CAD")}
                                         </span>
                                     </div>
 
                                     <div className="flex items-center justify-between gap-8">
                                         <span className="text-xs text-gray-400">남은 금액</span>
 
-                                        <span className="text-sm font-medium text-gray-900">{formatMoney(remainingSavings)}</span>
+                                        <span className="text-sm font-medium text-gray-900">
+                                            {formatMoney(remainingSavings, data?.currency ?? "CAD")}
+                                        </span>
                                     </div>
                                 </div>
                             </div>
+
                             <SavingsDollar progress={savingsProgress} />
                         </div>
 

@@ -183,3 +183,16 @@ input[type="number"] {
         transform: translateY(0);
     }
 }
+
+/* Startup Splash Exit */
+@keyframes splashExit {
+    from {
+        transform: translateY(0);
+        opacity: 1;
+    }
+
+    to {
+        transform: translateY(-100%);
+        opacity: 0;
+    }
+}
