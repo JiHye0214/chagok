@@ -20,7 +20,12 @@ export async function GET(request: Request) {
 
         const result = await pool.query(
             `
-            SELECT nickname
+            SELECT
+                nickname,
+                language,
+                country_code,
+                province_code,
+                currency
             FROM user_profiles
             WHERE user_id = $1
             LIMIT 1
@@ -28,8 +33,14 @@ export async function GET(request: Request) {
             [session.user.id],
         );
 
+        const profile = result.rows[0];
+
         return NextResponse.json({
-            nickname: result.rows[0]?.nickname ?? null,
+            nickname: profile?.nickname ?? null,
+            language: profile?.language ?? null,
+            countryCode: profile?.country_code ?? null,
+            provinceCode: profile?.province_code ?? null,
+            currency: profile?.currency ?? null,
         });
     } catch (error) {
         console.error("GET /api/user/profile error:", error);
@@ -58,7 +69,7 @@ export async function PATCH(request: Request) {
 
         const provinceCode =
             countryCode === "CA" && typeof body.provinceCode === "string" && body.provinceCode ? body.provinceCode : null;
-            
+
         const timezone = typeof body.timezone === "string" ? body.timezone : "";
 
         const currency = typeof body.currency === "string" ? body.currency : "";

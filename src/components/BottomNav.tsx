@@ -15,9 +15,9 @@ export default function BottomNav() {
         <nav className="fixed bottom-5 left-1/2 z-50 w-[calc(100%-32px)] max-w-md -translate-x-1/2 rounded-[28px] border border-gray-200/70 bg-white/90 px-4 py-3 shadow-lg backdrop-blur-xl">
             <div className="mx-auto flex items-center justify-around">
                 <button
-                    onClick={() => router.push("/")}
+                    onClick={() => router.push("/living")}
                     className={`flex flex-col items-center gap-0.5 px-3 py-0.5 ${
-                        pathname === "/" ? "text-black" : "text-gray-400"
+                        (pathname === "/" || pathname.startsWith("/living")) ? "text-black" : "text-gray-400"
                     }`}
                 >
                     <Wallet size={20} strokeWidth={1.8} />

@@ -301,7 +301,7 @@ export default function SchedulePage() {
     useEffect(() => {
         const loadSchedules = async () => {
             try {
-                const response = await fetch("/api/work-schedules");
+                const response = await fetch("/api/salary/work-schedules");
 
                 if (!response.ok) {
                     throw new Error("근무 기록 조회 실패");
@@ -355,7 +355,7 @@ export default function SchedulePage() {
     useEffect(() => {
         const loadSalarySettings = async () => {
             try {
-                const response = await fetch("/api/salary-settings");
+                const response = await fetch("/api/salary/salary-settings");
 
                 if (!response.ok) {
                     throw new Error("급여 설정 조회 실패");
@@ -772,7 +772,7 @@ export default function SchedulePage() {
         }
 
         try {
-            const response = await fetch("/api/work-schedules", {
+            const response = await fetch("/api/salary/work-schedules", {
                 method: editingSchedule ? "PUT" : "POST",
 
                 headers: {
@@ -876,7 +876,7 @@ export default function SchedulePage() {
         }
 
         try {
-            const response = await fetch("/api/work-schedules", {
+            const response = await fetch("/api/salary/work-schedules", {
                 method: "DELETE",
 
                 headers: {
@@ -926,7 +926,7 @@ export default function SchedulePage() {
         };
 
         try {
-            const response = await fetch("/api/pay-period-tips", {
+            const response = await fetch("/api/salary/pay-period-tips", {
                 method: "PUT",
 
                 headers: {

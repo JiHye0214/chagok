@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronRight, CircleDollarSign, Coins } from "lucide-react";
+import { ChevronRight, CircleDollarSign, Coins, Settings } from "lucide-react";
+import LivingStartSheet from "@/components/LivingStartSheet";
 import { useRouter } from "next/navigation";
 
 type CategorySpending = {
@@ -96,6 +97,8 @@ function SavingsDollar({ progress }: { progress: number }) {
 }
 
 export default function LivingPage() {
+    const [planCode, setPlanCode] = useState<"free" | "pro">("free");
+
     const router = useRouter();
 
     const [month] = useState(getCurrentMonth);
@@ -107,6 +110,28 @@ export default function LivingPage() {
     const [isSavingGoal, setIsSavingGoal] = useState(false);
 
     const [isReflecting, setIsReflecting] = useState<string | null>(null);
+
+    const [isLivingStartOpen, setIsLivingStartOpen] = useState(false);
+
+    useEffect(() => {
+        const loadPlan = async () => {
+            try {
+                const response = await fetch("/api/auth/me");
+
+                if (!response.ok) {
+                    return;
+                }
+
+                const result = await response.json();
+
+                setPlanCode(result.planCode === "pro" ? "pro" : "free");
+            } catch (error) {
+                console.error(error);
+            }
+        };
+
+        void loadPlan();
+    }, []);
 
     useEffect(() => {
         const loadLiving = async () => {
@@ -128,6 +153,28 @@ export default function LivingPage() {
 
         loadLiving();
     }, [month]);
+
+    useEffect(() => {
+        const checkLivingSettings = async () => {
+            try {
+                const response = await fetch("/api/living/settings");
+
+                if (!response.ok) {
+                    return;
+                }
+
+                const result = await response.json();
+
+                if (!result) {
+                    setIsLivingStartOpen(true);
+                }
+            } catch (error) {
+                console.error(error);
+            }
+        };
+
+        void checkLivingSettings();
+    }, []);
 
     const reflectIntegration = async (sourceType: "trip" | "payroll", sourceId: number | null) => {
         if (!sourceId) return;
@@ -193,7 +240,18 @@ export default function LivingPage() {
             <header className="mt-5 mb-10">
                 <p className="text-sm text-gray-500">차곡</p>
 
-                <h1 className=" mt-2 text-3xl font-bold">생활</h1>
+                <div className="mt-2 flex items-center justify-between">
+                    <h1 className="text-3xl font-bold">생활</h1>
+
+                    <button
+                        type="button"
+                        onClick={() => setIsLivingStartOpen(true)}
+                        className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-gray-500 shadow-sm transition hover:bg-gray-50"
+                        aria-label="생활 설정"
+                    >
+                        <Settings size={18} strokeWidth={1.8} />
+                    </button>
+                </div>
 
                 <p className="mt-2 text-sm text-gray-500">이번 달 생활비를 한눈에 확인해보세요.</p>
             </header>
@@ -409,17 +467,21 @@ export default function LivingPage() {
                                         <span>
                                             -{" "}
                                             {formatMoney(
-                                                (data?.expense ?? 0) - (data?.fixedExpense ?? 0),
+                                                planCode === "pro"
+                                                    ? (data?.expense ?? 0) - (data?.fixedExpense ?? 0)
+                                                    : (data?.expense ?? 0),
                                                 data?.currency ?? "CAD",
                                             )}
                                         </span>
                                     </div>
 
-                                    <div className="flex items-center justify-between">
-                                        <span>고정 지출</span>
+                                    {planCode === "pro" && (
+                                        <div className="flex items-center justify-between">
+                                            <span>고정 지출</span>
 
-                                        <span>- {formatMoney(data?.fixedExpense ?? 0, data?.currency ?? "CAD")}</span>
-                                    </div>
+                                            <span>- {formatMoney(data?.fixedExpense ?? 0, data?.currency ?? "CAD")}</span>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* View details */}
@@ -669,6 +731,25 @@ export default function LivingPage() {
                     </div>
                 </div>
             )}
+
+            <LivingStartSheet
+                isOpen={isLivingStartOpen}
+                onClose={() => setIsLivingStartOpen(false)}
+                onSaved={async () => {
+                    try {
+                        const response = await fetch(`/api/living?month=${month}`);
+
+                        if (!response.ok) {
+                            return;
+                        }
+
+                        const refreshedData = await response.json();
+                        setData(refreshedData);
+                    } catch (error) {
+                        console.error(error);
+                    }
+                }}
+            />
         </div>
     );
 }

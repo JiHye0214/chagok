@@ -49,7 +49,7 @@ export default function SalaryPage() {
     useEffect(() => {
         const loadSalarySettings = async () => {
             try {
-                const response = await fetch("/api/salary-settings");
+                const response = await fetch("/api/salary/salary-settings");
 
                 if (!response.ok) {
                     throw new Error("급여 설정 조회 실패");
@@ -107,7 +107,7 @@ export default function SalaryPage() {
         };
 
         try {
-            const response = await fetch("/api/salary-settings", {
+            const response = await fetch("/api/salary/salary-settings", {
                 method: "PUT",
                 headers: {
                     "Content-Type": "application/json",

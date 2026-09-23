@@ -1,43 +1,23 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowDownRight, ArrowUpRight, Plane, Wallet } from "lucide-react";
-
-// ㅅㅂ 안된다 이게 
 
 type StartupSplashProps = {
     children: React.ReactNode;
 };
 
 export default function StartupSplash({ children }: StartupSplashProps) {
-    const [showSplash, setShowSplash] = useState(false);
-    const splashRef = useRef<HTMLDivElement>(null);
+    const [showSplash, setShowSplash] = useState(true);
+    const [isLeaving, setIsLeaving] = useState(false);
 
     useEffect(() => {
-        const loginSplash = sessionStorage.getItem("chagok_login_splash") === "true";
-
-        const hasStarted = sessionStorage.getItem("chagok_app_started") === "true";
-
-        if (!loginSplash && hasStarted) {
-            return;
-        }
-
-        setShowSplash(true);
-
-        sessionStorage.removeItem("chagok_login_splash");
-        sessionStorage.setItem("chagok_app_started", "true");
-
         const leaveTimer = window.setTimeout(() => {
-            const splash = splashRef.current;
-
-            if (!splash) return;
-
-            splash.style.transform = "translateY(-100%)";
-            splash.style.opacity = "0";
+            setIsLeaving(true);
 
             window.setTimeout(() => {
                 setShowSplash(false);
-            }, 500);
+            }, 550);
         }, 2000);
 
         return () => {
@@ -51,13 +31,9 @@ export default function StartupSplash({ children }: StartupSplashProps) {
 
             {showSplash && (
                 <div
-                    ref={splashRef}
-                    className="fixed inset-0 z-[9999] overflow-hidden bg-gray-50"
-                    style={{
-                        transform: "translateY(0)",
-                        opacity: 1,
-                        transition: "transform 500ms ease-out, opacity 500ms ease-out",
-                    }}
+                    className={`fixed inset-0 z-[9999] overflow-hidden bg-gray-50 ${
+                        isLeaving ? "animate-[splashExit_0.55s_ease-in-out_forwards]" : ""
+                    }`}
                 >
                     <div className="mx-auto flex min-h-[100dvh] max-w-md flex-col px-5">
                         <header className="pt-8 opacity-0 animate-[splashFadeIn_0.7s_ease-out_forwards]">
@@ -75,12 +51,14 @@ export default function StartupSplash({ children }: StartupSplashProps) {
 
                             <div className="absolute right-0 top-[18%] flex translate-x-5 items-center gap-2 rounded-full bg-white px-3 py-2 opacity-0 shadow-sm animate-[splashFromRight_0.7s_ease-out_0.5s_forwards]">
                                 <Wallet size={14} strokeWidth={1.8} className="text-gray-400" />
+
                                 <span className="text-xs text-gray-500">돈을 기록하고</span>
                             </div>
 
                             <div className="absolute left-0 top-[58%] -translate-x-5 rounded-full bg-white px-3 py-2 opacity-0 shadow-sm animate-[splashFromLeft_0.7s_ease-out_0.7s_forwards]">
                                 <div className="flex items-center gap-2">
                                     <Plane size={14} strokeWidth={1.8} className="text-gray-400" />
+
                                     <span className="text-xs text-gray-500">여행을 남기고</span>
                                 </div>
                             </div>

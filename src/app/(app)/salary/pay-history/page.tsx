@@ -326,7 +326,7 @@ export default function PayHistoryPage() {
 
     const loadPayHistory = async () => {
         try {
-            const response = await fetch("/api/pay-history");
+            const response = await fetch("/api/salary/pay-history");
 
             if (!response.ok) {
                 throw new Error("급여 기록 조회 실패");
@@ -431,7 +431,7 @@ export default function PayHistoryPage() {
 
     const loadSalarySettings = async () => {
         try {
-            const response = await fetch("/api/salary-settings");
+            const response = await fetch("/api/salary/salary-settings");
 
             if (!response.ok) {
                 throw new Error("급여 설정 조회 실패");
@@ -453,7 +453,7 @@ export default function PayHistoryPage() {
 
     const loadSchedules = async () => {
         try {
-            const response = await fetch("/api/work-schedules");
+            const response = await fetch("/api/salary/work-schedules");
 
             if (!response.ok) {
                 throw new Error("근무 일정 조회 실패");
@@ -1611,7 +1611,7 @@ export default function PayHistoryPage() {
                 actualNetPay: netPay,
             };
 
-            const response = await fetch("/api/pay-history", {
+            const response = await fetch("/api/salary/pay-history", {
                 method: selectedHistory ? "PUT" : "POST",
 
                 headers: {
@@ -1670,7 +1670,7 @@ export default function PayHistoryPage() {
         }
 
         try {
-            const response = await fetch("/api/pay-history", {
+            const response = await fetch("/api/salary/pay-history", {
                 method: "DELETE",
                 headers: {
                     "Content-Type": "application/json",
@@ -1767,7 +1767,7 @@ export default function PayHistoryPage() {
                         )}
 
                         {/* 급여 예정 */}
-                        {shouldShowPendingPay && pendingPayPeriod && (
+                        {shouldShowPendingPay && pendingPayPeriod && pendingPeriodEstimate.netPay > 0 && (
                             <button
                                 type="button"
                                 onClick={() => setIsPendingExpectedOpen(true)}

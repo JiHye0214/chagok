@@ -70,6 +70,7 @@ export async function GET(request: Request) {
             pendingTravelResult,
             pendingPayrollResult,
             profileResult,
+            livingSettingsResult,
         ] = await Promise.all([
             sql`
                 SELECT
@@ -195,9 +196,22 @@ export async function GET(request: Request) {
                 WHERE user_id = ${user.id}
                 LIMIT 1
             `,
+
+            sql`
+                SELECT
+                    initial_living_money,
+                    initial_savings_money
+                FROM living_settings
+                WHERE user_id = ${user.id}
+                LIMIT 1
+            `,
         ]);
 
         const current = currentTransactions as LivingTransactionRow[];
+
+        const initialLivingMoney = toNumber(livingSettingsResult[0]?.initial_living_money);
+
+        const initialSavingsMoney = toNumber(livingSettingsResult[0]?.initial_savings_money);
 
         const currentIncome = current
             .filter((item) => item.type === "income")
@@ -234,7 +248,7 @@ export async function GET(request: Request) {
             .filter((item) => item.type === "transfer" && item.transfer_direction === "savings_to_living")
             .reduce((sum, item) => sum + toNumber(item.amount), 0);
 
-        const balance = currentIncome - expense - livingToSavings + savingsToLiving;
+        const balance = initialLivingMoney + currentIncome - expense - livingToSavings + savingsToLiving;
 
         const savingsResult = await sql`
             SELECT
@@ -258,7 +272,9 @@ export async function GET(request: Request) {
             WHERE user_id = ${user.id}
         `;
 
-        const savingsCurrent = toNumber(savingsResult[0]?.current_amount);
+        const savingsTransactionAmount = toNumber(savingsResult[0]?.current_amount);
+
+        const savingsCurrent = initialSavingsMoney + savingsTransactionAmount;
 
         const savingsGoal = savingsGoalResult[0]
             ? {

@@ -6,6 +6,7 @@ import { calculateTaxes } from "@/lib/tax";
 import { isHoliday } from "@/lib/holiday";
 import Link from "next/link";
 import { ClipboardList, Lock, Settings } from "lucide-react";
+import SalarySettingsSheet from "@/components/SalarySettingsSheet";
 
 type PayType = "hourly" | "salary" | "commission" | "other";
 
@@ -211,6 +212,7 @@ const getDdayLabel = (targetDate: string) => {
 
 export default function SalaryPage() {
     const [planCode, setPlanCode] = useState<"free" | "pro">("free");
+    const [isSalarySettingsOpen, setIsSalarySettingsOpen] = useState(false);
 
     const [schedules, setSchedules] = useState<WorkSchedule[]>([]);
     const [isSchedulesLoading, setIsSchedulesLoading] = useState(true);
@@ -252,7 +254,7 @@ export default function SalaryPage() {
     useEffect(() => {
         const loadSchedules = async () => {
             try {
-                const response = await fetch("/api/work-schedules");
+                const response = await fetch("/api/salary/work-schedules");
 
                 if (!response.ok) {
                     throw new Error("근무 기록 조회 실패");
@@ -280,7 +282,7 @@ export default function SalaryPage() {
     useEffect(() => {
         const loadSalarySettings = async () => {
             try {
-                const response = await fetch("/api/salary-settings");
+                const response = await fetch("/api/salary/salary-settings");
 
                 if (!response.ok) {
                     throw new Error("급여 설정 조회 실패");
@@ -788,7 +790,7 @@ export default function SalaryPage() {
     useEffect(() => {
         const loadPayHistory = async () => {
             try {
-                const response = await fetch("/api/pay-history");
+                const response = await fetch("/api/salary/pay-history");
 
                 if (!response.ok) {
                     throw new Error("급여 기록 조회 실패");
@@ -1252,13 +1254,14 @@ export default function SalaryPage() {
                             <ClipboardList size={18} strokeWidth={1.8} />
                         </Link>
 
-                        <Link
-                            href="/salary/settings"
+                        <button
+                            type="button"
+                            onClick={() => setIsSalarySettingsOpen(true)}
                             className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-gray-500 shadow-sm transition hover:bg-gray-50"
                             aria-label="급여 설정"
                         >
                             <Settings size={18} strokeWidth={1.8} />
-                        </Link>
+                        </button>
                     </div>
                 </div>
 
@@ -1292,7 +1295,7 @@ export default function SalaryPage() {
                         </Link>
                     )}
 
-                    {shouldShowPendingPay && pendingPayPeriod && (
+                    {shouldShowPendingPay && pendingPayPeriod && pendingPeriodEstimate.netPay > 0 && (
                         <button
                             type="button"
                             onClick={() => setIsPendingExpectedOpen(true)}
@@ -1970,6 +1973,9 @@ export default function SalaryPage() {
                     </div>
                 </div>
             )}
+
+            {/* 급여 세팅 */}
+            <SalarySettingsSheet isOpen={isSalarySettingsOpen} onClose={() => setIsSalarySettingsOpen(false)} />
         </div>
     );
 }
