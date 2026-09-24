@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { getPeriodsPerYear, formatDate } from "@/lib/payPeriod";
 import { calculateTaxes } from "@/lib/tax";
 import { isHoliday } from "@/lib/holiday";
@@ -14,12 +14,10 @@ type PayFrequency = "weekly" | "biweekly" | "semi-monthly" | "monthly" | "custom
 
 type SemiMonthlyType = "first-fifteenth" | "fifteenth-end";
 
-type Province = "ON" | "BC" | "AB" | "SK" | "MB" | "QC" | "NS" | "NB" | "NL" | "PE" | "YT" | "NT" | "NU";
-
 type TipType = "cash" | "paycheque" | "both";
 
 type SalarySettings = {
-    province: Province;
+    regionCode: string;
     payType: PayType;
     payFrequency: PayFrequency;
     hasTips: boolean;
@@ -46,6 +44,12 @@ type PayPeriod = {
     startDate: string;
     endDate: string;
     payDate: string;
+};
+
+type PayPeriods = {
+    previous: PayPeriod | null;
+    current: PayPeriod | null;
+    next: PayPeriod | null;
 };
 
 type PayPeriodTips = {
@@ -308,7 +312,8 @@ export default function SalaryPage() {
      */
 
     useEffect(() => {
-        if (!salarySettings?.province) {
+        if (!salarySettings?.regionCode) {
+            setHolidays([]);
             return;
         }
 
@@ -325,7 +330,7 @@ export default function SalaryPage() {
                 const results: Holiday[] = [];
 
                 for (const year of years) {
-                    const response = await fetch(`/api/holidays?year=${year}&province=${salarySettings.province}`);
+                    const response = await fetch(`/api/holidays?year=${year}&province=${salarySettings.regionCode}`);
 
                     if (!response.ok) {
                         continue;
@@ -344,7 +349,7 @@ export default function SalaryPage() {
         };
 
         loadHolidays();
-    }, [salarySettings?.province, schedules]);
+    }, [salarySettings?.regionCode, schedules]);
 
     /*
      * --------------------------------------------------
@@ -444,18 +449,13 @@ export default function SalaryPage() {
      * --------------------------------------------------
      * Pay Period Calculation
      * --------------------------------------------------
-     *
-     * Biweekly:
-     *
-     * 8/22 ~ 9/4
-     * 9/5  ~ 9/18
-     * 9/19 ~ 10/2
-     *
-     * 즉, 14일 단위로 정확히 연결한다.
-     * --------------------------------------------------
      */
 
-    const getPayPeriods = () => {
+    const getPayPeriods = (): PayPeriods => {
+        const today = new Date();
+
+        const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
         if (!salarySettings) {
             return {
                 previous: null,
@@ -464,34 +464,27 @@ export default function SalaryPage() {
             };
         }
 
-        const today = new Date();
+        const effectiveSalarySettings = salarySettings;
 
-        const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-
-        const configuredAnchorStart = salarySettings.payPeriodStartDate
-            ? new Date(`${salarySettings.payPeriodStartDate}T00:00:00`)
+        const configuredAnchorStart = effectiveSalarySettings.payPeriodStartDate
+            ? new Date(`${effectiveSalarySettings.payPeriodStartDate}T00:00:00`)
             : null;
 
         /*
          * 현재 설정값이 4일로 저장되어 있는 경우
          * 급여기간 기준을 5일부터 시작하도록 보정한다.
-         *
-         * 예:
-         * 8/4 → 8/5
-         *
-         * 이후에는 14일씩
-         * 8/5 ~ 8/18
-         * 8/19 ~ 9/1
-         * 9/2 ~ 9/15
-         * ...
          */
         const anchorStartDate = configuredAnchorStart ?? new Date(todayOnly.getFullYear(), todayOnly.getMonth(), 5);
 
-        if (salarySettings.payFrequency === "biweekly" && salarySettings.payPeriodStartDate && anchorStartDate.getDate() === 4) {
+        if (
+            effectiveSalarySettings.payFrequency === "biweekly" &&
+            effectiveSalarySettings.payPeriodStartDate &&
+            anchorStartDate.getDate() === 4
+        ) {
             anchorStartDate.setDate(anchorStartDate.getDate() + 1);
         }
 
-        const anchorPayDate = salarySettings.payDate ? new Date(`${salarySettings.payDate}T00:00:00`) : null;
+        const anchorPayDate = effectiveSalarySettings.payDate ? new Date(`${effectiveSalarySettings.payDate}T00:00:00`) : null;
 
         /*
          * --------------------------------------------------
@@ -499,7 +492,7 @@ export default function SalaryPage() {
          * --------------------------------------------------
          */
 
-        if (salarySettings.payFrequency === "semi-monthly") {
+        if (effectiveSalarySettings.payFrequency === "semi-monthly") {
             const makeSemiMonthlyPeriod = (date: Date): PayPeriod => {
                 const year = date.getFullYear();
                 const month = date.getMonth();
@@ -507,7 +500,7 @@ export default function SalaryPage() {
                 let startDay: number;
                 let endDay: number;
 
-                if (salarySettings.semiMonthlyType === "fifteenth-end") {
+                if (effectiveSalarySettings.semiMonthlyType === "fifteenth-end") {
                     if (date.getDate() <= 15) {
                         startDay = 15;
 
@@ -525,7 +518,6 @@ export default function SalaryPage() {
                         endDay = 15;
                     } else {
                         startDay = 16;
-
                         endDay = new Date(year, month + 1, 0).getDate();
                     }
                 }
@@ -574,7 +566,7 @@ export default function SalaryPage() {
          * --------------------------------------------------
          */
 
-        if (salarySettings.payFrequency === "monthly") {
+        if (effectiveSalarySettings.payFrequency === "monthly") {
             const currentStart = new Date(todayOnly.getFullYear(), todayOnly.getMonth(), 1);
 
             const currentEnd = new Date(todayOnly.getFullYear(), todayOnly.getMonth() + 1, 0);
@@ -615,7 +607,7 @@ export default function SalaryPage() {
          */
 
         const getPeriodLength = () => {
-            switch (salarySettings.payFrequency) {
+            switch (effectiveSalarySettings.payFrequency) {
                 case "weekly":
                     return 7;
 
@@ -623,7 +615,7 @@ export default function SalaryPage() {
                     return 14;
 
                 case "custom":
-                    return salarySettings.customPayDays ? Number(salarySettings.customPayDays) : 14;
+                    return effectiveSalarySettings.customPayDays ? Number(effectiveSalarySettings.customPayDays) : 14;
 
                 default:
                     return 14;
@@ -634,12 +626,6 @@ export default function SalaryPage() {
 
         let currentStart = new Date(anchorStartDate);
 
-        /*
-         * 현재 날짜가 포함되는 급여기간을 찾는다.
-         *
-         * 이전 기간으로 이동할 때도 정확히 14일,
-         * 다음 기간으로 이동할 때도 정확히 14일이다.
-         */
         while (true) {
             const currentEnd = new Date(currentStart);
 
@@ -876,7 +862,7 @@ export default function SalaryPage() {
 
     const currentHolidayPay = salarySettings?.payType === "hourly" ? currentHolidayHours * hourlyWage * 0.5 : 0;
 
-    const vacationPayRate = Number(salarySettings?.vacationPayRate ?? 4.15);
+    const vacationPayRate = salarySettings ? Number(salarySettings.vacationPayRate ?? 4.15) : 0;
 
     const currentVacationPay = currentBasePay * (vacationPayRate / 100);
 
@@ -886,13 +872,13 @@ export default function SalaryPage() {
 
     const currentTaxableGrossPay = currentBasePay + currentHolidayPay + currentVacationPay + currentPaychequeTips;
 
-    const periodsPerYear = getPeriodsPerYear(salarySettings?.payFrequency ?? "biweekly");
+    const periodsPerYear = salarySettings ? getPeriodsPerYear(salarySettings.payFrequency) : 1;
 
     const currentAnnualGross = currentTaxableGrossPay * periodsPerYear;
 
     const currentTaxes = calculateTaxes({
         country: "CA",
-        province: salarySettings?.province ?? "",
+        province: salarySettings?.regionCode ?? "",
         annualGross: currentAnnualGross,
     });
 
@@ -946,7 +932,6 @@ export default function SalaryPage() {
             const elapsed = timestamp - startTime;
             const progress = Math.min(elapsed / duration, 1);
 
-            // 처음 빠르고 끝에서 부드럽게 멈춤
             const eased = 1 - Math.pow(1 - progress, 3);
 
             setAnimatedNetPay(target * eased);
@@ -1014,7 +999,7 @@ export default function SalaryPage() {
 
     const pendingTaxes = calculateTaxes({
         country: "CA",
-        province: salarySettings?.province ?? "",
+        province: salarySettings?.regionCode ?? "",
         annualGross: pendingAnnualGross,
     });
 
@@ -1070,11 +1055,6 @@ export default function SalaryPage() {
 
     const isPendingPayDatePassed = pendingPayDate !== null && pendingPayDate < todayOnly;
 
-    /*
-     * 지급일 전 + 실제 기록 없음
-     *
-     * → 예상 지급 카드
-     */
     const shouldShowPendingPay = Boolean(pendingPayPeriod) && isPendingPeriodEnded && !isPendingPayDatePassed;
 
     const shouldGoToPayHistory = Boolean(pendingPayPeriod) && isPendingPeriodEnded && isPendingPayDatePassed;
@@ -1100,7 +1080,6 @@ export default function SalaryPage() {
             const elapsed = timestamp - startTime;
             const progress = Math.min(elapsed / duration, 1);
 
-            // 처음 빠르고 끝에서 부드럽게 멈춤
             const eased = 1 - Math.pow(1 - progress, 3);
 
             setAnimatedPendingNetPay(target * eased);
@@ -1139,15 +1118,6 @@ export default function SalaryPage() {
     /*
      * --------------------------------------------------
      * Graph Data
-     * --------------------------------------------------
-     *
-     * 실제 기록:
-     * actualNetPay 그대로 사용
-     *
-     * 지급 전 pending:
-     * 예상값 하나 추가
-     *
-     * 예상값은 평균 계산에서 제외.
      * --------------------------------------------------
      */
 
@@ -1208,29 +1178,6 @@ export default function SalaryPage() {
         );
     }
 
-    if (!salarySettings) {
-        return (
-            <div className="flex h-[calc(100vh-152px)] items-center justify-center px-6">
-                <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-8 text-center">
-                    <h2 className="text-xl font-semibold text-gray-900">Salary Settings가 필요해요</h2>
-
-                    <p className="mt-3 text-sm leading-6 text-gray-500">
-                        급여 계산과 통계를 사용하려면
-                        <br />
-                        먼저 Salary Settings를 설정해주세요.
-                    </p>
-
-                    <Link
-                        href="/salary/settings"
-                        className="mt-6 inline-flex h-11 items-center justify-center rounded-xl bg-gray-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-gray-800"
-                    >
-                        Salary Settings 설정하기
-                    </Link>
-                </div>
-            </div>
-        );
-    }
-
     /*
      * --------------------------------------------------
      * Render
@@ -1268,713 +1215,778 @@ export default function SalaryPage() {
                 <p className="mt-2 text-sm text-gray-500">이번 급여는 얼마나 받을까요?</p>
             </header>
 
-            {/* --------------------------------------------------
-                Pending Pay Status
-            -------------------------------------------------- */}
+            {!salarySettings ? (
+                <section className="rounded-3xl bg-white p-6 shadow-sm">
+                    <p className="text-xs font-medium text-gray-400">급여 설정</p>
 
-            {pendingPayPeriod && (
-                <>
-                    {shouldGoToPayHistory && (
-                        <Link
-                            href="/salary/pay-history"
-                            className="block w-full rounded-3xl bg-gray-900 p-5 text-left shadow-sm transition hover:shadow-md"
-                        >
-                            <p className="text-xs text-gray-400">급여 기록</p>
+                    <h2 className="mt-2 text-lg font-bold text-gray-900">급여 정보를 먼저 설정해주세요</h2>
 
-                            <p className="mt-1 text-lg font-bold text-white">지급일이 지났어요</p>
-
-                            <p className="mt-1 text-sm text-gray-500">아직 기록되지 않은 급여가 있어요.</p>
-
-                            <p className="mt-4 text-xs text-gray-400">
-                                {formatDisplayDate(pendingPayPeriod.startDate)}
-                                {" ~ "}
-                                {formatDisplayDate(pendingPayPeriod.endDate)}
-                            </p>
-
-                            <p className="mt-3 text-xs font-medium text-gray-500">급여 기록에서 확인하기 →</p>
-                        </Link>
-                    )}
-
-                    {shouldShowPendingPay && pendingPayPeriod && pendingPeriodEstimate.netPay > 0 && (
-                        <button
-                            type="button"
-                            onClick={() => setIsPendingExpectedOpen(true)}
-                            className="block w-full rounded-3xl border border-blue-100 bg-blue-50 p-5 text-left shadow-sm transition hover:bg-blue-100/70"
-                        >
-                            <div className="flex items-start justify-between gap-4">
-                                <div>
-                                    <p className="text-xs text-blue-500">급여 예정</p>
-
-                                    <p className="mt-2 text-lg font-semibold text-gray-900">
-                                        <span className="text-blue-600">{getDdayLabel(pendingPayPeriod.payDate)}</span>{" "}
-                                        {formatMoney(animatedPendingNetPay)}를 받아요
-                                    </p>
-
-                                    <p className="mt-1 text-sm text-gray-500">지급일이 다가오고 있어요. 지출을 계획해 볼까요?</p>
-                                </div>
-
-                                <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-blue-600 shadow-sm">
-                                    예상
-                                </span>
-                            </div>
-                        </button>
-                    )}
-                </>
-            )}
-
-            {currentPayPeriod && (
-                <div className="mt-6 rounded-3xl bg-white p-5 shadow-sm">
-                    <p className="text-xs font-medium text-blue-500">현재 급여 기간</p>
-
-                    <p className="mt-1 text-sm font-semibold text-gray-900">
-                        {formatDisplayDate(currentPayPeriod.startDate)}
-                        {" ~ "}
-                        {formatDisplayDate(currentPayPeriod.endDate)}
+                    <p className="mt-2 text-sm leading-6 text-gray-500">
+                        급여 방식과 급여 주기를 설정하면 예상 급여를 계산할 수 있어요.
                     </p>
 
-                    {currentPeriodSchedules.length === 0 ? (
-                        <div>
-                            <p className="mt-5 text-lg font-bold text-gray-900">근무 기록을 입력해주세요</p>
+                    <button
+                        type="button"
+                        onClick={() => setIsSalarySettingsOpen(true)}
+                        className="mt-5 w-full rounded-2xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-gray-800"
+                    >
+                        급여 설정하기
+                    </button>
+                </section>
+            ) : (
+                <>
+                    {/* --------------------------------------------------
+                    Pending Pay Status
+                -------------------------------------------------- */}
 
-                            <p className="mt-1 text-sm text-gray-500">근무 기록이 있어야 예상 급여를 계산할 수 있어요.</p>
-                        </div>
-                    ) : (
+                    {pendingPayPeriod && (
                         <>
-                            <p className="mt-5 text-xs text-gray-400">예상 급여</p>
+                            {shouldGoToPayHistory && (
+                                <Link
+                                    href="/salary/pay-history"
+                                    className="block w-full rounded-3xl bg-gray-900 p-5 text-left shadow-sm transition hover:shadow-md"
+                                >
+                                    <p className="text-xs text-gray-400">급여 기록</p>
 
-                            <p className="mt-1 text-2xl font-bold text-gray-900">{formatMoney(currentPeriodEstimate.netPay)}</p>
+                                    <p className="mt-1 text-lg font-bold text-white">지급일이 지났어요</p>
 
-                            <div className="mt-3 flex items-center gap-3 text-sm text-gray-500">
-                                <span>{currentPeriodEstimate.hours.toFixed(1)}시간</span>
-                                <span>·</span>
-                                <span>
-                                    팁 {formatMoney(currentPeriodEstimate.cashTips + currentPeriodEstimate.paychequeTips)}
-                                </span>
-                            </div>
+                                    <p className="mt-1 text-sm text-gray-500">아직 기록되지 않은 급여가 있어요.</p>
+
+                                    <p className="mt-4 text-xs text-gray-400">
+                                        {formatDisplayDate(pendingPayPeriod.startDate)}
+                                        {" ~ "}
+                                        {formatDisplayDate(pendingPayPeriod.endDate)}
+                                    </p>
+
+                                    <p className="mt-3 text-xs font-medium text-gray-500">급여 기록에서 확인하기 →</p>
+                                </Link>
+                            )}
+
+                            {shouldShowPendingPay && pendingPayPeriod && pendingPeriodEstimate.netPay > 0 && (
+                                <button
+                                    type="button"
+                                    onClick={() => setIsPendingExpectedOpen(true)}
+                                    className="block w-full rounded-3xl border border-blue-100 bg-blue-50 p-5 text-left shadow-sm transition hover:bg-blue-100/70"
+                                >
+                                    <div className="flex items-start justify-between gap-4">
+                                        <div>
+                                            <p className="text-xs text-blue-500">급여 예정</p>
+
+                                            <p className="mt-2 text-lg font-semibold text-gray-900">
+                                                <span className="text-blue-600">{getDdayLabel(pendingPayPeriod.payDate)}</span>{" "}
+                                                {formatMoney(animatedPendingNetPay)}를 받아요
+                                            </p>
+
+                                            <p className="mt-1 text-sm text-gray-500">
+                                                지급일이 다가오고 있어요. 지출을 계획해 볼까요?
+                                            </p>
+                                        </div>
+
+                                        <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-blue-600 shadow-sm">
+                                            예상
+                                        </span>
+                                    </div>
+                                </button>
+                            )}
                         </>
                     )}
 
-                    <Link
-                        href="/salary/schedule"
-                        className="mt-5 block w-full rounded-2xl bg-gray-900 px-4 py-3 text-center text-sm font-semibold text-white transition hover:bg-gray-800"
-                    >
-                        {currentPeriodSchedules.length === 0 ? "근무 기록 입력하기" : "근무 기록 추가하기"}
-                    </Link>
-                </div>
-            )}
+                    {currentPayPeriod && (
+                        <div className="mt-6 rounded-3xl bg-white p-5 shadow-sm">
+                            <p className="text-xs font-medium text-blue-500">현재 급여 기간</p>
 
-            {/* --------------------------------------------------
-                Actual Net Pay Statistics
-            -------------------------------------------------- */}
+                            <p className="mt-1 text-sm font-semibold text-gray-900">
+                                {formatDisplayDate(currentPayPeriod.startDate)}
+                                {" ~ "}
+                                {formatDisplayDate(currentPayPeriod.endDate)}
+                            </p>
 
-            <section className="mt-6">
-                {planCode === "pro" ? (
-                    <div className="rounded-3xl bg-white p-5 shadow-sm">
-                        <div className="flex items-start justify-between">
-                            <div>
-                                <p className="text-xs text-gray-400">실수령액 통계</p>
+                            {currentPeriodSchedules.length === 0 ? (
+                                <div>
+                                    <p className="mt-5 text-lg font-bold text-gray-900">근무 기록을 입력해주세요</p>
 
-                                <h2 className="mt-1 text-lg font-bold">평균 실수령액</h2>
-                            </div>
+                                    <p className="mt-1 text-sm text-gray-500">근무 기록이 있어야 예상 급여를 계산할 수 있어요.</p>
+                                </div>
+                            ) : (
+                                <>
+                                    <p className="mt-5 text-xs text-gray-400">예상 급여</p>
+
+                                    <p className="mt-1 text-2xl font-bold text-gray-900">
+                                        {formatMoney(currentPeriodEstimate.netPay)}
+                                    </p>
+
+                                    <div className="mt-3 flex items-center gap-3 text-sm text-gray-500">
+                                        <span>
+                                            {currentPeriodEstimate.hours.toFixed(1)}
+                                            시간
+                                        </span>
+
+                                        <span>·</span>
+
+                                        <span>
+                                            팁 {formatMoney(currentPeriodEstimate.cashTips + currentPeriodEstimate.paychequeTips)}
+                                        </span>
+                                    </div>
+                                </>
+                            )}
 
                             <Link
-                                href="/salary/pay-history"
-                                className="rounded-full bg-gray-100 px-3 py-2 text-xs font-medium text-gray-600"
+                                href="/salary/schedule"
+                                className="mt-5 block w-full rounded-2xl bg-gray-900 px-4 py-3 text-center text-sm font-semibold text-white transition hover:bg-gray-800"
                             >
-                                기록하기 →
+                                {currentPeriodSchedules.length === 0 ? "근무 기록 입력하기" : "근무 기록 추가하기"}
                             </Link>
                         </div>
+                    )}
 
-                        <p className="mt-2 text-3xl font-bold">
-                            {averageActualNetPay !== null ? formatMoney(averageActualNetPay) : "-"}
-                        </p>
+                    {/* --------------------------------------------------
+                    Actual Net Pay Statistics
+                -------------------------------------------------- */}
 
-                        {graphPayHistory.length > 0 ? (
-                            <div className="mt-8">
-                                <div className="relative h-48 w-full">
-                                    {(() => {
-                                        const values = graphPayHistory.map((point) => point.value);
+                    <section className="mt-6">
+                        {planCode === "pro" ? (
+                            <div className="rounded-3xl bg-white p-5 shadow-sm">
+                                <div className="flex items-start justify-between">
+                                    <div>
+                                        <p className="text-xs text-gray-400">실수령액 통계</p>
 
-                                        const allValues = [
-                                            ...values,
-                                            ...(averageActualNetPay !== null ? [averageActualNetPay] : []),
-                                        ];
+                                        <h2 className="mt-1 text-lg font-bold">평균 실수령액</h2>
+                                    </div>
 
-                                        const minValue = Math.min(...allValues);
-                                        const maxValue = Math.max(...allValues);
-                                        const range = Math.max(maxValue - minValue, 1);
+                                    <Link
+                                        href="/salary/pay-history"
+                                        className="rounded-full bg-gray-100 px-3 py-2 text-xs font-medium text-gray-600"
+                                    >
+                                        기록하기 →
+                                    </Link>
+                                </div>
 
-                                        const width = 320;
-                                        const height = 150;
-                                        const paddingX = 16;
-                                        const paddingY = 16;
+                                <p className="mt-2 text-3xl font-bold">
+                                    {averageActualNetPay !== null ? formatMoney(averageActualNetPay) : "-"}
+                                </p>
 
-                                        const points = graphPayHistory.map((point, index) => {
-                                            const x =
-                                                graphPayHistory.length === 1
-                                                    ? width / 2
-                                                    : paddingX + (index / (graphPayHistory.length - 1)) * (width - paddingX * 2);
+                                {graphPayHistory.length > 0 ? (
+                                    <div className="mt-8">
+                                        <div className="relative h-48 w-full">
+                                            {(() => {
+                                                const values = graphPayHistory.map((point) => point.value);
 
-                                            const y =
-                                                height - paddingY - ((point.value - minValue) / range) * (height - paddingY * 2);
+                                                const allValues = [
+                                                    ...values,
+                                                    ...(averageActualNetPay !== null ? [averageActualNetPay] : []),
+                                                ];
 
-                                            return {
-                                                ...point,
-                                                x,
-                                                y,
-                                            };
-                                        });
+                                                const minValue = Math.min(...allValues);
 
-                                        const linePoints = points.map((point) => `${point.x},${point.y}`).join(" ");
+                                                const maxValue = Math.max(...allValues);
 
-                                        const averageY =
-                                            averageActualNetPay !== null
-                                                ? height -
-                                                  paddingY -
-                                                  ((averageActualNetPay - minValue) / range) * (height - paddingY * 2)
-                                                : null;
+                                                const range = Math.max(maxValue - minValue, 1);
 
-                                        return (
-                                            <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full overflow-visible">
-                                                {averageY !== null && (
+                                                const width = 320;
+                                                const height = 150;
+                                                const paddingX = 16;
+                                                const paddingY = 16;
+
+                                                const points = graphPayHistory.map((point, index) => {
+                                                    const x =
+                                                        graphPayHistory.length === 1
+                                                            ? width / 2
+                                                            : paddingX +
+                                                              (index / (graphPayHistory.length - 1)) * (width - paddingX * 2);
+
+                                                    const y =
+                                                        height -
+                                                        paddingY -
+                                                        ((point.value - minValue) / range) * (height - paddingY * 2);
+
+                                                    return {
+                                                        ...point,
+                                                        x,
+                                                        y,
+                                                    };
+                                                });
+
+                                                const linePoints = points.map((point) => `${point.x},${point.y}`).join(" ");
+
+                                                const averageY =
+                                                    averageActualNetPay !== null
+                                                        ? height -
+                                                          paddingY -
+                                                          ((averageActualNetPay - minValue) / range) * (height - paddingY * 2)
+                                                        : null;
+
+                                                return (
+                                                    <svg
+                                                        viewBox={`0 0 ${width} ${height}`}
+                                                        className="h-full w-full overflow-visible"
+                                                    >
+                                                        {averageY !== null && (
+                                                            <line
+                                                                x1={paddingX}
+                                                                y1={averageY}
+                                                                x2={width - paddingX}
+                                                                y2={averageY}
+                                                                stroke="currentColor"
+                                                                strokeWidth="1"
+                                                                strokeDasharray="4 4"
+                                                                className="text-gray-300"
+                                                            />
+                                                        )}
+
+                                                        <polyline
+                                                            points={linePoints}
+                                                            fill="none"
+                                                            stroke="currentColor"
+                                                            strokeWidth="2"
+                                                            strokeLinecap="round"
+                                                            strokeLinejoin="round"
+                                                            className="text-gray-900"
+                                                        />
+
+                                                        {points.map((point) => (
+                                                            <g
+                                                                key={`${point.startDate}-${point.endDate}`}
+                                                                className={point.isEstimate ? "" : "cursor-pointer"}
+                                                                onMouseEnter={() => {
+                                                                    if (point.isEstimate) {
+                                                                        setHoveredGraphPoint(point);
+                                                                    }
+                                                                }}
+                                                                onMouseLeave={() => {
+                                                                    if (point.isEstimate) {
+                                                                        setHoveredGraphPoint(null);
+                                                                    }
+                                                                }}
+                                                                onClick={() => {
+                                                                    if (point.isEstimate) {
+                                                                        return;
+                                                                    }
+
+                                                                    if (point.history) {
+                                                                        setSelectedPayHistory(point.history);
+                                                                    }
+                                                                }}
+                                                            >
+                                                                <circle cx={point.x} cy={point.y} r="12" fill="transparent" />
+
+                                                                <circle
+                                                                    cx={point.x}
+                                                                    cy={point.y}
+                                                                    r="4"
+                                                                    className={
+                                                                        point.isEstimate ? "fill-blue-500" : "fill-gray-900"
+                                                                    }
+                                                                />
+
+                                                                {point.isEstimate &&
+                                                                    hoveredGraphPoint?.startDate === point.startDate &&
+                                                                    hoveredGraphPoint?.endDate === point.endDate && (
+                                                                        <foreignObject
+                                                                            x={point.x - 60}
+                                                                            y={point.y - 48}
+                                                                            width="120"
+                                                                            height="42"
+                                                                            pointerEvents="none"
+                                                                        >
+                                                                            <div className="flex justify-center">
+                                                                                <div className="rounded-lg bg-gray-900 px-2.5 py-2 text-center text-[10px] text-white shadow-md">
+                                                                                    <div className="font-semibold">
+                                                                                        예상 {formatMoney(point.value)}
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                        </foreignObject>
+                                                                    )}
+                                                            </g>
+                                                        ))}
+                                                    </svg>
+                                                );
+                                            })()}
+                                        </div>
+
+                                        <div className="mt-2 flex justify-between text-[10px] text-gray-400">
+                                            {graphPayHistory.map((point) => (
+                                                <span
+                                                    key={`${point.startDate}-${point.endDate}`}
+                                                    className={point.isEstimate ? "font-medium text-blue-500" : ""}
+                                                >
+                                                    {point.payDate ? formatDisplayDate(point.payDate) : "예정"}
+                                                </span>
+                                            ))}
+                                        </div>
+
+                                        <div className="mt-4 flex items-center justify-end gap-2 text-xs text-gray-400">
+                                            <span className="h-px w-5 border-t border-dashed border-gray-300" />
+                                            평균
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="mt-6 rounded-2xl bg-gray-100 p-4 text-sm text-gray-500">
+                                        아직 기록된 실수령액이 없어요.
+                                        <br />
+                                        급여 기록에서 실수령액을 기록하면 통계가 보여요.
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="relative overflow-hidden rounded-3xl bg-white shadow-sm">
+                                {/* 잠긴 통계 미리보기 */}
+                                <div className="pointer-events-none select-none blur-[2px] opacity-30">
+                                    <div className="p-5">
+                                        <div className="flex items-start justify-between">
+                                            <div>
+                                                <p className="text-xs text-gray-400">실수령액 통계</p>
+
+                                                <h2 className="mt-1 text-lg font-bold text-gray-900">평균 실수령액</h2>
+                                            </div>
+
+                                            <span className="rounded-full bg-gray-100 px-3 py-2 text-xs font-medium text-gray-500">
+                                                Salary Statistics
+                                            </span>
+                                        </div>
+
+                                        <p className="mt-2 text-3xl font-bold text-gray-900">$2,450</p>
+
+                                        <div className="mt-8">
+                                            <div className="relative h-48 w-full">
+                                                <svg viewBox="0 0 320 150" className="h-full w-full overflow-visible">
                                                     <line
-                                                        x1={paddingX}
-                                                        y1={averageY}
-                                                        x2={width - paddingX}
-                                                        y2={averageY}
+                                                        x1="16"
+                                                        y1="75"
+                                                        x2="304"
+                                                        y2="75"
                                                         stroke="currentColor"
                                                         strokeWidth="1"
                                                         strokeDasharray="4 4"
                                                         className="text-gray-300"
                                                     />
-                                                )}
 
-                                                <polyline
-                                                    points={linePoints}
-                                                    fill="none"
-                                                    stroke="currentColor"
-                                                    strokeWidth="2"
-                                                    strokeLinecap="round"
-                                                    strokeLinejoin="round"
-                                                    className="text-gray-900"
-                                                />
+                                                    <polyline
+                                                        points="16,105 88,80 160,92 232,50 304,65"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        strokeWidth="2"
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        className="text-gray-900"
+                                                    />
 
-                                                {points.map((point) => (
-                                                    <g
-                                                        key={`${point.startDate}-${point.endDate}`}
-                                                        className={point.isEstimate ? "" : "cursor-pointer"}
-                                                        onMouseEnter={() => {
-                                                            if (point.isEstimate) {
-                                                                setHoveredGraphPoint(point);
-                                                            }
-                                                        }}
-                                                        onMouseLeave={() => {
-                                                            if (point.isEstimate) {
-                                                                setHoveredGraphPoint(null);
-                                                            }
-                                                        }}
-                                                        onClick={() => {
-                                                            if (point.isEstimate) {
-                                                                return;
-                                                            }
-
-                                                            if (point.history) {
-                                                                setSelectedPayHistory(point.history);
-                                                            }
-                                                        }}
-                                                    >
-                                                        <circle cx={point.x} cy={point.y} r="12" fill="transparent" />
-
+                                                    {[105, 80, 92, 50, 65].map((y, index) => (
                                                         <circle
-                                                            cx={point.x}
-                                                            cy={point.y}
+                                                            key={index}
+                                                            cx={16 + index * 72}
+                                                            cy={y}
                                                             r="4"
-                                                            className={point.isEstimate ? "fill-blue-500" : "fill-gray-900"}
+                                                            className="fill-gray-900"
                                                         />
+                                                    ))}
+                                                </svg>
+                                            </div>
 
-                                                        {point.isEstimate &&
-                                                            hoveredGraphPoint?.startDate === point.startDate &&
-                                                            hoveredGraphPoint?.endDate === point.endDate && (
-                                                                <foreignObject
-                                                                    x={point.x - 60}
-                                                                    y={point.y - 48}
-                                                                    width="120"
-                                                                    height="42"
-                                                                    pointerEvents="none"
-                                                                >
-                                                                    <div className="flex justify-center">
-                                                                        <div className="rounded-lg bg-gray-900 px-2.5 py-2 text-center text-[10px] text-white shadow-md">
-                                                                            <div className="font-semibold">
-                                                                                예상 {formatMoney(point.value)}
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                </foreignObject>
-                                                            )}
-                                                    </g>
-                                                ))}
-                                            </svg>
-                                        );
-                                    })()}
+                                            <div className="mt-2 flex justify-between text-[10px] text-gray-400">
+                                                <span>Sep 01</span>
+                                                <span>Sep 15</span>
+                                                <span>Sep 30</span>
+                                                <span>Oct 15</span>
+                                                <span>Oct 30</span>
+                                            </div>
+
+                                            <div className="mt-4 flex items-center justify-end gap-2 text-xs text-gray-400">
+                                                <span className="h-px w-5 border-t border-dashed border-gray-300" />
+                                                평균
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
 
-                                <div className="mt-2 flex justify-between text-[10px] text-gray-400">
-                                    {graphPayHistory.map((point) => (
-                                        <span
-                                            key={`${point.startDate}-${point.endDate}`}
-                                            className={point.isEstimate ? "font-medium text-blue-500" : ""}
-                                        >
-                                            {point.payDate ? formatDisplayDate(point.payDate) : "예정"}
-                                        </span>
-                                    ))}
-                                </div>
+                                {/* 잠금 안내 */}
+                                <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/65">
+                                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100">
+                                        <Lock size={20} strokeWidth={2} className="text-gray-500" />
+                                    </div>
 
-                                <div className="mt-4 flex items-center justify-end gap-2 text-xs text-gray-400">
-                                    <span className="h-px w-5 border-t border-dashed border-gray-300" />
-                                    평균
+                                    <p className="mt-4 text-sm font-semibold text-gray-900">실수령액 통계</p>
+
+                                    <p className="mt-1 text-xs text-gray-500">Pro에서 실수령액 통계를 확인할 수 있어요.</p>
                                 </div>
-                            </div>
-                        ) : (
-                            <div className="mt-6 rounded-2xl bg-gray-100 p-4 text-sm text-gray-500">
-                                아직 기록된 실수령액이 없어요.
-                                <br />
-                                급여 기록에서 실수령액을 기록하면 통계가 보여요.
                             </div>
                         )}
-                    </div>
-                ) : (
-                    <div className="relative overflow-hidden rounded-3xl bg-white shadow-sm">
-                        {/* 잠긴 통계 미리보기 */}
-                        <div className="pointer-events-none select-none blur-[2px] opacity-30">
-                            <div className="p-5">
+                    </section>
+
+                    {/* --------------------------------------------------
+                    Pending Expected Salary Modal
+                -------------------------------------------------- */}
+
+                    {isPendingExpectedOpen && pendingPayPeriod && (
+                        <div
+                            className="fixed inset-0 z-[60] flex items-end justify-center bg-gray-900/30 p-3 backdrop-blur-sm sm:items-center"
+                            onClick={() => setIsPendingExpectedOpen(false)}
+                        >
+                            <div
+                                className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-[2rem] bg-white p-6 shadow-2xl"
+                                onClick={(event) => event.stopPropagation()}
+                            >
+                                {/* Header */}
                                 <div className="flex items-start justify-between">
                                     <div>
-                                        <p className="text-xs text-gray-400">실수령액 통계</p>
+                                        <div className="flex items-center gap-2">
+                                            <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-600">
+                                                예상
+                                            </span>
 
-                                        <h2 className="mt-1 text-lg font-bold text-gray-900">평균 실수령액</h2>
-                                    </div>
-
-                                    <span className="rounded-full bg-gray-100 px-3 py-2 text-xs font-medium text-gray-500">
-                                        Salary Statistics
-                                    </span>
-                                </div>
-
-                                <p className="mt-2 text-3xl font-bold text-gray-900">$2,450</p>
-
-                                <div className="mt-8">
-                                    <div className="relative h-48 w-full">
-                                        <svg viewBox="0 0 320 150" className="h-full w-full overflow-visible">
-                                            <line
-                                                x1="16"
-                                                y1="75"
-                                                x2="304"
-                                                y2="75"
-                                                stroke="currentColor"
-                                                strokeWidth="1"
-                                                strokeDasharray="4 4"
-                                                className="text-gray-300"
-                                            />
-
-                                            <polyline
-                                                points="16,105 88,80 160,92 232,50 304,65"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                strokeWidth="2"
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                className="text-gray-900"
-                                            />
-
-                                            {[105, 80, 92, 50, 65].map((y, index) => (
-                                                <circle key={index} cx={16 + index * 72} cy={y} r="4" className="fill-gray-900" />
-                                            ))}
-                                        </svg>
-                                    </div>
-
-                                    <div className="mt-2 flex justify-between text-[10px] text-gray-400">
-                                        <span>Sep 01</span>
-                                        <span>Sep 15</span>
-                                        <span>Sep 30</span>
-                                        <span>Oct 15</span>
-                                        <span>Oct 30</span>
-                                    </div>
-
-                                    <div className="mt-4 flex items-center justify-end gap-2 text-xs text-gray-400">
-                                        <span className="h-px w-5 border-t border-dashed border-gray-300" />
-                                        평균
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* 잠금 안내 */}
-                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/65">
-                            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100">
-                                <Lock size={20} strokeWidth={2} className="text-gray-500" />
-                            </div>
-
-                            <p className="mt-4 text-sm font-semibold text-gray-900">실수령액 통계</p>
-
-                            <p className="mt-1 text-xs text-gray-500">Pro에서 실수령액 통계를 확인할 수 있어요.</p>
-                        </div>
-                    </div>
-                )}
-            </section>
-
-            {/* --------------------------------------------------
-                Pending Expected Salary Modal
-            -------------------------------------------------- */}
-
-            {isPendingExpectedOpen && pendingPayPeriod && (
-                <div
-                    className="fixed inset-0 z-[60] flex items-end justify-center bg-gray-900/30 p-3 backdrop-blur-sm sm:items-center"
-                    onClick={() => setIsPendingExpectedOpen(false)}
-                >
-                    <div
-                        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-[2rem] bg-white p-6 shadow-2xl"
-                        onClick={(event) => event.stopPropagation()}
-                    >
-                        {/* Header */}
-                        <div className="flex items-start justify-between">
-                            <div>
-                                <div className="flex items-center gap-2">
-                                    <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-600">
-                                        예상
-                                    </span>
-
-                                    <span className="text-xs text-gray-400">{getDdayLabel(pendingPayPeriod.payDate)}</span>
-                                </div>
-
-                                <p className="mt-3 text-lg font-bold text-gray-900">지급 예정 급여</p>
-
-                                <p className="mt-1 text-sm text-gray-500">
-                                    {formatDisplayDate(pendingPayPeriod.startDate)}
-                                    {" ~ "}
-                                    {formatDisplayDate(pendingPayPeriod.endDate)}
-                                </p>
-                            </div>
-
-                            <button
-                                type="button"
-                                onClick={() => setIsPendingExpectedOpen(false)}
-                                className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-lg text-gray-500 transition hover:bg-gray-200"
-                                aria-label="닫기"
-                            >
-                                ×
-                            </button>
-                        </div>
-
-                        {/* Main Amount */}
-                        <div className="mt-6 rounded-3xl bg-blue-50 p-5">
-                            <p className="text-xs font-medium text-blue-500">예상 실수령액</p>
-
-                            <p className="mt-2 text-4xl font-bold tracking-tight text-gray-900">
-                                {formatMoney(pendingPeriodEstimate.netPay)}
-                            </p>
-
-                            <div className="mt-4 flex items-center justify-between">
-                                <span className="text-sm text-gray-500">지급일</span>
-
-                                <span className="text-sm font-semibold text-gray-900">
-                                    {formatDisplayDate(pendingPayPeriod.payDate)}
-                                </span>
-                            </div>
-                        </div>
-
-                        {/* Breakdown */}
-                        <div className="mt-6">
-                            <p className="mb-3 text-xs font-semibold text-gray-400">예상 급여 내역</p>
-
-                            <div className="rounded-3xl bg-gray-50 p-5">
-                                <div className="space-y-4 text-sm">
-                                    <div className="flex justify-between">
-                                        <span className="text-gray-500">근무시간</span>
-
-                                        <span className="font-medium text-gray-900">
-                                            {pendingPeriodEstimate.hours.toFixed(2)}시간
-                                        </span>
-                                    </div>
-
-                                    <div className="flex justify-between">
-                                        <span className="text-gray-500">기본 급여</span>
-
-                                        <span className="font-medium text-gray-900">
-                                            {formatMoney(pendingPeriodEstimate.basePay)}
-                                        </span>
-                                    </div>
-
-                                    {pendingPeriodEstimate.paychequeTips > 0 && (
-                                        <div className="flex justify-between">
-                                            <span className="text-gray-500">급여 포함 팁</span>
-
-                                            <span className="font-medium text-gray-900">
-                                                {formatMoney(pendingPeriodEstimate.paychequeTips)}
+                                            <span className="text-xs text-gray-400">
+                                                {getDdayLabel(pendingPayPeriod.payDate)}
                                             </span>
                                         </div>
-                                    )}
 
-                                    {pendingPeriodEstimate.holidayPay > 0 && (
-                                        <div className="flex justify-between">
-                                            <span className="text-gray-500">Holiday Pay</span>
+                                        <p className="mt-3 text-lg font-bold text-gray-900">지급 예정 급여</p>
 
-                                            <span className="font-medium text-gray-900">
-                                                {formatMoney(pendingPeriodEstimate.holidayPay)}
-                                            </span>
-                                        </div>
-                                    )}
-
-                                    <div className="flex justify-between">
-                                        <span className="text-gray-500">Vacation Pay</span>
-
-                                        <span className="font-medium text-gray-900">
-                                            {formatMoney(pendingPeriodEstimate.vacationPay)}
-                                        </span>
+                                        <p className="mt-1 text-sm text-gray-500">
+                                            {formatDisplayDate(pendingPayPeriod.startDate)}
+                                            {" ~ "}
+                                            {formatDisplayDate(pendingPayPeriod.endDate)}
+                                        </p>
                                     </div>
 
-                                    <div className="my-1 border-t border-gray-200" />
-
-                                    <div className="flex justify-between">
-                                        <span className="font-medium text-gray-600">세전 급여</span>
-
-                                        <span className="font-semibold text-gray-900">
-                                            {formatMoney(pendingPeriodEstimate.grossPay)}
-                                        </span>
-                                    </div>
-
-                                    <div className="flex justify-between">
-                                        <span className="text-gray-500">예상 공제</span>
-
-                                        <span className="text-gray-600">- {formatMoney(pendingPeriodEstimate.deductions)}</span>
-                                    </div>
-
-                                    <div className="my-1 border-t border-gray-200" />
-
-                                    <div className="flex justify-between">
-                                        <span className="font-semibold text-gray-900">실수령액</span>
-
-                                        <span className="font-bold text-gray-900">
-                                            {formatMoney(pendingPeriodEstimate.netPay)}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Cash Tips */}
-                        {pendingPeriodEstimate.cashTips > 0 && (
-                            <div className="mt-4 rounded-3xl bg-gray-50 p-5">
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-gray-500">현금 팁</span>
-
-                                    <span className="text-sm font-semibold text-gray-900">
-                                        {formatMoney(pendingPeriodEstimate.cashTips)}
-                                    </span>
-                                </div>
-
-                                <div className="mt-4 flex items-center justify-between rounded-2xl bg-white p-4 shadow-sm">
-                                    <span className="text-sm font-semibold text-gray-700">예상 총 수령액</span>
-
-                                    <span className="text-xl font-bold text-gray-900">
-                                        {formatMoney(pendingPeriodEstimate.totalIncome)}
-                                    </span>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Notice */}
-                        <div className="mt-5 rounded-2xl bg-amber-50 px-4 py-3">
-                            <p className="text-xs leading-5 text-amber-700">
-                                실제 급여가 아직 기록되지 않아 이전 근무 기록과 팁을 기준으로 계산한 예상 금액이에요.
-                            </p>
-                        </div>
-
-                        {/* Button */}
-                        <Link
-                            href="/salary/schedule"
-                            className="mt-5 block w-full rounded-2xl bg-gray-900 py-4 text-center text-sm font-semibold text-white transition hover:bg-gray-800"
-                        >
-                            근무 기록 보기
-                        </Link>
-                    </div>
-                </div>
-            )}
-
-            {/* --------------------------------------------------
-                Actual Net Pay Detail Modal
-            -------------------------------------------------- */}
-
-            {selectedPayHistory && (
-                <div
-                    className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 p-4 sm:items-center"
-                    onClick={() => setSelectedPayHistory(null)}
-                >
-                    <div
-                        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl bg-black p-6 text-white shadow-xl"
-                        onClick={(event) => event.stopPropagation()}
-                    >
-                        <div className="flex items-start justify-between">
-                            <div>
-                                <p className="text-xs text-gray-500">실수령액 기록</p>
-
-                                <p className="mt-1 text-sm font-semibold">
-                                    {formatDisplayDate(selectedPayHistory.startDate)}
-                                    {" ~ "}
-                                    {formatDisplayDate(selectedPayHistory.endDate)}
-                                </p>
-
-                                {selectedPayHistory.payDate && (
-                                    <p className="mt-1 text-xs text-gray-500">
-                                        지급일 {formatDisplayDate(selectedPayHistory.payDate)}
-                                    </p>
-                                )}
-                            </div>
-
-                            <button type="button" onClick={() => setSelectedPayHistory(null)} className="text-xl text-gray-400">
-                                ×
-                            </button>
-                        </div>
-
-                        <p className="mt-6 text-4xl font-bold">{formatMoney(Number(selectedPayHistory.actualNetPay ?? 0))}</p>
-
-                        <p className="mt-2 text-sm text-gray-400">실제 실수령액</p>
-
-                        {selectedPayDifference !== null && selectedPayChangePercent !== null && (
-                            <div className="mt-5 rounded-2xl bg-white/5 p-4">
-                                <p className="text-xs text-gray-500">평균과 비교</p>
-
-                                <p className="mt-2 text-sm">
-                                    평균보다{" "}
-                                    <span
-                                        className={
-                                            selectedPayDifference >= 0
-                                                ? "font-semibold text-red-400"
-                                                : "font-semibold text-blue-400"
-                                        }
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsPendingExpectedOpen(false)}
+                                        className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-lg text-gray-500 transition hover:bg-gray-200"
+                                        aria-label="닫기"
                                     >
-                                        {selectedPayDifference >= 0
-                                            ? `${formatMoney(Math.abs(selectedPayDifference))} 많아요`
-                                            : `${formatMoney(Math.abs(selectedPayDifference))} 적어요`}
-                                    </span>
-                                </p>
-
-                                <p className="mt-1 text-xs text-gray-500">
-                                    평균 대비 {Math.abs(selectedPayChangePercent).toFixed(1)}%
-                                    {selectedPayDifference >= 0 ? " 높아요" : " 낮아요"}
-                                </p>
-                            </div>
-                        )}
-
-                        <div className="mt-6 space-y-3 text-sm">
-                            <div className="flex justify-between">
-                                <span className="text-gray-400">근무시간</span>
-
-                                <span>
-                                    {Number(selectedPayHistory.hours ?? 0).toFixed(2)}
-                                    시간
-                                </span>
-                            </div>
-
-                            <div className="flex justify-between">
-                                <span className="text-gray-400">실제 급여</span>
-
-                                <span>{formatMoney(Number(selectedPayHistory.actualPay ?? selectedPayHistory.pay ?? 0))}</span>
-                            </div>
-
-                            {selectedPayHistory.actualTips > 0 && (
-                                <div className="flex justify-between">
-                                    <span className="text-gray-400">실제 팁</span>
-
-                                    <span>{formatMoney(Number(selectedPayHistory.actualTips ?? 0))}</span>
+                                        ×
+                                    </button>
                                 </div>
-                            )}
 
-                            {selectedPayHistory.cashTips > 0 && (
-                                <div className="flex justify-between">
-                                    <span className="text-gray-400">현금 팁</span>
+                                {/* Main Amount */}
+                                <div className="mt-6 rounded-3xl bg-blue-50 p-5">
+                                    <p className="text-xs font-medium text-blue-500">예상 실수령액</p>
 
-                                    <span>{formatMoney(Number(selectedPayHistory.cashTips ?? 0))}</span>
-                                </div>
-                            )}
+                                    <p className="mt-2 text-4xl font-bold tracking-tight text-gray-900">
+                                        {formatMoney(pendingPeriodEstimate.netPay)}
+                                    </p>
 
-                            {Number(selectedPayHistory.actualPay ?? 0) + Number(selectedPayHistory.actualTips ?? 0) > 0 && (
-                                <div className="mt-4 border-t border-gray-800 pt-4">
-                                    <div className="flex justify-between">
-                                        <span className="text-gray-300">실제 세전 금액</span>
+                                    <div className="mt-4 flex items-center justify-between">
+                                        <span className="text-sm text-gray-500">지급일</span>
 
-                                        <span className="font-semibold">
-                                            {formatMoney(
-                                                Number(selectedPayHistory.actualPay ?? 0) +
-                                                    Number(selectedPayHistory.actualTips ?? 0),
-                                            )}
+                                        <span className="text-sm font-semibold text-gray-900">
+                                            {formatDisplayDate(pendingPayPeriod.payDate)}
                                         </span>
                                     </div>
                                 </div>
-                            )}
 
-                            {selectedPayHistory.actualDeductions > 0 && (
-                                <div className="flex justify-between">
-                                    <span className="text-gray-400">실제 공제</span>
+                                {/* Breakdown */}
+                                <div className="mt-6">
+                                    <p className="mb-3 text-xs font-semibold text-gray-400">예상 급여 내역</p>
 
-                                    <span>- {formatMoney(Number(selectedPayHistory.actualDeductions ?? 0))}</span>
-                                </div>
-                            )}
+                                    <div className="rounded-3xl bg-gray-50 p-5">
+                                        <div className="space-y-4 text-sm">
+                                            <div className="flex justify-between">
+                                                <span className="text-gray-500">근무시간</span>
 
-                            {selectedPayHistory.adjustments.length > 0 && (
-                                <div className="mt-4 border-t border-gray-800 pt-4">
-                                    <p className="mb-3 text-xs text-gray-500">조정 내역</p>
-
-                                    <div className="space-y-2">
-                                        {selectedPayHistory.adjustments.map((adjustment, index) => (
-                                            <div key={`${adjustment.name}-${index}`} className="flex justify-between">
-                                                <span className="text-gray-400">{adjustment.name}</span>
-
-                                                <span className={adjustment.type === "add" ? "text-green-400" : "text-red-400"}>
-                                                    {adjustment.type === "add" ? "+" : "-"}
-                                                    {formatMoney(Number(adjustment.amount ?? 0))}
+                                                <span className="font-medium text-gray-900">
+                                                    {pendingPeriodEstimate.hours.toFixed(2)}
+                                                    시간
                                                 </span>
                                             </div>
-                                        ))}
+
+                                            <div className="flex justify-between">
+                                                <span className="text-gray-500">기본 급여</span>
+
+                                                <span className="font-medium text-gray-900">
+                                                    {formatMoney(pendingPeriodEstimate.basePay)}
+                                                </span>
+                                            </div>
+
+                                            {pendingPeriodEstimate.paychequeTips > 0 && (
+                                                <div className="flex justify-between">
+                                                    <span className="text-gray-500">급여 포함 팁</span>
+
+                                                    <span className="font-medium text-gray-900">
+                                                        {formatMoney(pendingPeriodEstimate.paychequeTips)}
+                                                    </span>
+                                                </div>
+                                            )}
+
+                                            {pendingPeriodEstimate.holidayPay > 0 && (
+                                                <div className="flex justify-between">
+                                                    <span className="text-gray-500">Holiday Pay</span>
+
+                                                    <span className="font-medium text-gray-900">
+                                                        {formatMoney(pendingPeriodEstimate.holidayPay)}
+                                                    </span>
+                                                </div>
+                                            )}
+
+                                            <div className="flex justify-between">
+                                                <span className="text-gray-500">Vacation Pay</span>
+
+                                                <span className="font-medium text-gray-900">
+                                                    {formatMoney(pendingPeriodEstimate.vacationPay)}
+                                                </span>
+                                            </div>
+
+                                            <div className="my-1 border-t border-gray-200" />
+
+                                            <div className="flex justify-between">
+                                                <span className="font-medium text-gray-600">세전 급여</span>
+
+                                                <span className="font-semibold text-gray-900">
+                                                    {formatMoney(pendingPeriodEstimate.grossPay)}
+                                                </span>
+                                            </div>
+
+                                            <div className="flex justify-between">
+                                                <span className="text-gray-500">예상 공제</span>
+
+                                                <span className="text-gray-600">
+                                                    - {formatMoney(pendingPeriodEstimate.deductions)}
+                                                </span>
+                                            </div>
+
+                                            <div className="my-1 border-t border-gray-200" />
+
+                                            <div className="flex justify-between">
+                                                <span className="font-semibold text-gray-900">실수령액</span>
+
+                                                <span className="font-bold text-gray-900">
+                                                    {formatMoney(pendingPeriodEstimate.netPay)}
+                                                </span>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
-                            )}
 
-                            <div className="mt-4 border-t border-gray-800 pt-4">
-                                <div className="flex justify-between">
-                                    <span className="text-gray-300">실제 실수령액</span>
+                                {/* Cash Tips */}
+                                {pendingPeriodEstimate.cashTips > 0 && (
+                                    <div className="mt-4 rounded-3xl bg-gray-50 p-5">
+                                        <div className="flex justify-between">
+                                            <span className="text-sm text-gray-500">현금 팁</span>
 
-                                    <span className="font-semibold">
-                                        {formatMoney(Number(selectedPayHistory.actualNetPay ?? 0))}
-                                    </span>
+                                            <span className="text-sm font-semibold text-gray-900">
+                                                {formatMoney(pendingPeriodEstimate.cashTips)}
+                                            </span>
+                                        </div>
+
+                                        <div className="mt-4 flex items-center justify-between rounded-2xl bg-white p-4 shadow-sm">
+                                            <span className="text-sm font-semibold text-gray-700">예상 총 수령액</span>
+
+                                            <span className="text-xl font-bold text-gray-900">
+                                                {formatMoney(pendingPeriodEstimate.totalIncome)}
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Notice */}
+                                <div className="mt-5 rounded-2xl bg-amber-50 px-4 py-3">
+                                    <p className="text-xs leading-5 text-amber-700">
+                                        실제 급여가 아직 기록되지 않아 이전 근무 기록과 팁을 기준으로 계산한 예상 금액이에요.
+                                    </p>
                                 </div>
+
+                                {/* Button */}
+                                <Link
+                                    href="/salary/schedule"
+                                    className="mt-5 block w-full rounded-2xl bg-gray-900 py-4 text-center text-sm font-semibold text-white transition hover:bg-gray-800"
+                                >
+                                    근무 기록 보기
+                                </Link>
                             </div>
+                        </div>
+                    )}
 
-                            {selectedPayHistory.cashTips > 0 && (
-                                <div className="mt-4">
-                                    <div className="flex justify-between rounded-2xl bg-white p-3 text-black">
-                                        <span className="text-sm font-medium">총 수령액</span>
+                    {/* --------------------------------------------------
+                    Actual Net Pay Detail Modal
+                -------------------------------------------------- */}
 
-                                        <span className="text-lg font-bold">
-                                            {formatMoney(
-                                                Number(selectedPayHistory.actualNetPay ?? 0) +
-                                                    Number(selectedPayHistory.cashTips ?? 0),
-                                            )}
+                    {selectedPayHistory && (
+                        <div
+                            className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 p-4 sm:items-center"
+                            onClick={() => setSelectedPayHistory(null)}
+                        >
+                            <div
+                                className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl bg-black p-6 text-white shadow-xl"
+                                onClick={(event) => event.stopPropagation()}
+                            >
+                                <div className="flex items-start justify-between">
+                                    <div>
+                                        <p className="text-xs text-gray-500">실수령액 기록</p>
+
+                                        <p className="mt-1 text-sm font-semibold">
+                                            {formatDisplayDate(selectedPayHistory.startDate)}
+                                            {" ~ "}
+                                            {formatDisplayDate(selectedPayHistory.endDate)}
+                                        </p>
+
+                                        {selectedPayHistory.payDate && (
+                                            <p className="mt-1 text-xs text-gray-500">
+                                                지급일 {formatDisplayDate(selectedPayHistory.payDate)}
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => setSelectedPayHistory(null)}
+                                        className="text-xl text-gray-400"
+                                    >
+                                        ×
+                                    </button>
+                                </div>
+
+                                <p className="mt-6 text-4xl font-bold">
+                                    {formatMoney(Number(selectedPayHistory.actualNetPay ?? 0))}
+                                </p>
+
+                                <p className="mt-2 text-sm text-gray-400">실제 실수령액</p>
+
+                                {selectedPayDifference !== null && selectedPayChangePercent !== null && (
+                                    <div className="mt-5 rounded-2xl bg-white/5 p-4">
+                                        <p className="text-xs text-gray-500">평균과 비교</p>
+
+                                        <p className="mt-2 text-sm">
+                                            평균보다{" "}
+                                            <span
+                                                className={
+                                                    selectedPayDifference >= 0
+                                                        ? "font-semibold text-red-400"
+                                                        : "font-semibold text-blue-400"
+                                                }
+                                            >
+                                                {selectedPayDifference >= 0
+                                                    ? `${formatMoney(Math.abs(selectedPayDifference))} 많아요`
+                                                    : `${formatMoney(Math.abs(selectedPayDifference))} 적어요`}
+                                            </span>
+                                        </p>
+
+                                        <p className="mt-1 text-xs text-gray-500">
+                                            평균 대비 {Math.abs(selectedPayChangePercent).toFixed(1)}%
+                                            {selectedPayDifference >= 0 ? " 높아요" : " 낮아요"}
+                                        </p>
+                                    </div>
+                                )}
+
+                                <div className="mt-6 space-y-3 text-sm">
+                                    <div className="flex justify-between">
+                                        <span className="text-gray-400">근무시간</span>
+
+                                        <span>
+                                            {Number(selectedPayHistory.hours ?? 0).toFixed(2)}
+                                            시간
                                         </span>
                                     </div>
-                                </div>
-                            )}
-                        </div>
 
-                        <Link
-                            href="/salary/pay-history"
-                            className="mt-6 block w-full rounded-2xl bg-white py-4 text-center text-sm font-semibold text-black"
-                        >
-                            급여 기록 보기
-                        </Link>
-                    </div>
-                </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-gray-400">실제 급여</span>
+
+                                        <span>
+                                            {formatMoney(Number(selectedPayHistory.actualPay ?? selectedPayHistory.pay ?? 0))}
+                                        </span>
+                                    </div>
+
+                                    {selectedPayHistory.actualTips > 0 && (
+                                        <div className="flex justify-between">
+                                            <span className="text-gray-400">실제 팁</span>
+
+                                            <span>{formatMoney(Number(selectedPayHistory.actualTips ?? 0))}</span>
+                                        </div>
+                                    )}
+
+                                    {selectedPayHistory.cashTips > 0 && (
+                                        <div className="flex justify-between">
+                                            <span className="text-gray-400">현금 팁</span>
+
+                                            <span>{formatMoney(Number(selectedPayHistory.cashTips ?? 0))}</span>
+                                        </div>
+                                    )}
+
+                                    {Number(selectedPayHistory.actualPay ?? 0) + Number(selectedPayHistory.actualTips ?? 0) >
+                                        0 && (
+                                        <div className="mt-4 border-t border-gray-800 pt-4">
+                                            <div className="flex justify-between">
+                                                <span className="text-gray-300">실제 세전 금액</span>
+
+                                                <span className="font-semibold">
+                                                    {formatMoney(
+                                                        Number(selectedPayHistory.actualPay ?? 0) +
+                                                            Number(selectedPayHistory.actualTips ?? 0),
+                                                    )}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {selectedPayHistory.actualDeductions > 0 && (
+                                        <div className="flex justify-between">
+                                            <span className="text-gray-400">실제 공제</span>
+
+                                            <span>- {formatMoney(Number(selectedPayHistory.actualDeductions ?? 0))}</span>
+                                        </div>
+                                    )}
+
+                                    {selectedPayHistory.adjustments.length > 0 && (
+                                        <div className="mt-4 border-t border-gray-800 pt-4">
+                                            <p className="mb-3 text-xs text-gray-500">조정 내역</p>
+
+                                            <div className="space-y-2">
+                                                {selectedPayHistory.adjustments.map((adjustment, index) => (
+                                                    <div key={`${adjustment.name}-${index}`} className="flex justify-between">
+                                                        <span className="text-gray-400">{adjustment.name}</span>
+
+                                                        <span
+                                                            className={
+                                                                adjustment.type === "add" ? "text-green-400" : "text-red-400"
+                                                            }
+                                                        >
+                                                            {adjustment.type === "add" ? "+" : "-"}
+                                                            {formatMoney(Number(adjustment.amount ?? 0))}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className="mt-4 border-t border-gray-800 pt-4">
+                                        <div className="flex justify-between">
+                                            <span className="text-gray-300">실제 실수령액</span>
+
+                                            <span className="font-semibold">
+                                                {formatMoney(Number(selectedPayHistory.actualNetPay ?? 0))}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {selectedPayHistory.cashTips > 0 && (
+                                        <div className="mt-4">
+                                            <div className="flex justify-between rounded-2xl bg-white p-3 text-black">
+                                                <span className="text-sm font-medium">총 수령액</span>
+
+                                                <span className="text-lg font-bold">
+                                                    {formatMoney(
+                                                        Number(selectedPayHistory.actualNetPay ?? 0) +
+                                                            Number(selectedPayHistory.cashTips ?? 0),
+                                                    )}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <Link
+                                    href="/salary/pay-history"
+                                    className="mt-6 block w-full rounded-2xl bg-white py-4 text-center text-sm font-semibold text-black"
+                                >
+                                    급여 기록 보기
+                                </Link>
+                            </div>
+                        </div>
+                    )}
+                </>
             )}
 
-            {/* 급여 세팅 */}
+            {/* 급여 설정 */}
             <SalarySettingsSheet isOpen={isSalarySettingsOpen} onClose={() => setIsSalarySettingsOpen(false)} />
         </div>
     );

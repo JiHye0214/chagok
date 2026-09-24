@@ -34,7 +34,7 @@ export default function SplashPage({ autoExit = false }: SplashPageProps) {
 
     return (
         <div
-            className={`min-h-[100dvh] overflow-hidden bg-gray-50 ${
+            className={`min-h-[100dvh] overflow-hidden bg-gray-50 translate-y-0 opacity-100 ${
                 isLeaving ? "pointer-events-none animate-[splashExit_0.6s_ease-out_forwards]" : "translate-y-0 opacity-100"
             }`}
         >

@@ -14,6 +14,15 @@ type Destination = {
     cities: DestinationCity[];
 };
 
+const DEFAULT_TRIP_EXPENSE_CATEGORIES = [
+    { name: "항공", sortOrder: 1 },
+    { name: "숙소", sortOrder: 2 },
+    { name: "식비", sortOrder: 3 },
+    { name: "교통", sortOrder: 4 },
+    { name: "쇼핑", sortOrder: 5 },
+    { name: "기타", sortOrder: 6 },
+];
+
 export async function GET() {
     try {
         const user = await getCurrentUser();
@@ -312,6 +321,25 @@ export async function POST(request: Request) {
 
         if (!trip) {
             return NextResponse.json({ error: "여행 저장에 실패했습니다." }, { status: 500 });
+        }
+
+        // ----------------------------------------
+        // 기본 여행 지출 카테고리 생성
+        // ----------------------------------------
+
+        for (const category of DEFAULT_TRIP_EXPENSE_CATEGORIES) {
+            await sql`
+        INSERT INTO trip_expense_categories (
+            trip_id,
+            name,
+            sort_order
+        )
+        VALUES (
+            ${trip.id},
+            ${category.name},
+            ${category.sortOrder}
+        )
+    `;
         }
 
         // ----------------------------------------

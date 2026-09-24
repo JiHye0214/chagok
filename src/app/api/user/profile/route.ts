@@ -8,6 +8,22 @@ const pool = new Pool({
 
 const nicknameRegex = /^[가-힣a-z0-9._]{3,20}$/;
 
+const DEFAULT_LIVING_CATEGORIES = [
+    { name: "주거", kind: "variable", sortOrder: 1 },
+    { name: "식비", kind: "variable", sortOrder: 2 },
+    { name: "교통", kind: "variable", sortOrder: 3 },
+    { name: "쇼핑", kind: "variable", sortOrder: 4 },
+    { name: "여행", kind: "variable", sortOrder: 5 },
+    { name: "기타", kind: "variable", sortOrder: 6 },
+
+    { name: "급여", kind: "income", sortOrder: 1 },
+    { name: "용돈", kind: "income", sortOrder: 2 },
+    { name: "부수입", kind: "income", sortOrder: 3 },
+    { name: "환급", kind: "income", sortOrder: 4 },
+    { name: "이자/배당", kind: "income", sortOrder: 5 },
+    { name: "기타", kind: "income", sortOrder: 6 },
+];
+
 export async function GET(request: Request) {
     try {
         const session = await auth.api.getSession({
@@ -50,6 +66,8 @@ export async function GET(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+    const client = await pool.connect();
+
     try {
         const session = await auth.api.getSession({
             headers: request.headers,
@@ -94,7 +112,9 @@ export async function PATCH(request: Request) {
             );
         }
 
-        const existingProfile = await pool.query(
+        await client.query("BEGIN");
+
+        const existingProfile = await client.query(
             `
             SELECT user_id
             FROM user_profiles
@@ -105,7 +125,7 @@ export async function PATCH(request: Request) {
         );
 
         if (existingProfile.rows.length > 0) {
-            await pool.query(
+            await client.query(
                 `
                 UPDATE user_profiles
                 SET
@@ -121,7 +141,8 @@ export async function PATCH(request: Request) {
                 [language, countryCode, provinceCode, timezone, currency, nickname, session.user.id],
             );
         } else {
-            await pool.query(
+            // 최초 프로필 생성
+            await client.query(
                 `
                 INSERT INTO user_profiles (
                     user_id,
@@ -138,15 +159,39 @@ export async function PATCH(request: Request) {
                 `,
                 [session.user.id, language, countryCode, provinceCode, timezone, currency, nickname],
             );
+
+            // 최초 계정 연동 시 생활 기본 카테고리 생성
+            for (const category of DEFAULT_LIVING_CATEGORIES) {
+                await client.query(
+                    `
+                    INSERT INTO living_categories (
+                        name,
+                        kind,
+                        sort_order,
+                        is_active,
+                        created_at,
+                        user_id
+                    )
+                    VALUES ($1, $2, $3, true, NOW(), $4)
+                    `,
+                    [category.name, category.kind, category.sortOrder, session.user.id],
+                );
+            }
         }
+
+        await client.query("COMMIT");
 
         return NextResponse.json({
             success: true,
             nickname,
         });
     } catch (error) {
+        await client.query("ROLLBACK");
+
         console.error("PATCH /api/user/profile error:", error);
 
         return NextResponse.json({ error: "프로필을 저장하지 못했어요." }, { status: 500 });
+    } finally {
+        client.release();
     }
 }

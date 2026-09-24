@@ -54,7 +54,7 @@ export async function GET() {
         }
 
         return Response.json({
-            province: row.province,
+            regionCode: row.province,
             payType: row.pay_type,
             payFrequency: row.pay_frequency,
             hourlyWage: row.hourly_wage,
@@ -89,7 +89,7 @@ export async function PUT(request: Request) {
 
         const body = await request.json();
 
-        const province = body.province ?? null;
+        const regionCode = body.regionCode ?? null;
         const payType = body.payType ?? null;
         const payFrequency = body.payFrequency ?? null;
 
@@ -119,9 +119,6 @@ export async function PUT(request: Request) {
             }
         }
 
-        /*
-         * 먼저 해당 user의 급여 설정이 존재하는지 확인
-         */
         const existing = await sql`
             SELECT id
             FROM salary_settings
@@ -129,14 +126,11 @@ export async function PUT(request: Request) {
             LIMIT 1
         `;
 
-        /*
-         * 이미 있으면 UPDATE
-         */
         if (existing.length > 0) {
             const result = await sql`
                 UPDATE salary_settings
                 SET
-                    province = ${province},
+                    province = ${regionCode},
                     pay_type = ${payType},
                     pay_frequency = ${payFrequency},
                     hourly_wage = ${hourlyWage},
@@ -156,12 +150,6 @@ export async function PUT(request: Request) {
             return Response.json(result[0]);
         }
 
-        /*
-         * 없으면 INSERT
-         *
-         * id는 직접 넣지 않음.
-         * DB가 자동 생성하도록 둠.
-         */
         const result = await sql`
             INSERT INTO salary_settings (
                 user_id,
@@ -180,7 +168,7 @@ export async function PUT(request: Request) {
             )
             VALUES (
                 ${user.id},
-                ${province},
+                ${regionCode},
                 ${payType},
                 ${payFrequency},
                 ${hourlyWage},

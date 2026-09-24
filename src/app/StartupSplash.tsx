@@ -27,7 +27,7 @@ export default function StartupSplash({ children }: StartupSplashProps) {
 
     return (
         <>
-            {children}
+            {!showSplash && children}
 
             {showSplash && (
                 <div

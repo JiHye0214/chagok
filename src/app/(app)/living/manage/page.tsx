@@ -39,6 +39,12 @@ type FixedExpense = {
     sortOrder: number;
 };
 
+type Holiday = {
+    date: string;
+    name: string;
+    global: boolean;
+};
+
 const formatMoney = (amount: number) =>
     new Intl.NumberFormat("en-CA", {
         style: "currency",
@@ -96,6 +102,8 @@ export default function LivingManagePage() {
     const [fixedLoading, setFixedLoading] = useState(true);
 
     const [planCode, setPlanCode] = useState("free");
+    const [province, setProvince] = useState<string | null>(null);
+    const [holidays, setHolidays] = useState<Holiday[]>([]);
     const [totalTransactionCount, setTotalTransactionCount] = useState(0);
     const [totalFixedExpenseCount, setTotalFixedExpenseCount] = useState(0);
 
@@ -300,6 +308,52 @@ export default function LivingManagePage() {
 
         loadPlan();
     }, []);
+
+    useEffect(() => {
+        const loadSalarySettings = async () => {
+            try {
+                const response = await fetch("/api/salary/salary-settings");
+
+                if (!response.ok) {
+                    return;
+                }
+
+                const data = await response.json();
+
+                setProvince(data.salarySettings?.province ?? data.province ?? null);
+            } catch (error) {
+                console.error("급여 설정 조회 실패:", error);
+            }
+        };
+
+        loadSalarySettings();
+    }, []);
+
+    useEffect(() => {
+        if (!province) {
+            setHolidays([]);
+            return;
+        }
+
+        const loadHolidays = async () => {
+            try {
+                const response = await fetch(`/api/holidays?year=${year}&province=${province}`);
+
+                if (!response.ok) {
+                    throw new Error("공휴일 조회 실패");
+                }
+
+                const data: Holiday[] = await response.json();
+
+                setHolidays(data);
+            } catch (error) {
+                console.error("공휴일 조회 실패:", error);
+                setHolidays([]);
+            }
+        };
+
+        loadHolidays();
+    }, [year, province]);
 
     useEffect(() => {
         loadTransactions();
@@ -923,6 +977,8 @@ export default function LivingManagePage() {
 
                             const date = formatDate(new Date(year, month, day));
 
+                            const holiday = holidays.find((item) => item.date === date);
+
                             const net = getDayNet(day);
                             const hasTransactions = getDayTransactions(day).length > 0;
                             const isSelected = selectedDate === date;
@@ -936,7 +992,7 @@ export default function LivingManagePage() {
                                 >
                                     <span
                                         className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium ${
-                                            isSelected ? "bg-gray-900 text-white" : "text-gray-700"
+                                            isSelected ? "bg-gray-900 text-white" : holiday ? "text-red-500" : "text-gray-700"
                                         }`}
                                     >
                                         {day}
@@ -944,7 +1000,7 @@ export default function LivingManagePage() {
 
                                     {hasTransactions && (
                                         <span
-                                            className={`mt-1.5 max-w-full truncate px-0.5 text-[9px] font-medium ${
+                                            className={`mt-1 max-w-full truncate px-0.5 text-[9px] font-medium ${
                                                 net > 0 ? "text-[#C66B6B]" : net < 0 ? "text-[#718FB8]" : "text-gray-400"
                                             }`}
                                         >
@@ -952,11 +1008,29 @@ export default function LivingManagePage() {
                                             {formatMoney(net)}
                                         </span>
                                     )}
+
+                                    {holiday && (
+                                        <span className="mt-0.5 max-w-full truncate px-0.5 text-[8px] font-medium text-red-500">
+                                            {holiday.name}
+                                        </span>
+                                    )}
                                 </button>
                             );
                         })}
                     </div>
                 )}
+
+                <div className="mt-4 flex items-center gap-4 text-xs text-gray-400">
+                    <div className="flex items-center gap-2">
+                        <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
+                        공휴일
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <span className="h-2.5 w-2.5 rounded-full bg-gray-900" />
+                        선택한 날짜
+                    </div>
+                </div>
             </section>
 
             {/* Selected day details */}
