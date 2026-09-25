@@ -45,13 +45,48 @@ type Holiday = {
     global: boolean;
 };
 
-const formatMoney = (amount: number) =>
-    new Intl.NumberFormat("en-CA", {
+const getCurrencyLocale = (currencyCode: string) => {
+    switch (currencyCode) {
+        case "KRW":
+            return "ko-KR";
+        case "CAD":
+            return "en-CA";
+        case "USD":
+            return "en-US";
+        default:
+            return "en-CA";
+    }
+};
+
+const formatMoney = (amount: number, currencyCode: string | null) => {
+    if (!currencyCode) {
+        return "";
+    }
+
+    return new Intl.NumberFormat(getCurrencyLocale(currencyCode), {
         style: "currency",
-        currency: "CAD",
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
+        currency: currencyCode,
+        minimumFractionDigits: currencyCode === "KRW" ? 0 : 2,
+        maximumFractionDigits: currencyCode === "KRW" ? 0 : 2,
     }).format(Math.abs(amount));
+};
+
+const getCurrencySymbol = (currencyCode: string | null) => {
+    if (!currencyCode) {
+        return "";
+    }
+
+    return (
+        new Intl.NumberFormat(getCurrencyLocale(currencyCode), {
+            style: "currency",
+            currency: currencyCode,
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0,
+        })
+            .formatToParts(0)
+            .find((part) => part.type === "currency")?.value ?? currencyCode
+    );
+};
 
 const formatMonth = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 
@@ -102,7 +137,12 @@ export default function LivingManagePage() {
     const [fixedLoading, setFixedLoading] = useState(true);
 
     const [planCode, setPlanCode] = useState("free");
+
+    // user_profiles 기준 지역 / 국가 / 통화
+    const [countryCode, setCountryCode] = useState<string | null>(null);
     const [province, setProvince] = useState<string | null>(null);
+    const [currency, setCurrency] = useState<string | null>(null);
+
     const [holidays, setHolidays] = useState<Holiday[]>([]);
     const [totalTransactionCount, setTotalTransactionCount] = useState(0);
     const [totalFixedExpenseCount, setTotalFixedExpenseCount] = useState(0);
@@ -309,35 +349,62 @@ export default function LivingManagePage() {
         loadPlan();
     }, []);
 
+    /*
+     * --------------------------------------------------
+     * Load User Profile
+     * --------------------------------------------------
+     * 국가 / 지역 / 통화는 모두 user_profiles를 기준으로 한다.
+     */
     useEffect(() => {
-        const loadSalarySettings = async () => {
+        const loadProfile = async () => {
             try {
-                const response = await fetch("/api/salary/salary-settings");
+                const response = await fetch("/api/user/profile");
 
                 if (!response.ok) {
-                    return;
+                    throw new Error("프로필 조회 실패");
                 }
 
                 const data = await response.json();
 
-                setProvince(data.salarySettings?.province ?? data.province ?? null);
+                setCountryCode(data.countryCode ?? null);
+                setProvince(data.provinceCode ?? null);
+                setCurrency(data.currency ?? null);
             } catch (error) {
-                console.error("급여 설정 조회 실패:", error);
+                console.error("프로필 조회 실패:", error);
+
+                setCountryCode(null);
+                setProvince(null);
+                setCurrency(null);
             }
         };
 
-        loadSalarySettings();
+        loadProfile();
     }, []);
 
+    /*
+     * --------------------------------------------------
+     * Load Holidays
+     * --------------------------------------------------
+     * 국가 / 지역 모두 user_profiles에서 가져온다.
+     */
     useEffect(() => {
-        if (!province) {
+        if (!countryCode) {
             setHolidays([]);
             return;
         }
 
         const loadHolidays = async () => {
             try {
-                const response = await fetch(`/api/holidays?year=${year}&province=${province}`);
+                const params = new URLSearchParams({
+                    year: String(year),
+                    country: countryCode,
+                });
+
+                if (province) {
+                    params.set("province", province);
+                }
+
+                const response = await fetch(`/api/holidays?${params.toString()}`);
 
                 if (!response.ok) {
                     throw new Error("공휴일 조회 실패");
@@ -353,7 +420,7 @@ export default function LivingManagePage() {
         };
 
         loadHolidays();
-    }, [year, province]);
+    }, [year, countryCode, province]);
 
     useEffect(() => {
         loadTransactions();
@@ -835,7 +902,9 @@ export default function LivingManagePage() {
                     <div className="flex flex-1 items-center justify-between pr-5">
                         <span className="text-[12px] font-medium text-gray-400">수입</span>
 
-                        <span className="text-[15px] font-semibold text-gray-900">+{formatMoney(monthTotals.income)}</span>
+                        <span className="text-[15px] font-semibold text-gray-900">
+                            +{formatMoney(monthTotals.income, currency)}
+                        </span>
                     </div>
 
                     <div className="h-5 w-px bg-gray-100" />
@@ -843,7 +912,9 @@ export default function LivingManagePage() {
                     <div className="flex flex-1 items-center justify-between pl-5">
                         <span className="text-[12px] font-medium text-gray-400">지출</span>
 
-                        <span className="text-[15px] font-semibold text-gray-900">-{formatMoney(monthTotals.expense)}</span>
+                        <span className="text-[15px] font-semibold text-gray-900">
+                            -{formatMoney(monthTotals.expense, currency)}
+                        </span>
                     </div>
                 </div>
             </section>
@@ -868,7 +939,7 @@ export default function LivingManagePage() {
 
                     {planCode !== "free" && fixedExpenses.length > 0 && (
                         <p className="text-[13px] font-medium text-gray-500">
-                            {formatMoney(fixedExpenseTotal)}
+                            {formatMoney(fixedExpenseTotal, currency)}
                             /월
                         </p>
                     )}
@@ -928,7 +999,7 @@ export default function LivingManagePage() {
                                             </div>
 
                                             <p className="shrink-0 text-sm font-medium text-gray-900">
-                                                {formatMoney(expense.amount)}
+                                                {formatMoney(expense.amount, currency)}
                                             </p>
 
                                             <button
@@ -1005,7 +1076,7 @@ export default function LivingManagePage() {
                                             }`}
                                         >
                                             {net > 0 ? "+" : net < 0 ? "−" : ""}
-                                            {formatMoney(net)}
+                                            {formatMoney(net, currency)}
                                         </span>
                                     )}
 
@@ -1089,7 +1160,7 @@ export default function LivingManagePage() {
 
                                     <p className="shrink-0 text-[15px] font-medium text-gray-900">
                                         {net > 0 ? "+" : net < 0 ? "−" : ""}
-                                        {formatMoney(net)}
+                                        {formatMoney(net, currency)}
                                     </p>
                                 </button>
                             );
@@ -1272,7 +1343,7 @@ export default function LivingManagePage() {
                             />
 
                             <div className="flex items-center rounded-2xl bg-gray-100 px-4 py-3">
-                                <span className="mr-2 text-lg font-medium text-gray-400">$</span>
+                                <span className="mr-2 text-lg font-medium text-gray-400">{getCurrencySymbol(currency)}</span>
 
                                 <input
                                     type="number"
@@ -1444,7 +1515,7 @@ export default function LivingManagePage() {
                             />
 
                             <div className="flex items-center rounded-2xl bg-gray-100 px-4 py-3">
-                                <span className="mr-2 text-lg font-medium text-gray-400">$</span>
+                                <span className="mr-2 text-lg font-medium text-gray-400">{getCurrencySymbol(currency)}</span>
 
                                 <input
                                     type="number"

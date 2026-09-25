@@ -17,7 +17,6 @@ type SemiMonthlyType = "first-fifteenth" | "fifteenth-end";
 type TipType = "cash" | "paycheque" | "both";
 
 type SalarySettings = {
-    regionCode: string;
     payType: PayType;
     payFrequency: PayFrequency;
     hasTips: boolean;
@@ -162,8 +161,30 @@ const formatISO = (date: Date) => {
     return `${year}-${month}-${day}`;
 };
 
-const formatMoney = (value: number) => {
-    return `$${value.toFixed(2)}`;
+const getCurrencyLocale = (currencyCode: string) => {
+    switch (currencyCode) {
+        case "KRW":
+            return "ko-KR";
+        case "CAD":
+            return "en-CA";
+        case "USD":
+            return "en-US";
+        default:
+            return "en-CA";
+    }
+};
+
+const formatMoney = (value: number, currencyCode: string | null) => {
+    if (!currencyCode) {
+        return "";
+    }
+
+    return new Intl.NumberFormat(getCurrencyLocale(currencyCode), {
+        style: "currency",
+        currency: currencyCode,
+        minimumFractionDigits: currencyCode === "KRW" ? 0 : 2,
+        maximumFractionDigits: currencyCode === "KRW" ? 0 : 2,
+    }).format(value);
 };
 
 const formatDisplayDate = (value: string) => {
@@ -222,6 +243,9 @@ export default function SalaryPage() {
     const [isSchedulesLoading, setIsSchedulesLoading] = useState(true);
 
     const [holidays, setHolidays] = useState<Holiday[]>([]);
+    const [countryCode, setCountryCode] = useState<string | null>(null);
+    const [province, setProvince] = useState<string | null>(null);
+    const [currency, setCurrency] = useState<string | null>(null);
 
     const [, setCashTips] = useState("");
     const [, setPaychequeTips] = useState("");
@@ -312,7 +336,7 @@ export default function SalaryPage() {
      */
 
     useEffect(() => {
-        if (!salarySettings?.regionCode) {
+        if (!countryCode) {
             setHolidays([]);
             return;
         }
@@ -330,7 +354,16 @@ export default function SalaryPage() {
                 const results: Holiday[] = [];
 
                 for (const year of years) {
-                    const response = await fetch(`/api/holidays?year=${year}&province=${salarySettings.regionCode}`);
+                    const params = new URLSearchParams({
+                        year: String(year),
+                        country: countryCode,
+                    });
+
+                    if (province) {
+                        params.set("province", province);
+                    }
+
+                    const response = await fetch(`/api/holidays?${params.toString()}`);
 
                     if (!response.ok) {
                         continue;
@@ -349,7 +382,7 @@ export default function SalaryPage() {
         };
 
         loadHolidays();
-    }, [salarySettings?.regionCode, schedules]);
+    }, [countryCode, province, schedules]);
 
     /*
      * --------------------------------------------------
@@ -375,6 +408,33 @@ export default function SalaryPage() {
         };
 
         loadPlan();
+    }, []);
+
+    // 지역 국가 가져오기
+
+    useEffect(() => {
+        const loadProfile = async () => {
+            try {
+                const response = await fetch("/api/user/profile");
+
+                if (!response.ok) {
+                    throw new Error("프로필 조회 실패");
+                }
+
+                const data = await response.json();
+
+                setCountryCode(data.countryCode ?? null);
+                setProvince(data.provinceCode ?? null);
+                setCurrency(data.currency ?? null);
+            } catch (error) {
+                console.error("프로필 조회 실패:", error);
+                setCountryCode(null);
+                setProvince(null);
+                setCurrency(null);
+            }
+        };
+
+        loadProfile();
     }, []);
 
     /*
@@ -877,8 +937,8 @@ export default function SalaryPage() {
     const currentAnnualGross = currentTaxableGrossPay * periodsPerYear;
 
     const currentTaxes = calculateTaxes({
-        country: "CA",
-        province: salarySettings?.regionCode ?? "",
+        country: countryCode ?? "",
+        province: province ?? "",
         annualGross: currentAnnualGross,
     });
 
@@ -998,8 +1058,8 @@ export default function SalaryPage() {
     const pendingAnnualGross = pendingTaxableGrossPay * periodsPerYear;
 
     const pendingTaxes = calculateTaxes({
-        country: "CA",
-        province: salarySettings?.regionCode ?? "",
+        country: countryCode ?? "",
+        province: province ?? "",
         annualGross: pendingAnnualGross,
     });
 
@@ -1214,7 +1274,6 @@ export default function SalaryPage() {
 
                 <p className="mt-2 text-sm text-gray-500">이번 급여는 얼마나 받을까요?</p>
             </header>
-
             {!salarySettings ? (
                 <section className="rounded-3xl bg-white p-6 shadow-sm">
                     <p className="text-xs font-medium text-gray-400">급여 설정</p>
@@ -1274,7 +1333,7 @@ export default function SalaryPage() {
 
                                             <p className="mt-2 text-lg font-semibold text-gray-900">
                                                 <span className="text-blue-600">{getDdayLabel(pendingPayPeriod.payDate)}</span>{" "}
-                                                {formatMoney(animatedPendingNetPay)}를 받아요
+                                                {formatMoney(animatedPendingNetPay, currency)}를 받아요{" "}
                                             </p>
 
                                             <p className="mt-1 text-sm text-gray-500">
@@ -1312,7 +1371,7 @@ export default function SalaryPage() {
                                     <p className="mt-5 text-xs text-gray-400">예상 급여</p>
 
                                     <p className="mt-1 text-2xl font-bold text-gray-900">
-                                        {formatMoney(currentPeriodEstimate.netPay)}
+                                        {formatMoney(currentPeriodEstimate.netPay, currency)}{" "}
                                     </p>
 
                                     <div className="mt-3 flex items-center gap-3 text-sm text-gray-500">
@@ -1324,7 +1383,11 @@ export default function SalaryPage() {
                                         <span>·</span>
 
                                         <span>
-                                            팁 {formatMoney(currentPeriodEstimate.cashTips + currentPeriodEstimate.paychequeTips)}
+                                            팁{" "}
+                                            {formatMoney(
+                                                currentPeriodEstimate.cashTips + currentPeriodEstimate.paychequeTips,
+                                                currency,
+                                            )}{" "}
                                         </span>
                                     </div>
                                 </>
@@ -1362,7 +1425,7 @@ export default function SalaryPage() {
                                 </div>
 
                                 <p className="mt-2 text-3xl font-bold">
-                                    {averageActualNetPay !== null ? formatMoney(averageActualNetPay) : "-"}
+                                    {averageActualNetPay !== null ? formatMoney(averageActualNetPay, currency) : "-"}{" "}
                                 </p>
 
                                 {graphPayHistory.length > 0 ? (
@@ -1491,7 +1554,8 @@ export default function SalaryPage() {
                                                                             <div className="flex justify-center">
                                                                                 <div className="rounded-lg bg-gray-900 px-2.5 py-2 text-center text-[10px] text-white shadow-md">
                                                                                     <div className="font-semibold">
-                                                                                        예상 {formatMoney(point.value)}
+                                                                                        예상{" "}
+                                                                                        {formatMoney(point.value, currency)}{" "}
                                                                                     </div>
                                                                                 </div>
                                                                             </div>
@@ -1663,7 +1727,7 @@ export default function SalaryPage() {
                                     <p className="text-xs font-medium text-blue-500">예상 실수령액</p>
 
                                     <p className="mt-2 text-4xl font-bold tracking-tight text-gray-900">
-                                        {formatMoney(pendingPeriodEstimate.netPay)}
+                                        {formatMoney(pendingPeriodEstimate.netPay, currency)}
                                     </p>
 
                                     <div className="mt-4 flex items-center justify-between">
@@ -1694,7 +1758,7 @@ export default function SalaryPage() {
                                                 <span className="text-gray-500">기본 급여</span>
 
                                                 <span className="font-medium text-gray-900">
-                                                    {formatMoney(pendingPeriodEstimate.basePay)}
+                                                    {formatMoney(pendingPeriodEstimate.basePay, currency)}
                                                 </span>
                                             </div>
 
@@ -1703,7 +1767,7 @@ export default function SalaryPage() {
                                                     <span className="text-gray-500">급여 포함 팁</span>
 
                                                     <span className="font-medium text-gray-900">
-                                                        {formatMoney(pendingPeriodEstimate.paychequeTips)}
+                                                        {formatMoney(pendingPeriodEstimate.paychequeTips, currency)}
                                                     </span>
                                                 </div>
                                             )}
@@ -1713,7 +1777,7 @@ export default function SalaryPage() {
                                                     <span className="text-gray-500">Holiday Pay</span>
 
                                                     <span className="font-medium text-gray-900">
-                                                        {formatMoney(pendingPeriodEstimate.holidayPay)}
+                                                        {formatMoney(pendingPeriodEstimate.holidayPay, currency)}
                                                     </span>
                                                 </div>
                                             )}
@@ -1722,7 +1786,7 @@ export default function SalaryPage() {
                                                 <span className="text-gray-500">Vacation Pay</span>
 
                                                 <span className="font-medium text-gray-900">
-                                                    {formatMoney(pendingPeriodEstimate.vacationPay)}
+                                                    {formatMoney(pendingPeriodEstimate.vacationPay, currency)}
                                                 </span>
                                             </div>
 
@@ -1732,7 +1796,7 @@ export default function SalaryPage() {
                                                 <span className="font-medium text-gray-600">세전 급여</span>
 
                                                 <span className="font-semibold text-gray-900">
-                                                    {formatMoney(pendingPeriodEstimate.grossPay)}
+                                                    {formatMoney(pendingPeriodEstimate.grossPay, currency)}
                                                 </span>
                                             </div>
 
@@ -1740,7 +1804,7 @@ export default function SalaryPage() {
                                                 <span className="text-gray-500">예상 공제</span>
 
                                                 <span className="text-gray-600">
-                                                    - {formatMoney(pendingPeriodEstimate.deductions)}
+                                                    - {formatMoney(pendingPeriodEstimate.deductions, currency)}
                                                 </span>
                                             </div>
 
@@ -1750,7 +1814,7 @@ export default function SalaryPage() {
                                                 <span className="font-semibold text-gray-900">실수령액</span>
 
                                                 <span className="font-bold text-gray-900">
-                                                    {formatMoney(pendingPeriodEstimate.netPay)}
+                                                    {formatMoney(pendingPeriodEstimate.netPay, currency)}
                                                 </span>
                                             </div>
                                         </div>
@@ -1764,7 +1828,7 @@ export default function SalaryPage() {
                                             <span className="text-sm text-gray-500">현금 팁</span>
 
                                             <span className="text-sm font-semibold text-gray-900">
-                                                {formatMoney(pendingPeriodEstimate.cashTips)}
+                                                {formatMoney(pendingPeriodEstimate.cashTips, currency)}
                                             </span>
                                         </div>
 
@@ -1772,7 +1836,7 @@ export default function SalaryPage() {
                                             <span className="text-sm font-semibold text-gray-700">예상 총 수령액</span>
 
                                             <span className="text-xl font-bold text-gray-900">
-                                                {formatMoney(pendingPeriodEstimate.totalIncome)}
+                                                {formatMoney(pendingPeriodEstimate.totalIncome, currency)}
                                             </span>
                                         </div>
                                     </div>
@@ -1836,7 +1900,7 @@ export default function SalaryPage() {
                                 </div>
 
                                 <p className="mt-6 text-4xl font-bold">
-                                    {formatMoney(Number(selectedPayHistory.actualNetPay ?? 0))}
+                                    {formatMoney(Number(selectedPayHistory.actualNetPay ?? 0), currency)}
                                 </p>
 
                                 <p className="mt-2 text-sm text-gray-400">실제 실수령액</p>
@@ -1855,8 +1919,8 @@ export default function SalaryPage() {
                                                 }
                                             >
                                                 {selectedPayDifference >= 0
-                                                    ? `${formatMoney(Math.abs(selectedPayDifference))} 많아요`
-                                                    : `${formatMoney(Math.abs(selectedPayDifference))} 적어요`}
+                                                    ? `${formatMoney(Math.abs(selectedPayDifference), currency)} 많아요`
+                                                    : `${formatMoney(Math.abs(selectedPayDifference), currency)} 적어요`}
                                             </span>
                                         </p>
 
@@ -1881,7 +1945,10 @@ export default function SalaryPage() {
                                         <span className="text-gray-400">실제 급여</span>
 
                                         <span>
-                                            {formatMoney(Number(selectedPayHistory.actualPay ?? selectedPayHistory.pay ?? 0))}
+                                            {formatMoney(
+                                                Number(selectedPayHistory.actualPay ?? selectedPayHistory.pay ?? 0),
+                                                currency,
+                                            )}
                                         </span>
                                     </div>
 
@@ -1889,7 +1956,7 @@ export default function SalaryPage() {
                                         <div className="flex justify-between">
                                             <span className="text-gray-400">실제 팁</span>
 
-                                            <span>{formatMoney(Number(selectedPayHistory.actualTips ?? 0))}</span>
+                                            <span>{formatMoney(Number(selectedPayHistory.actualTips ?? 0), currency)}</span>
                                         </div>
                                     )}
 
@@ -1897,7 +1964,7 @@ export default function SalaryPage() {
                                         <div className="flex justify-between">
                                             <span className="text-gray-400">현금 팁</span>
 
-                                            <span>{formatMoney(Number(selectedPayHistory.cashTips ?? 0))}</span>
+                                            <span>{formatMoney(Number(selectedPayHistory.cashTips ?? 0), currency)}</span>
                                         </div>
                                     )}
 
@@ -1911,6 +1978,7 @@ export default function SalaryPage() {
                                                     {formatMoney(
                                                         Number(selectedPayHistory.actualPay ?? 0) +
                                                             Number(selectedPayHistory.actualTips ?? 0),
+                                                        currency,
                                                     )}
                                                 </span>
                                             </div>
@@ -1921,7 +1989,9 @@ export default function SalaryPage() {
                                         <div className="flex justify-between">
                                             <span className="text-gray-400">실제 공제</span>
 
-                                            <span>- {formatMoney(Number(selectedPayHistory.actualDeductions ?? 0))}</span>
+                                            <span>
+                                                - {formatMoney(Number(selectedPayHistory.actualDeductions ?? 0), currency)}
+                                            </span>
                                         </div>
                                     )}
 
@@ -1940,7 +2010,7 @@ export default function SalaryPage() {
                                                             }
                                                         >
                                                             {adjustment.type === "add" ? "+" : "-"}
-                                                            {formatMoney(Number(adjustment.amount ?? 0))}
+                                                            {formatMoney(Number(adjustment.amount ?? 0), currency)}
                                                         </span>
                                                     </div>
                                                 ))}
@@ -1953,7 +2023,7 @@ export default function SalaryPage() {
                                             <span className="text-gray-300">실제 실수령액</span>
 
                                             <span className="font-semibold">
-                                                {formatMoney(Number(selectedPayHistory.actualNetPay ?? 0))}
+                                                {formatMoney(Number(selectedPayHistory.actualNetPay ?? 0), currency)}
                                             </span>
                                         </div>
                                     </div>
@@ -1967,6 +2037,7 @@ export default function SalaryPage() {
                                                     {formatMoney(
                                                         Number(selectedPayHistory.actualNetPay ?? 0) +
                                                             Number(selectedPayHistory.cashTips ?? 0),
+                                                        currency,
                                                     )}
                                                 </span>
                                             </div>
@@ -1985,9 +2056,14 @@ export default function SalaryPage() {
                     )}
                 </>
             )}
-
             {/* 급여 설정 */}
-            <SalarySettingsSheet isOpen={isSalarySettingsOpen} onClose={() => setIsSalarySettingsOpen(false)} />
+            <SalarySettingsSheet
+                isOpen={isSalarySettingsOpen}
+                onClose={() => setIsSalarySettingsOpen(false)}
+                onSaved={async () => {
+                    await loadSalaryData();
+                }}
+            />
         </div>
     );
 }

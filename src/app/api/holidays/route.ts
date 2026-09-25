@@ -17,40 +17,45 @@ export async function GET(request: Request) {
         const { searchParams } = new URL(request.url);
 
         const year = searchParams.get("year");
-        const province = searchParams.get("province");
+        const country = searchParams.get("country")?.toUpperCase();
+        const province = searchParams.get("province")?.toUpperCase() || null;
 
-        if (!year || !province) {
+        if (!year || !country) {
             return NextResponse.json(
-                { error: "year와 province가 필요합니다." },
+                {
+                    error: "year와 country가 필요합니다.",
+                },
                 { status: 400 },
             );
         }
 
-        const response = await fetch(
-            `https://date.nager.at/api/v3/PublicHolidays/${year}/CA`,
-            {
-                next: {
-                    revalidate: 86400,
-                },
+        const response = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/${country}`, {
+            next: {
+                revalidate: 86400,
             },
-        );
+        });
 
         if (!response.ok) {
-            throw new Error("Nager 공휴일 API 조회 실패");
+            throw new Error(`Nager 공휴일 API 조회 실패: ${response.status}`);
         }
 
         const holidays: NagerHoliday[] = await response.json();
 
-        const subdivisionCode = `CA-${province}`;
-
         const filteredHolidays = holidays
             .filter((holiday) => {
-                // 캐나다 전체에 적용되는 공휴일
+                // 국가 전체 공휴일
                 if (holiday.global) {
                     return true;
                 }
 
-                // 해당 주/준주에 적용되는 공휴일
+                // 지역 정보가 없는 국가
+                if (!province) {
+                    return false;
+                }
+
+                // 캐나다처럼 province/subdivision을 사용하는 경우
+                const subdivisionCode = `${country}-${province}`;
+
                 return holiday.counties?.includes(subdivisionCode) ?? false;
             })
             .map((holiday) => ({

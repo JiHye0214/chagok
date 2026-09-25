@@ -105,6 +105,9 @@ export default function LivingPage() {
     const [data, setData] = useState<LivingSummary | null>(null);
     const [loading, setLoading] = useState(true);
 
+    const [hasLivingSettings, setHasLivingSettings] = useState(false);
+    const [isLivingSettingsLoading, setIsLivingSettingsLoading] = useState(true);
+
     const [isEditingSavingsGoal, setIsEditingSavingsGoal] = useState(false);
     const [savingsGoalInput, setSavingsGoalInput] = useState("");
     const [isSavingGoal, setIsSavingGoal] = useState(false);
@@ -160,16 +163,18 @@ export default function LivingPage() {
                 const response = await fetch("/api/living/settings");
 
                 if (!response.ok) {
+                    setHasLivingSettings(false);
                     return;
                 }
 
                 const result = await response.json();
 
-                if (!result) {
-                    setIsLivingStartOpen(true);
-                }
+                setHasLivingSettings(Boolean(result));
             } catch (error) {
                 console.error(error);
+                setHasLivingSettings(false);
+            } finally {
+                setIsLivingSettingsLoading(false);
             }
         };
 
@@ -256,14 +261,32 @@ export default function LivingPage() {
                 <p className="mt-2 text-sm text-gray-500">이번 달 생활비를 한눈에 확인해보세요.</p>
             </header>
 
-            {loading ? (
+            {isLivingSettingsLoading || loading ? (
                 <div className="space-y-5">
-                    <div className="h-[390px] animate-pulse bg-white" />
+                    <div className="h-48 animate-pulse rounded-3xl bg-white" />
 
                     <div className="h-72 animate-pulse rounded-3xl bg-white" />
 
                     <div className="h-64 animate-pulse rounded-3xl bg-white" />
                 </div>
+            ) : !hasLivingSettings ? (
+                <section className="rounded-3xl bg-white p-6 shadow-sm">
+                    <p className="text-xs font-medium text-gray-400">생활 설정</p>
+
+                    <h2 className="mt-2 text-lg font-bold text-gray-900">생활 정보를 먼저 설정해주세요</h2>
+
+                    <p className="mt-2 text-sm leading-6 text-gray-500">
+                        생활비와 수입을 관리하기 위해 기본 생활 정보를 설정하면 이번 달 생활비를 확인할 수 있어요.
+                    </p>
+
+                    <button
+                        type="button"
+                        onClick={() => setIsLivingStartOpen(true)}
+                        className="mt-5 w-full rounded-2xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-gray-800"
+                    >
+                        생활 설정하기
+                    </button>
+                </section>
             ) : (
                 <div className="space-y-5">
                     {/* External data integration */}
@@ -399,7 +422,7 @@ export default function LivingPage() {
                                         <div className="mt-3 flex gap-2">
                                             <button
                                                 type="button"
-                                                onClick={() => router.push(`/salary/pay-history`)}
+                                                onClick={() => router.push("/salary/pay-history")}
                                                 className="flex-1 rounded-2xl bg-white py-3 text-[13px] font-medium text-gray-600 shadow-sm transition hover:bg-gray-50"
                                             >
                                                 급여 수정
@@ -736,6 +759,9 @@ export default function LivingPage() {
                 isOpen={isLivingStartOpen}
                 onClose={() => setIsLivingStartOpen(false)}
                 onSaved={async () => {
+                    setHasLivingSettings(true);
+                    setIsLivingStartOpen(false);
+
                     try {
                         const response = await fetch(`/api/living?month=${month}`);
 

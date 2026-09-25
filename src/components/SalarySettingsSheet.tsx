@@ -40,9 +40,10 @@ type UserProfile = {
 type SalarySettingsSheetProps = {
     isOpen: boolean;
     onClose: () => void;
+    onSaved?: () => void | Promise<void>;
 };
 
-export default function SalarySettingsSheet({ isOpen, onClose }: SalarySettingsSheetProps) {
+export default function SalarySettingsSheet({ isOpen, onClose, onSaved }: SalarySettingsSheetProps) {
     const [payType, setPayType] = useState<PayType>("hourly");
     const [payFrequency, setPayFrequency] = useState<PayFrequency>("biweekly");
 
@@ -182,7 +183,7 @@ export default function SalarySettingsSheet({ isOpen, onClose }: SalarySettingsS
             }
         };
 
-        loadSalarySettings();
+        void loadSalarySettings();
     }, [isOpen]);
 
     /*
@@ -263,7 +264,9 @@ export default function SalarySettingsSheet({ isOpen, onClose }: SalarySettingsS
                 throw new Error("급여 설정 저장 실패");
             }
 
-            window.location.reload();
+            // 전체 페이지를 새로고침하지 않고
+            // 부모에서 필요한 급여 데이터를 다시 조회한다.
+            await onSaved?.();
 
             onClose();
         } catch (error) {

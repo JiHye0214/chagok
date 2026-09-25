@@ -10,11 +10,13 @@ const nicknameRegex = /^[가-힣a-z0-9._]{3,20}$/;
 
 const DEFAULT_LIVING_CATEGORIES = [
     { name: "주거", kind: "variable", sortOrder: 1 },
-    { name: "식비", kind: "variable", sortOrder: 2 },
-    { name: "교통", kind: "variable", sortOrder: 3 },
-    { name: "쇼핑", kind: "variable", sortOrder: 4 },
-    { name: "여행", kind: "variable", sortOrder: 5 },
-    { name: "기타", kind: "variable", sortOrder: 6 },
+    { name: "통신", kind: "variable", sortOrder: 2 },
+    { name: "식비", kind: "variable", sortOrder: 3 },
+    { name: "교통", kind: "variable", sortOrder: 4 },
+    { name: "쇼핑", kind: "variable", sortOrder: 5 },
+    { name: "여행", kind: "variable", sortOrder: 6 },
+    { name: "생활", kind: "variable", sortOrder: 7 },
+    { name: "기타", kind: "variable", sortOrder: 8 },
 
     { name: "급여", kind: "income", sortOrder: 1 },
     { name: "용돈", kind: "income", sortOrder: 2 },
@@ -23,6 +25,12 @@ const DEFAULT_LIVING_CATEGORIES = [
     { name: "이자/배당", kind: "income", sortOrder: 5 },
     { name: "기타", kind: "income", sortOrder: 6 },
 ];
+
+const SUPPORTED_COUNTRIES = ["KR", "CA"];
+
+const SUPPORTED_CURRENCIES = ["KRW", "CAD", "USD"];
+
+const SUPPORTED_CANADA_PROVINCES = ["BC", "ON"];
 
 export async function GET(request: Request) {
     try {
@@ -41,6 +49,7 @@ export async function GET(request: Request) {
                 language,
                 country_code,
                 province_code,
+                timezone,
                 currency
             FROM user_profiles
             WHERE user_id = $1
@@ -56,6 +65,7 @@ export async function GET(request: Request) {
             language: profile?.language ?? null,
             countryCode: profile?.country_code ?? null,
             provinceCode: profile?.province_code ?? null,
+            timezone: profile?.timezone ?? null,
             currency: profile?.currency ?? null,
         });
     } catch (error) {
@@ -83,14 +93,13 @@ export async function PATCH(request: Request) {
 
         const language = typeof body.language === "string" ? body.language : "ko";
 
-        const countryCode = typeof body.countryCode === "string" ? body.countryCode : "";
+        const countryCode = typeof body.countryCode === "string" ? body.countryCode.toUpperCase() : "";
 
-        const provinceCode =
-            countryCode === "CA" && typeof body.provinceCode === "string" && body.provinceCode ? body.provinceCode : null;
+        const provinceCode = typeof body.provinceCode === "string" && body.provinceCode ? body.provinceCode.toUpperCase() : null;
 
         const timezone = typeof body.timezone === "string" ? body.timezone : "";
 
-        const currency = typeof body.currency === "string" ? body.currency : "";
+        const currency = typeof body.currency === "string" ? body.currency.toUpperCase() : "";
 
         // 닉네임 검증
         if (!nicknameRegex.test(nickname)) {
@@ -102,8 +111,41 @@ export async function PATCH(request: Request) {
             );
         }
 
+        // 국가 검증
+        if (!SUPPORTED_COUNTRIES.includes(countryCode)) {
+            return NextResponse.json(
+                {
+                    error: "지원하지 않는 국가예요.",
+                },
+                { status: 400 },
+            );
+        }
+
+        // 통화 검증
+        if (!SUPPORTED_CURRENCIES.includes(currency)) {
+            return NextResponse.json(
+                {
+                    error: "지원하지 않는 통화예요.",
+                },
+                { status: 400 },
+            );
+        }
+
+        // 캐나다인 경우에만 지역 사용
+        if (countryCode === "CA" && (!provinceCode || !SUPPORTED_CANADA_PROVINCES.includes(provinceCode))) {
+            return NextResponse.json(
+                {
+                    error: "캐나다 지역 정보를 확인할 수 없어요.",
+                },
+                { status: 400 },
+            );
+        }
+
+        // 한국은 province_code를 사용하지 않음
+        const normalizedProvinceCode = countryCode === "CA" ? provinceCode : null;
+
         // 필수 프로필 정보 검증
-        if (!countryCode || !timezone || !currency) {
+        if (!timezone) {
             return NextResponse.json(
                 {
                     error: "사용자 정보를 확인할 수 없어요. 처음부터 다시 진행해 주세요.",
@@ -138,7 +180,7 @@ export async function PATCH(request: Request) {
                     updated_at = NOW()
                 WHERE user_id = $7
                 `,
-                [language, countryCode, provinceCode, timezone, currency, nickname, session.user.id],
+                [language, countryCode, normalizedProvinceCode, timezone, currency, nickname, session.user.id],
             );
         } else {
             // 최초 프로필 생성
@@ -157,7 +199,7 @@ export async function PATCH(request: Request) {
                 )
                 VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
                 `,
-                [session.user.id, language, countryCode, provinceCode, timezone, currency, nickname],
+                [session.user.id, language, countryCode, normalizedProvinceCode, timezone, currency, nickname],
             );
 
             // 최초 계정 연동 시 생활 기본 카테고리 생성
@@ -184,6 +226,11 @@ export async function PATCH(request: Request) {
         return NextResponse.json({
             success: true,
             nickname,
+            language,
+            countryCode,
+            provinceCode: normalizedProvinceCode,
+            timezone,
+            currency,
         });
     } catch (error) {
         await client.query("ROLLBACK");

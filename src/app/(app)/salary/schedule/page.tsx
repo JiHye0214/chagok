@@ -15,10 +15,7 @@ type PayFrequency = "weekly" | "biweekly" | "semi-monthly" | "monthly" | "custom
 
 type SemiMonthlyType = "first-fifteenth" | "fifteenth-end";
 
-type Province = "ON" | "BC" | "AB" | "SK" | "MB" | "QC" | "NS" | "NB" | "NL" | "PE" | "YT" | "NT" | "NU";
-
 type SalarySettings = {
-    province: Province;
     payType: PayType;
     payFrequency: PayFrequency;
     hasTips: boolean;
@@ -212,6 +209,10 @@ export default function SchedulePage() {
 
     const [holidays, setHolidays] = useState<Holiday[]>([]);
 
+    const [countryCode, setCountryCode] = useState<string | null>(null);
+    const [province, setProvince] = useState<string | null>(null);
+    const [currency, setCurrency] = useState<string | null>(null);
+
     /*
      * --------------------------------------------------
      * Modal
@@ -374,18 +375,60 @@ export default function SchedulePage() {
 
     /*
      * --------------------------------------------------
+     * Load Profile
+     * --------------------------------------------------
+     */
+
+    useEffect(() => {
+        const loadProfile = async () => {
+            try {
+                const response = await fetch("/api/user/profile");
+
+                if (!response.ok) {
+                    throw new Error("프로필 조회 실패");
+                }
+
+                const data = await response.json();
+
+                setCountryCode(data.countryCode ?? null);
+                setProvince(data.province ?? null);
+                setCurrency(data.currency ?? null);
+            } catch (error) {
+                console.error("프로필 조회 실패:", error);
+
+                setCountryCode(null);
+                setProvince(null);
+                setCurrency(null);
+            }
+        };
+
+        loadProfile();
+    }, []);
+
+    /*
+     * --------------------------------------------------
      * Load Holidays
      * --------------------------------------------------
      */
 
     useEffect(() => {
-        if (!salarySettings?.province) {
+        if (!countryCode) {
+            setHolidays([]);
             return;
         }
 
         const loadHolidays = async () => {
             try {
-                const response = await fetch(`/api/holidays?year=${year}&province=${salarySettings.province}`);
+                const params = new URLSearchParams({
+                    year: String(year),
+                    country: countryCode,
+                });
+
+                if (province) {
+                    params.set("province", province);
+                }
+
+                const response = await fetch(`/api/holidays?${params.toString()}`);
 
                 if (!response.ok) {
                     throw new Error("공휴일 조회 실패");
@@ -402,7 +445,7 @@ export default function SchedulePage() {
         };
 
         loadHolidays();
-    }, [year, salarySettings?.province]);
+    }, [year, countryCode, province]);
 
     /*
      * --------------------------------------------------
@@ -561,8 +604,8 @@ export default function SchedulePage() {
     const currentAnnualGross = currentTaxableGrossPay * periodsPerYear;
 
     const currentTaxes = calculateTaxes({
-        country: "CA",
-        province: salarySettings?.province ?? "",
+        country: countryCode ?? "",
+        province: province ?? "",
         annualGross: currentAnnualGross,
     });
 
@@ -1211,7 +1254,7 @@ export default function SchedulePage() {
                                                 <div className="text-right">
                                                     {salarySettings?.payType === "hourly" ? (
                                                         <>
-                                                            <p className="font-semibold">${totalPay.toFixed(2)}</p>
+                                                            <p className="font-semibold">{formatMoney(totalPay)}</p>
 
                                                             <p className="mt-1 text-xs text-gray-400">
                                                                 {hours.toFixed(1)}
@@ -1289,7 +1332,7 @@ export default function SchedulePage() {
 
                                     {selectedDate && isHoliday(selectedDate.slice(0, 10), holidays) && (
                                         <div className="flex items-center gap-1 rounded-lg bg-red-50 px-2 py-0.5">
-                                            <span className="text-[9px]">🇨🇦</span>
+                                            <span className="text-[9px]">{countryCode === "KR" ? "🇰🇷" : "🇨🇦"}</span>
 
                                             <p className="max-w-[100px] truncate text-[9px] font-medium text-red-500">
                                                 {isHoliday(selectedDate.slice(0, 10), holidays)?.name}
@@ -1546,8 +1589,8 @@ export default function SchedulePage() {
             )}
 
             {/* --------------------------------------------------
-                Current Period Tips
-            -------------------------------------------------- */}
+            Current Period Tips
+        -------------------------------------------------- */}
 
             {currentPayPeriod && salarySettings?.hasTips && (
                 <section className="mt-5 rounded-3xl bg-white p-5 shadow-sm">
@@ -1566,7 +1609,7 @@ export default function SchedulePage() {
                             <p className="mb-2 text-sm text-gray-500">현금으로 받은 팁</p>
 
                             <div className="flex items-center rounded-2xl bg-gray-100 px-4">
-                                <span className="text-gray-500">$</span>
+                                <span className="text-gray-500">{currency === "KRW" ? "₩" : "$"}</span>
 
                                 <input
                                     type="number"
@@ -1596,7 +1639,7 @@ export default function SchedulePage() {
                             <p className="mb-2 text-sm text-gray-500">급여에 포함되는 팁</p>
 
                             <div className="flex items-center rounded-2xl bg-gray-100 px-4">
-                                <span className="text-gray-500">$</span>
+                                <span className="text-gray-500">{currency === "KRW" ? "₩" : "$"}</span>
 
                                 <input
                                     type="number"
@@ -1627,7 +1670,7 @@ export default function SchedulePage() {
                                 <p className="mb-2 text-sm text-gray-500">급여에 포함되는 팁</p>
 
                                 <div className="flex items-center rounded-2xl bg-gray-100 px-4">
-                                    <span className="text-gray-500">$</span>
+                                    <span className="text-gray-500">{currency === "KRW" ? "₩" : "$"}</span>
 
                                     <input
                                         type="number"
@@ -1655,7 +1698,7 @@ export default function SchedulePage() {
                                 <p className="mb-2 text-sm text-gray-500">현금으로 받은 팁</p>
 
                                 <div className="flex items-center rounded-2xl bg-gray-100 px-4">
-                                    <span className="text-gray-500">$</span>
+                                    <span className="text-gray-500">{currency === "KRW" ? "₩" : "$"}</span>
 
                                     <input
                                         type="number"
@@ -1692,18 +1735,19 @@ export default function SchedulePage() {
             )}
 
             {/* --------------------------------------------------
-                Current Expected Salary
-            -------------------------------------------------- */}
+            Current Expected Salary
+        -------------------------------------------------- */}
 
             {currentPayPeriod && (
                 <section className="mt-6 rounded-3xl bg-black p-6 text-white shadow-sm">
                     <p className="text-sm text-gray-400">이번예상 급여</p>
 
                     <div className="mt-2 flex items-start gap-2">
-                        <p className="text-4xl font-bold tabular-nums">${animatedNetPay.toFixed(2)}</p>
+                        <p className="text-4xl font-bold tabular-nums">{formatMoney(animatedNetPay)}</p>
                     </div>
 
                     {/* 세부 계산 */}
+
                     {planCode === "pro" ? (
                         <div className="mt-6 space-y-3 text-sm">
                             <div className="flex justify-between">
@@ -1776,6 +1820,7 @@ export default function SchedulePage() {
                     ) : (
                         <div className="relative mt-6 overflow-hidden rounded-2xl">
                             {/* 잠긴 세부사항 미리보기 */}
+
                             <div className="pointer-events-none select-none blur-[3px] opacity-40">
                                 <div className="space-y-3 text-sm">
                                     <div className="flex justify-between">
@@ -1785,39 +1830,40 @@ export default function SchedulePage() {
 
                                     <div className="flex justify-between">
                                         <span className="text-gray-400">기본 급여</span>
-                                        <span>$570.03</span>
+                                        <span>{formatMoney(570.03)}</span>
                                     </div>
 
                                     <div className="flex justify-between">
                                         <span className="text-gray-400">Holiday Pay</span>
-                                        <span>$28.50</span>
+                                        <span>{formatMoney(28.5)}</span>
                                     </div>
 
                                     <div className="flex justify-between">
                                         <span className="text-gray-400">Vacation Pay</span>
-                                        <span>$24.85</span>
+                                        <span>{formatMoney(24.85)}</span>
                                     </div>
 
                                     <div className="border-t border-gray-800 pt-4">
                                         <div className="flex justify-between">
                                             <span className="text-gray-300">세전 급여</span>
-                                            <span>$623.38</span>
+                                            <span>{formatMoney(623.38)}</span>
                                         </div>
                                     </div>
 
                                     <div className="flex justify-between">
                                         <span className="text-gray-400">예상 공제</span>
-                                        <span>-$123.42</span>
+                                        <span>- {formatMoney(123.42)}</span>
                                     </div>
 
                                     <div className="flex justify-between">
                                         <span className="text-gray-300">실수령 급여</span>
-                                        <span>$499.96</span>
+                                        <span>{formatMoney(499.96)}</span>
                                     </div>
                                 </div>
                             </div>
 
                             {/* Lock */}
+
                             <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50">
                                 <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10">
                                     <Lock size={19} strokeWidth={2} className="text-gray-300" />
@@ -1831,12 +1877,12 @@ export default function SchedulePage() {
                     )}
 
                     {salarySettings?.payType === "hourly" && (
-                        <p className="mt-5 text-xs text-gray-400">${hourlyWage.toFixed(2)} / 시간 기준</p>
+                        <p className="mt-5 text-xs text-gray-400">{formatMoney(hourlyWage)} / 시간 기준</p>
                     )}
 
                     {salarySettings?.payType === "salary" && (
                         <p className="mt-5 text-xs text-gray-400">
-                            설정된 월급 ${Number(salarySettings.monthlySalary ?? 0).toFixed(2)}
+                            설정된 월급 {formatMoney(Number(salarySettings.monthlySalary ?? 0))}
                         </p>
                     )}
                 </section>
