@@ -321,7 +321,7 @@ export async function POST(request: Request) {
             )
             VALUES (
                 ${user.id},
-                (${payroll.pay_date}::date + INTERVAL '1 day')::date,
+                ${payroll.pay_date}::date,                
                 'income',
                 ${amount},
                 ${categoryId},

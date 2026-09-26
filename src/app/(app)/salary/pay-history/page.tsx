@@ -279,6 +279,8 @@ export default function PayHistoryPage() {
     const [selectedHistory, setSelectedHistory] = useState<PayHistory | null>(null);
 
     const [isFormOpen, setIsFormOpen] = useState(false);
+    const [isFormMounted, setIsFormMounted] = useState(false);
+    const [isFormAnimating, setIsFormAnimating] = useState(false);
 
     const [isSaving, setIsSaving] = useState(false);
 
@@ -735,6 +737,42 @@ export default function PayHistoryPage() {
     useEffect(() => {
         setIsHistoryExpanded(false);
     }, [historyFilter, customStartDate, customEndDate]);
+
+    /*
+     * Add Modal Open
+     *
+     */
+    useEffect(() => {
+        if (isFormOpen) {
+            setIsFormMounted(true);
+
+            document.body.style.overflow = "hidden";
+
+            const frame = window.requestAnimationFrame(() => {
+                window.requestAnimationFrame(() => {
+                    setIsFormAnimating(true);
+                });
+            });
+
+            return () => {
+                window.cancelAnimationFrame(frame);
+                document.body.style.overflow = "";
+            };
+        }
+
+        setIsFormAnimating(false);
+
+        const timer = window.setTimeout(() => {
+            setIsFormMounted(false);
+        }, 350);
+
+        document.body.style.overflow = "";
+
+        return () => {
+            clearTimeout(timer);
+            document.body.style.overflow = "";
+        };
+    }, [isFormOpen]);
 
     /*
      * 급여 기간을 다음 기간으로 이동
@@ -1578,7 +1616,7 @@ export default function PayHistoryPage() {
             return;
         }
 
-        if (!Number.isFinite(netPay) || netPay < 0) {
+        if (!Number.isFinite(netPay) || netPay <= 0) {
             alert("실수령액을 확인해주세요.");
 
             return;
@@ -2342,153 +2380,176 @@ export default function PayHistoryPage() {
             )}
 
             {/* 입력 / 수정 모달 */}
-            {isFormOpen && (
-                <div
-                    className="fixed inset-0 z-[60] flex items-end justify-center bg-gray-900/40 p-4 sm:items-center"
-                    onClick={closeForm}
-                >
+
+            {isFormMounted && (
+                <div className="fixed inset-0 z-[10000]">
+                    {/* Backdrop */}
+
+                    <button
+                        type="button"
+                        aria-label="닫기"
+                        onClick={closeForm}
+                        className={`absolute inset-0 bg-black/30 transition-opacity duration-300 ease-out ${
+                            isFormAnimating ? "opacity-100" : "opacity-0"
+                        }`}
+                    />
+
+                    {/* Bottom Sheet */}
+
                     <div
-                        className="max-h-[92vh] w-full max-w-md scrollbar-hide overflow-y-auto rounded-3xl bg-white p-6 shadow-xl"
-                        onClick={(event) => event.stopPropagation()}
+                        className={`absolute inset-x-0 bottom-0 mx-auto flex max-h-[95dvh] w-full max-w-md flex-col rounded-t-[2rem] bg-white shadow-2xl transform-gpu transition-transform duration-[350ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                            isFormAnimating ? "translate-y-0" : "translate-y-full"
+                        }`}
                     >
-                        <div className="flex items-start justify-between">
+                        {/* Handle */}
+
+                        <div className="flex shrink-0 items-center justify-center px-6 pb-4 pt-3">
+                            <div className="h-1.5 w-10 rounded-full bg-gray-300" />
+                        </div>
+
+                        {/* Content */}
+
+                        <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-8 pt-2 scrollbar-hide">
+                            {/* Header */}
+
                             <div>
                                 <h2 className="text-xl font-bold">{selectedHistory ? "급여 기록 수정" : "실제 급여 기록"}</h2>
 
                                 <p className="mt-1 text-sm text-gray-400">실제로 받은 급여를 기록해주세요.</p>
                             </div>
 
-                            <button type="button" onClick={closeForm} className="text-xl text-gray-400">
-                                ×
-                            </button>
-                        </div>
+                            <div className="mt-6 space-y-5">
+                                {/* 급여 기간 */}
 
-                        <div className="mt-6 space-y-5">
-                            {/* 급여 기간 */}
-                            <div>
-                                <label className="text-sm font-medium">급여 기간</label>
+                                <div>
+                                    <label className="text-sm font-medium">급여 기간</label>
 
-                                <div className="mt-2 grid grid-cols-2 gap-2">
+                                    <div className="mt-2 grid grid-cols-2 gap-2">
+                                        <input
+                                            type="date"
+                                            value={form.startDate}
+                                            onChange={(event) => updateForm("startDate", event.target.value)}
+                                            className="rounded-2xl border border-gray-200 px-3 py-3 text-sm outline-none"
+                                        />
+
+                                        <input
+                                            type="date"
+                                            value={form.endDate}
+                                            onChange={(event) => updateForm("endDate", event.target.value)}
+                                            className="rounded-2xl border border-gray-200 px-3 py-3 text-sm outline-none"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* 지급일 */}
+
+                                <div>
+                                    <label className="text-sm font-medium">지급일</label>
+
                                     <input
                                         type="date"
-                                        value={form.startDate}
-                                        onChange={(event) => updateForm("startDate", event.target.value)}
-                                        className="rounded-2xl border border-gray-200 px-3 py-3 text-sm outline-none"
-                                    />
-
-                                    <input
-                                        type="date"
-                                        value={form.endDate}
-                                        onChange={(event) => updateForm("endDate", event.target.value)}
-                                        className="rounded-2xl border border-gray-200 px-3 py-3 text-sm outline-none"
+                                        value={form.payDate}
+                                        onChange={(event) => updateForm("payDate", event.target.value)}
+                                        className="mt-2 w-full rounded-2xl border border-gray-200 px-4 py-3 outline-none"
                                     />
                                 </div>
-                            </div>
 
-                            {/* 지급일 */}
-                            <div>
-                                <label className="text-sm font-medium">지급일</label>
+                                {/* 근무시간 */}
 
-                                <input
-                                    type="date"
-                                    value={form.payDate}
-                                    onChange={(event) => updateForm("payDate", event.target.value)}
-                                    className="mt-2 w-full rounded-2xl border border-gray-200 px-4 py-3 outline-none"
-                                />
-                            </div>
+                                <div>
+                                    <label className="text-sm font-medium">총 근무시간</label>
 
-                            {/* 근무시간 */}
-                            <div>
-                                <label className="text-sm font-medium">총 근무시간</label>
+                                    <div className="mt-2 flex items-center gap-2">
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="0.1"
+                                            value={form.hours}
+                                            onChange={(event) => {
+                                                const hours = normalizeNumberInput(event.target.value);
 
-                                <div className="mt-2 flex items-center gap-2">
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        step="0.1"
-                                        value={form.hours}
-                                        onChange={(event) => {
-                                            const hours = normalizeNumberInput(event.target.value);
+                                                setForm((current) => ({
+                                                    ...current,
+                                                    hours,
+                                                    ...(selectedHistory
+                                                        ? {}
+                                                        : {
+                                                              pay:
+                                                                  hourlyWage !== null && hours !== ""
+                                                                      ? (Number(hours) * hourlyWage).toFixed(2)
+                                                                      : current.pay,
+                                                          }),
+                                                }));
+                                            }}
+                                            className="w-full rounded-2xl border border-gray-200 px-4 py-3 outline-none"
+                                        />
 
-                                            setForm((current) => ({
-                                                ...current,
-
-                                                hours,
-
-                                                ...(selectedHistory
-                                                    ? {}
-                                                    : {
-                                                          pay:
-                                                              hourlyWage !== null && hours !== ""
-                                                                  ? (Number(hours) * hourlyWage).toFixed(2)
-                                                                  : current.pay,
-                                                      }),
-                                            }));
-                                        }}
-                                        className="w-full rounded-2xl border border-gray-200 px-4 py-3 outline-none"
-                                    />
-
-                                    <span className="text-sm text-gray-400">시간</span>
+                                        <span className="text-sm text-gray-400">시간</span>
+                                    </div>
                                 </div>
-                            </div>
 
-                            {/* 급여 */}
-                            <div>
-                                <label className="text-sm font-medium">급여</label>
+                                {/* 급여 */}
 
-                                <div className="mt-2 flex items-center gap-2">
-                                    <span className="text-gray-400">$</span>
+                                <div>
+                                    <label className="text-sm font-medium">급여</label>
 
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        step="0.01"
-                                        value={form.pay}
-                                        onChange={(event) => updateForm("pay", normalizeNumberInput(event.target.value))}
-                                        className="w-full rounded-2xl border border-gray-200 px-4 py-3 outline-none"
-                                    />
+                                    <div className="mt-2 flex items-center gap-2">
+                                        <span className="text-gray-400">$</span>
+
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="0.01"
+                                            value={form.pay}
+                                            onChange={(event) => updateForm("pay", normalizeNumberInput(event.target.value))}
+                                            className="w-full rounded-2xl border border-gray-200 px-4 py-3 outline-none"
+                                        />
+                                    </div>
                                 </div>
-                            </div>
 
-                            {/* 팁 */}
-                            <div>
-                                <label className="text-sm font-medium">팁</label>
+                                {/* 팁 */}
 
-                                <div className="mt-2 flex items-center gap-2">
-                                    <span className="text-gray-400">$</span>
+                                <div>
+                                    <label className="text-sm font-medium">팁</label>
 
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        step="0.01"
-                                        value={form.tips}
-                                        onChange={(event) => updateForm("tips", normalizeNumberInput(event.target.value))}
-                                        className="w-full rounded-2xl border border-gray-200 px-4 py-3 outline-none"
-                                    />
+                                    <div className="mt-2 flex items-center gap-2">
+                                        <span className="text-gray-400">$</span>
+
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="0.01"
+                                            value={form.tips}
+                                            onChange={(event) => updateForm("tips", normalizeNumberInput(event.target.value))}
+                                            className="w-full rounded-2xl border border-gray-200 px-4 py-3 outline-none"
+                                        />
+                                    </div>
                                 </div>
-                            </div>
 
-                            {/* 공제 */}
-                            <div>
-                                <label className="text-sm font-medium">공제</label>
+                                {/* 공제 */}
 
-                                <div className="mt-2 flex items-center gap-2">
-                                    <span className="text-gray-400">$</span>
+                                <div>
+                                    <label className="text-sm font-medium">공제</label>
 
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        step="0.01"
-                                        value={form.deductions}
-                                        onChange={(event) => updateForm("deductions", normalizeNumberInput(event.target.value))}
-                                        className="w-full rounded-2xl border border-gray-200 px-4 py-3 outline-none"
-                                    />
+                                    <div className="mt-2 flex items-center gap-2">
+                                        <span className="text-gray-400">$</span>
+
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="0.01"
+                                            value={form.deductions}
+                                            onChange={(event) =>
+                                                updateForm("deductions", normalizeNumberInput(event.target.value))
+                                            }
+                                            className="w-full rounded-2xl border border-gray-200 px-4 py-3 outline-none"
+                                        />
+                                    </div>
                                 </div>
-                            </div>
 
-                            {/* 추가 / 차감 */}
-                            <div>
-                                <div className="flex items-center justify-between">
+                                {/* 추가 / 차감 */}
+
+                                <div>
                                     <div>
                                         <label className="text-sm font-medium">추가 / 차감</label>
 
@@ -2496,133 +2557,133 @@ export default function PayHistoryPage() {
                                             Holiday Pay 등의 금액을 추가하거나 차감할 수 있어요.
                                         </p>
                                     </div>
-                                </div>
 
-                                {form.adjustments.length > 0 && (
-                                    <div className="mt-3 space-y-3">
-                                        {form.adjustments.map((adjustment, index) => (
-                                            <div key={index} className="rounded-2xl bg-gray-50 p-3">
-                                                <div className="flex gap-2">
-                                                    <select
-                                                        value={adjustment.type}
-                                                        onChange={(event) =>
-                                                            updateAdjustment(index, "type", event.target.value as AdjustmentType)
-                                                        }
-                                                        className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none"
-                                                    >
-                                                        <option value="add">+ 추가</option>
+                                    {form.adjustments.length > 0 && (
+                                        <div className="mt-3 space-y-3">
+                                            {form.adjustments.map((adjustment, index) => (
+                                                <div key={index} className="rounded-2xl bg-gray-50 p-3">
+                                                    <div className="flex gap-2">
+                                                        <select
+                                                            value={adjustment.type}
+                                                            onChange={(event) =>
+                                                                updateAdjustment(
+                                                                    index,
+                                                                    "type",
+                                                                    event.target.value as AdjustmentType,
+                                                                )
+                                                            }
+                                                            className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none"
+                                                        >
+                                                            <option value="add">+ 추가</option>
+                                                            <option value="subtract">− 차감</option>
+                                                        </select>
 
-                                                        <option value="subtract">− 차감</option>
-                                                    </select>
+                                                        <input
+                                                            type="text"
+                                                            value={adjustment.name}
+                                                            onChange={(event) =>
+                                                                updateAdjustment(index, "name", event.target.value)
+                                                            }
+                                                            placeholder="예: Holiday Pay"
+                                                            className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none"
+                                                        />
 
-                                                    <input
-                                                        type="text"
-                                                        value={adjustment.name}
-                                                        onChange={(event) => updateAdjustment(index, "name", event.target.value)}
-                                                        placeholder="예: Holiday Pay"
-                                                        className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none"
-                                                    />
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => removeAdjustment(index)}
+                                                            className="px-2 text-gray-400"
+                                                        >
+                                                            ×
+                                                        </button>
+                                                    </div>
 
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => removeAdjustment(index)}
-                                                        className="px-2 text-gray-400"
-                                                    >
-                                                        ×
-                                                    </button>
+                                                    <div className="mt-2 flex items-center gap-2">
+                                                        <span className="text-gray-400">$</span>
+
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            step="0.01"
+                                                            value={adjustment.amount === 0 ? "" : adjustment.amount}
+                                                            onChange={(event) =>
+                                                                updateAdjustment(index, "amount", event.target.value)
+                                                            }
+                                                            placeholder="0.00"
+                                                            className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none"
+                                                        />
+                                                    </div>
                                                 </div>
+                                            ))}
+                                        </div>
+                                    )}
 
-                                                <div className="mt-2 flex items-center gap-2">
-                                                    <span className="text-gray-400">$</span>
+                                    <div className="mt-3 grid grid-cols-2 gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => addAdjustment("add")}
+                                            className="rounded-2xl border border-gray-200 py-3 text-sm font-medium"
+                                        >
+                                            + 금액 추가
+                                        </button>
 
-                                                    <input
-                                                        type="number"
-                                                        min="0"
-                                                        step="0.01"
-                                                        value={adjustment.amount === 0 ? "" : adjustment.amount}
-                                                        onChange={(event) =>
-                                                            updateAdjustment(index, "amount", event.target.value)
-                                                        }
-                                                        placeholder="0.00"
-                                                        className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none"
-                                                    />
-                                                </div>
-                                            </div>
-                                        ))}
+                                        <button
+                                            type="button"
+                                            onClick={() => addAdjustment("subtract")}
+                                            className="rounded-2xl border border-gray-200 py-3 text-sm font-medium"
+                                        >
+                                            − 금액 차감
+                                        </button>
                                     </div>
-                                )}
+                                </div>
 
-                                <div className="mt-3 grid grid-cols-2 gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => addAdjustment("add")}
-                                        className="rounded-2xl border border-gray-200 py-3 text-sm font-medium"
-                                    >
-                                        + 금액 추가
-                                    </button>
+                                {/* 계산된 실수령액 */}
+
+                                <div className="rounded-3xl bg-gray-50 p-5">
+                                    <p className="text-xs text-gray-400">계산된 실수령액</p>
+
+                                    <p className="mt-1 text-2xl font-bold">{formatMoney(calculatedNetPay)}</p>
 
                                     <button
                                         type="button"
-                                        onClick={() => addAdjustment("subtract")}
-                                        className="rounded-2xl border border-gray-200 py-3 text-sm font-medium"
+                                        onClick={useCalculatedNetPay}
+                                        className="mt-4 w-full rounded-2xl bg-white px-4 py-3 text-sm font-medium shadow-sm"
                                     >
-                                        − 금액 차감
+                                        이 금액이 맞나요?
                                     </button>
+                                </div>
+
+                                {/* 실제 실수령액 */}
+
+                                <div>
+                                    <label className="text-sm font-medium">실제 실수령액</label>
+
+                                    <div className="mt-2 flex items-center gap-2">
+                                        <span className="text-gray-400">$</span>
+
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="0.01"
+                                            value={form.netPay}
+                                            onChange={(event) => updateForm("netPay", normalizeNumberInput(event.target.value))}
+                                            placeholder={calculatedNetPay.toFixed(2)}
+                                            className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-lg font-semibold outline-none"
+                                        />
+                                    </div>
+
+                                    <p className="mt-2 text-xs text-gray-400">
+                                        실제 급여명세서나 통장에 입금된 금액을 입력해주세요.
+                                    </p>
                                 </div>
                             </div>
 
-                            {/* 계산된 실수령액 */}
-                            <div className="rounded-3xl bg-gray-50 p-5">
-                                <p className="text-xs text-gray-400">계산된 실수령액</p>
-
-                                <p className="mt-1 text-2xl font-bold">{formatMoney(calculatedNetPay)}</p>
-
-                                <button
-                                    type="button"
-                                    onClick={useCalculatedNetPay}
-                                    className="mt-4 w-full rounded-2xl bg-white px-4 py-3 text-sm font-medium shadow-sm"
-                                >
-                                    이 금액이 맞나요?
-                                </button>
-                            </div>
-
-                            {/* 실제 실수령액 */}
-                            <div>
-                                <label className="text-sm font-medium">실제 실수령액</label>
-
-                                <div className="mt-2 flex items-center gap-2">
-                                    <span className="text-gray-400">$</span>
-
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        step="0.01"
-                                        value={form.netPay}
-                                        onChange={(event) => updateForm("netPay", normalizeNumberInput(event.target.value))}
-                                        placeholder={calculatedNetPay.toFixed(2)}
-                                        className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-lg font-semibold outline-none"
-                                    />
-                                </div>
-
-                                <p className="mt-2 text-xs text-gray-400">실제 급여명세서나 통장에 입금된 금액을 입력해주세요.</p>
-                            </div>
-                        </div>
-
-                        <div className="mt-6 flex gap-3">
-                            <button
-                                type="button"
-                                onClick={closeForm}
-                                disabled={isSaving}
-                                className="flex-1 rounded-2xl bg-gray-100 py-3 text-sm font-medium disabled:opacity-50"
-                            >
-                                취소
-                            </button>
+                            {/* Buttons */}
 
                             <button
                                 type="button"
                                 onClick={() => void savePayHistory()}
                                 disabled={isSaving}
-                                className="flex-1 rounded-2xl bg-gray-900 py-3 text-sm font-medium text-white disabled:opacity-50"
+                                className="mt-6 w-full rounded-2xl bg-gray-900 py-4 text-sm font-semibold text-white disabled:opacity-50"
                             >
                                 {isSaving ? "저장 중..." : "저장하기"}
                             </button>

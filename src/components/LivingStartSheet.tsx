@@ -83,7 +83,7 @@ export default function LivingStartSheet({ isOpen, onClose, onSaved }: LivingSta
     const totalMoney = livingMoney + savingsMoney;
 
     const handleSave = async () => {
-        if (!Number.isFinite(livingMoney) || livingMoney < 0 || !Number.isFinite(savingsMoney) || savingsMoney < 0) {
+        if (!Number.isFinite(livingMoney) || !Number.isFinite(savingsMoney) || savingsMoney < 0) {
             return;
         }
 
@@ -160,7 +160,6 @@ export default function LivingStartSheet({ isOpen, onClose, onSaved }: LivingSta
 
                                         <input
                                             type="number"
-                                            min="0"
                                             inputMode="decimal"
                                             value={initialLivingMoney}
                                             onChange={(e) => setInitialLivingMoney(e.target.value)}

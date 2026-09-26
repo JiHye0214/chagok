@@ -66,6 +66,7 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved }: Salary
      */
     const [regionCode, setRegionCode] = useState<RegionCode | null>(null);
     const [countryCode, setCountryCode] = useState<string | null>(null);
+    const [currency, setCurrency] = useState<string | null>(null);
 
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
@@ -149,6 +150,7 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved }: Salary
                  */
                 setCountryCode(profile.countryCode ?? null);
                 setRegionCode(profile.provinceCode ?? null);
+                setCurrency(profile.currency ?? null);
 
                 /*
                  * 기존 Salary Settings
@@ -194,13 +196,13 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved }: Salary
      * regionCode 자체를 fallback으로 보여준다.
      */
     const getWorkRegionLabel = () => {
-        if (!countryCode) {
-            return "프로필에서 설정된 지역";
-        }
-
-        if (!regionCode) {
-            return "프로필에 설정된 국가";
-        }
+        const countryLabels: Record<string, string> = {
+            KR: "🇰🇷 대한민국",
+            CA: "🇨🇦 캐나다",
+            US: "🇺🇸 미국",
+            AU: "🇦🇺 호주",
+            GB: "🇬🇧 영국",
+        };
 
         const regionLabels: Record<string, string> = {
             ON: "🇨🇦 Ontario",
@@ -211,7 +213,15 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved }: Salary
             QC: "🇨🇦 Quebec",
         };
 
-        return regionLabels[regionCode] ?? regionCode;
+        if (!countryCode) {
+            return "국가 설정 필요";
+        }
+
+        if (regionCode) {
+            return regionLabels[regionCode] ?? `${countryLabels[countryCode] ?? countryCode} · ${regionCode}`;
+        }
+
+        return countryLabels[countryCode] ?? countryCode;
     };
 
     /*
@@ -426,8 +436,9 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved }: Salary
                                     <h2 className="text-lg font-semibold">시급</h2>
 
                                     <div className="mt-4 flex items-center rounded-2xl bg-gray-100 px-4">
-                                        <span className="text-gray-500">$</span>
-
+                                        <span className="text-gray-500">
+                                            {currency === "KRW" ? "₩" : currency === "USD" ? "$" : "C$"}
+                                        </span>
                                         <input
                                             type="number"
                                             min="0"
@@ -438,7 +449,7 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved }: Salary
 
                                                 setHourlyWage(value < 0 ? "0" : e.target.value);
                                             }}
-                                            placeholder="17.60"
+                                            placeholder={currency === "KRW" ? "10,320" : "17.60"}
                                             className="w-full bg-transparent px-2 py-4 outline-none"
                                         />
                                     </div>
@@ -451,7 +462,9 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved }: Salary
                                     <h2 className="text-lg font-semibold">월급</h2>
 
                                     <div className="mt-4 flex items-center rounded-2xl bg-gray-100 px-4">
-                                        <span className="text-gray-500">$</span>
+                                        <span className="text-gray-500">
+                                            {currency === "KRW" ? "₩" : currency === "USD" ? "$" : "C$"}
+                                        </span>
 
                                         <input
                                             type="number"

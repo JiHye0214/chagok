@@ -220,6 +220,8 @@ export default function SchedulePage() {
      */
 
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+    const [isMounted, setIsMounted] = useState(false);
+    const [isAnimating, setIsAnimating] = useState(false);
 
     const [editingSchedule, setEditingSchedule] = useState<WorkSchedule | null>(null);
 
@@ -543,6 +545,43 @@ export default function SchedulePage() {
 
         loadTips();
     }, [currentPayPeriod?.startDate, currentPayPeriod?.endDate]);
+
+    /*
+     * --------------------------------------------------
+     * Schedule Modal
+     * --------------------------------------------------
+     */
+    useEffect(() => {
+        if (isAddModalOpen) {
+            setIsMounted(true);
+
+            document.body.style.overflow = "hidden";
+
+            const frame = window.requestAnimationFrame(() => {
+                window.requestAnimationFrame(() => {
+                    setIsAnimating(true);
+                });
+            });
+
+            return () => {
+                window.cancelAnimationFrame(frame);
+                document.body.style.overflow = "";
+            };
+        }
+
+        setIsAnimating(false);
+
+        const timer = window.setTimeout(() => {
+            setIsMounted(false);
+        }, 350);
+
+        document.body.style.overflow = "";
+
+        return () => {
+            clearTimeout(timer);
+            document.body.style.overflow = "";
+        };
+    }, [isAddModalOpen]);
 
     /*
      * --------------------------------------------------
@@ -1036,21 +1075,10 @@ export default function SchedulePage() {
     return (
         <div className="mx-auto max-w-md">
             {/* Header */}
-
             <header className="flex items-center justify-between">
                 <BackButtonHeader href="/salary" title="근무 관리" description="근무 일정을 등록하고 예상 급여를 확인해보세요." />
-
-                <a
-                    href="/salary/settings"
-                    className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-gray-500 shadow-sm"
-                    aria-label="급여 설정"
-                >
-                    ⚙
-                </a>
             </header>
-
             {/* Pay Period Notice */}
-
             {currentPayPeriod && (
                 <section className="mt-10 rounded-3xl bg-white p-5 shadow-sm">
                     <div className="flex items-center justify-between">
@@ -1072,7 +1100,6 @@ export default function SchedulePage() {
                     </div>
                 </section>
             )}
-
             {planCode === "free" && schedules.length >= 100 && (
                 <div className="my-4 flex items-center gap-3 rounded-2xl bg-gray-50 p-4">
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100">
@@ -1086,9 +1113,7 @@ export default function SchedulePage() {
                     </div>
                 </div>
             )}
-
             {/* Calendar */}
-
             <section className="mt-5 rounded-3xl bg-white p-5 shadow-sm">
                 <div className="mb-5 flex items-center justify-between">
                     <button
@@ -1130,6 +1155,30 @@ export default function SchedulePage() {
 
                         const hasSchedule = daySchedules.length > 0;
 
+                        const dayHours = daySchedules.reduce(
+                            (total, schedule) =>
+                                total +
+                                calculateHours(
+                                    schedule.startTime,
+                                    schedule.endTime,
+                                    schedule.hasBreak ? schedule.breakMinutes : 0,
+                                ),
+                            0,
+                        );
+
+                        const dayPay = daySchedules.reduce((total, schedule) => {
+                            const hours = calculateHours(
+                                schedule.startTime,
+                                schedule.endTime,
+                                schedule.hasBreak ? schedule.breakMinutes : 0,
+                            );
+
+                            const basePay = hours * hourlyWage;
+                            const premiumPay = holiday ? basePay * 0.5 : 0;
+
+                            return total + basePay + premiumPay;
+                        }, 0);
+
                         const isPayPeriodDay = currentPayPeriod
                             ? date >= currentPayPeriod.startDate && date <= currentPayPeriod.endDate
                             : false;
@@ -1139,38 +1188,54 @@ export default function SchedulePage() {
                         return (
                             <div
                                 key={date}
-                                className={`relative flex h-16 flex-col items-center ${
-                                    isPayPeriodDay ? "rounded-xl bg-gray-100" : ""
+                                className={`relative flex h-16 flex-col items-center rounded-xl ${
+                                    isPayPeriodDay ? "bg-gray-100" : ""
                                 }`}
                             >
                                 <button
                                     onClick={() => (hasSchedule ? openEditModal(daySchedules[0]) : openAddModal(date))}
-                                    className="flex h-12 w-full flex-col items-center justify-center rounded-xl"
+                                    className="flex h-full w-full flex-col items-center justify-start rounded-xl pt-1"
                                 >
                                     <span
                                         className={
                                             hasSchedule
                                                 ? "flex h-8 w-8 items-center justify-center rounded-full bg-black text-sm font-medium text-white"
                                                 : holiday
-                                                  ? "text-sm font-semibold text-red-500"
-                                                  : "text-sm"
+                                                  ? "flex h-8 w-8 items-center justify-center text-sm font-medium text-red-500"
+                                                  : "flex h-8 w-8 items-center justify-center text-sm text-gray-900"
                                         }
                                     >
                                         {day}
                                     </span>
 
-                                    {hasSchedule && !isPayDate && !holiday && (
-                                        <span className="absolute bottom-1 h-1 w-1 rounded-full bg-black" />
-                                    )}
+                                    {hasSchedule ? (
+                                        <>
+                                            <span className="mt-1.5 text-[8px] font-medium leading-none text-gray-500">
+                                                {dayHours.toFixed(2)}h
+                                            </span>
 
-                                    {holiday && (
-                                        <span className="absolute bottom-0 max-w-full truncate px-1 text-[8px] font-medium text-red-500">
-                                            {holiday.name}
-                                        </span>
+                                            {salarySettings?.payType === "hourly" ? (
+                                                <span className="mt-1 text-[8px] font-semibold leading-none text-gray-700">
+                                                    {formatMoney(dayPay)}
+                                                </span>
+                                            ) : salarySettings?.payType === "salary" ? (
+                                                <span className="mt-1 text-[10px] font-medium leading-none text-gray-500">
+                                                    월급
+                                                </span>
+                                            ) : null}
+                                        </>
+                                    ) : (
+                                        holiday && (
+                                            <span className="mt-1 max-w-full truncate px-1 text-[9px] font-medium leading-none text-red-400">
+                                                {holiday.name}
+                                            </span>
+                                        )
                                     )}
 
                                     {isPayDate && (
-                                        <span className="absolute bottom-0 text-[8px] font-medium text-gray-500">급여일</span>
+                                        <span className="absolute bottom-0 text-[8px] font-medium leading-none text-gray-400">
+                                            급여일
+                                        </span>
                                     )}
                                 </button>
                             </div>
@@ -1178,145 +1243,61 @@ export default function SchedulePage() {
                     })}
                 </div>
 
-                <div className="mt-4 flex items-center gap-4 text-xs text-gray-400">
-                    <div className="flex items-center gap-2">
-                        <span className="h-3 w-3 rounded bg-gray-100" />
-                        급여 기간
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                        <span className="h-3 w-3 rounded-full bg-black" />
-                        근무 등록
-                    </div>
-                </div>
-            </section>
-
-            {/* This Month Schedule List */}
-
-            <section className="mt-5 rounded-3xl bg-white p-5 shadow-sm">
-                <div className="flex items-center justify-between">
-                    <h2 className="text-lg font-semibold">이번 달 근무</h2>
-
-                    <span className="text-sm text-gray-400">{currentMonthSchedules.length}회</span>
-                </div>
-
-                {currentMonthSchedules.length === 0 ? (
-                    <p className="mt-5 text-sm text-gray-400">아직 등록된 근무가 없어요.</p>
-                ) : (
-                    <>
-                        <div className="mt-4 space-y-3">
-                            {currentMonthSchedules
-                                .slice(0, showAllSchedules ? currentMonthSchedules.length : 3)
-                                .map((schedule) => {
-                                    const hours = calculateHours(
-                                        schedule.startTime,
-                                        schedule.endTime,
-                                        schedule.hasBreak ? schedule.breakMinutes : 0,
-                                    );
-
-                                    const basePay = hours * hourlyWage;
-
-                                    const scheduleDate = schedule.date.slice(0, 10);
-
-                                    const holiday = isHoliday(scheduleDate, holidays);
-
-                                    const premiumPay = holiday ? basePay * 0.5 : 0;
-
-                                    const totalPay = basePay + premiumPay;
-
-                                    return (
-                                        <button
-                                            key={schedule.id}
-                                            onClick={() => openEditModal(schedule)}
-                                            className="w-full rounded-2xl bg-gray-50 p-4 text-left"
-                                        >
-                                            <div className="flex items-center justify-between">
-                                                <div>
-                                                    <div className="flex items-center gap-2">
-                                                        <p className={`font-semibold ${holiday ? "text-red-500" : ""}`}>
-                                                            {formatDate(new Date(schedule.date))}
-                                                        </p>
-
-                                                        {holiday && (
-                                                            <span className="text-[10px] font-medium text-red-400">
-                                                                {holiday.name}
-                                                            </span>
-                                                        )}
-                                                    </div>
-
-                                                    <p className="mt-1 text-sm text-gray-500">
-                                                        {schedule.startTime.slice(0, 5)}
-                                                        {" ~ "}
-                                                        {schedule.endTime.slice(0, 5)}
-                                                    </p>
-                                                </div>
-
-                                                <div className="text-right">
-                                                    {salarySettings?.payType === "hourly" ? (
-                                                        <>
-                                                            <p className="font-semibold">{formatMoney(totalPay)}</p>
-
-                                                            <p className="mt-1 text-xs text-gray-400">
-                                                                {hours.toFixed(1)}
-                                                                시간
-                                                            </p>
-                                                        </>
-                                                    ) : salarySettings?.payType === "salary" ? (
-                                                        <>
-                                                            <p className="font-semibold">월급</p>
-
-                                                            <p className="mt-1 text-xs text-gray-400">
-                                                                {hours.toFixed(1)}
-                                                                시간
-                                                            </p>
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <p className="font-semibold">-</p>
-
-                                                            <p className="mt-1 text-xs text-gray-400">
-                                                                {hours.toFixed(1)}
-                                                                시간
-                                                            </p>
-                                                        </>
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            <div className="mt-3 flex gap-2">
-                                                {schedule.alarmEnabled && (
-                                                    <span className="rounded-full bg-white px-3 py-1 text-xs text-gray-500">
-                                                        🔔 {schedule.alarmMinutesBefore}분 전
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </button>
-                                    );
-                                })}
+                <div className="mt-5 flex items-center justify-between border-t border-gray-100 pt-5">
+                    <div className="flex items-center gap-4 text-xs text-gray-400">
+                        <div className="flex items-center gap-2">
+                            <span className="h-3 w-3 rounded bg-gray-100" />
+                            급여 기간
                         </div>
 
-                        {currentMonthSchedules.length > 3 && (
-                            <button
-                                type="button"
-                                onClick={() => setShowAllSchedules((prev) => !prev)}
-                                className="mt-4 w-full rounded-2xl bg-gray-100 py-3 text-sm font-medium text-gray-600"
-                            >
-                                {showAllSchedules ? "접기" : `전체 ${currentMonthSchedules.length}개 보기`}
-                            </button>
-                        )}
-                    </>
-                )}
+                        <div className="flex items-center gap-2">
+                            <span className="h-3 w-3 rounded-full bg-black" />
+                            근무 등록
+                        </div>
+                    </div>
+
+                    <span className="text-xs font-medium text-gray-400">
+                        {currentMonthSchedules.length}회 / {currentPeriodEstimate.hours.toFixed(2)}시간
+                    </span>
+                </div>
             </section>
 
             {/* Add / Edit Modal */}
+            {isMounted && (
+                <div className="fixed inset-0 z-[10000]">
+                    {/* Backdrop */}
 
-            {isAddModalOpen && (
-                <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40 p-5">
-                    <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl bg-white p-5 scrollbar-hide">
-                        {/* Modal Header */}
+                    <button
+                        type="button"
+                        aria-label="닫기"
+                        onClick={() => {
+                            setIsAddModalOpen(false);
+                            setEditingSchedule(null);
+                        }}
+                        className={`absolute inset-0 bg-black/30 transition-opacity duration-300 ease-out ${
+                            isAnimating ? "opacity-100" : "opacity-0"
+                        }`}
+                    />
 
-                        <div className="flex items-start justify-between">
-                            <div className="relative">
+                    {/* Bottom Sheet */}
+
+                    <div
+                        className={`absolute inset-x-0 bottom-0 mx-auto flex max-h-[95dvh] w-full max-w-md flex-col rounded-t-[2rem] bg-gray-50 shadow-2xl transform-gpu transition-transform duration-[350ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                            isAnimating ? "translate-y-0" : "translate-y-full"
+                        }`}
+                    >
+                        {/* Handle */}
+
+                        <div className="flex shrink-0 items-center justify-center px-6 pb-4 pt-3">
+                            <div className="h-1.5 w-10 rounded-full bg-gray-300" />
+                        </div>
+
+                        {/* Content */}
+
+                        <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-8 pt-2 scrollbar-hide">
+                            {/* Modal Header */}
+
+                            <div>
                                 <h2 className="text-xl font-bold">{editingSchedule ? "근무 수정" : "근무 추가"}</h2>
 
                                 <div className="mt-1 flex items-center gap-2">
@@ -1346,218 +1327,210 @@ export default function SchedulePage() {
                                 </div>
                             </div>
 
-                            <button
-                                onClick={() => {
-                                    setIsAddModalOpen(false);
+                            {/* Time */}
 
-                                    setEditingSchedule(null);
-                                }}
-                                className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-500"
-                            >
-                                ×
-                            </button>
-                        </div>
-
-                        {/* Time */}
-
-                        <div className="mt-6 grid grid-cols-2 gap-3">
-                            <div>
-                                <p className="mb-2 text-sm text-gray-500">시작</p>
-
-                                <input
-                                    type="time"
-                                    value={startTime}
-                                    onChange={(e) => setStartTime(e.target.value)}
-                                    className="w-full rounded-2xl bg-gray-100 px-4 py-4 outline-none"
-                                />
-                            </div>
-
-                            <div>
-                                <p className="mb-2 text-sm text-gray-500">종료</p>
-
-                                <input
-                                    type="time"
-                                    value={endTime}
-                                    onChange={(e) => setEndTime(e.target.value)}
-                                    className="w-full rounded-2xl bg-gray-100 px-4 py-4 outline-none"
-                                />
-                            </div>
-                        </div>
-
-                        {/* Break */}
-
-                        <div className="mt-5 rounded-2xl bg-gray-50 p-4">
-                            <div className="flex items-center justify-between">
+                            <div className="mt-6 grid grid-cols-2 gap-3">
                                 <div>
-                                    <p className="font-medium">☕ 휴게시간</p>
+                                    <p className="mb-2 text-sm text-gray-500">시작</p>
 
-                                    <p className="mt-1 text-xs text-gray-400">이번 근무에 휴게시간이 있었나요?</p>
+                                    <input
+                                        type="time"
+                                        value={startTime}
+                                        onChange={(e) => setStartTime(e.target.value)}
+                                        className="w-full rounded-2xl bg-gray-100 px-4 py-4 outline-none"
+                                    />
                                 </div>
 
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setHasBreak((prev) => {
-                                            const next = !prev;
+                                <div>
+                                    <p className="mb-2 text-sm text-gray-500">종료</p>
 
-                                            if (!next) {
-                                                setBreakMinutes("0");
-                                            }
-
-                                            return next;
-                                        });
-                                    }}
-                                    className={`relative h-7 w-12 rounded-full transition ${
-                                        hasBreak ? "bg-black" : "bg-gray-300"
-                                    }`}
-                                >
-                                    <span
-                                        className={`absolute top-1 h-5 w-5 rounded-full bg-white transition ${
-                                            hasBreak ? "left-6" : "left-1"
-                                        }`}
+                                    <input
+                                        type="time"
+                                        value={endTime}
+                                        onChange={(e) => setEndTime(e.target.value)}
+                                        className="w-full rounded-2xl bg-gray-100 px-4 py-4 outline-none"
                                     />
-                                </button>
+                                </div>
                             </div>
 
-                            {hasBreak && (
-                                <div className="mt-4">
-                                    <p className="mb-2 text-sm text-gray-500">휴게시간은 몇 분이었나요?</p>
+                            {/* Break */}
 
-                                    <div className="flex items-center rounded-2xl bg-white px-4">
-                                        <input
-                                            type="number"
-                                            min={0}
-                                            value={breakMinutes}
-                                            onChange={(e) => {
-                                                const value = e.target.value;
+                            <div className="mt-5 rounded-2xl bg-white p-4">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="font-medium">☕ 휴게시간</p>
 
-                                                if (value === "") {
-                                                    setBreakMinutes("");
+                                        <p className="mt-1 text-xs text-gray-400">이번 근무에 휴게시간이 있었나요?</p>
+                                    </div>
 
-                                                    return;
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setHasBreak((prev) => {
+                                                const next = !prev;
+
+                                                if (!next) {
+                                                    setBreakMinutes("0");
                                                 }
 
-                                                setBreakMinutes(value.replace(/^0+(?=\d)/, ""));
-                                            }}
-                                            className="w-full bg-transparent px-2 py-4 outline-none"
-                                            placeholder="30"
+                                                return next;
+                                            });
+                                        }}
+                                        className={`relative h-7 w-12 rounded-full transition ${
+                                            hasBreak ? "bg-black" : "bg-gray-300"
+                                        }`}
+                                    >
+                                        <span
+                                            className={`absolute top-1 h-5 w-5 rounded-full bg-white transition ${
+                                                hasBreak ? "left-6" : "left-1"
+                                            }`}
                                         />
+                                    </button>
+                                </div>
 
-                                        <span className="shrink-0 text-sm text-gray-400">분</span>
+                                {hasBreak && (
+                                    <div className="mt-4">
+                                        <p className="mb-2 text-sm text-gray-500">휴게시간은 몇 분이었나요?</p>
+
+                                        <div className="flex items-center rounded-2xl bg-gray-50 px-4">
+                                            <input
+                                                type="number"
+                                                min={0}
+                                                value={breakMinutes}
+                                                onChange={(e) => {
+                                                    const value = e.target.value;
+
+                                                    if (value === "") {
+                                                        setBreakMinutes("");
+                                                        return;
+                                                    }
+
+                                                    setBreakMinutes(value.replace(/^0+(?=\d)/, ""));
+                                                }}
+                                                className="w-full bg-transparent px-2 py-4 outline-none"
+                                                placeholder="30"
+                                            />
+
+                                            <span className="shrink-0 text-sm text-gray-400">분</span>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Hours Preview */}
+
+                            <div className="mt-4 rounded-2xl bg-white p-4">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm text-gray-500">실제 근무시간</span>
+
+                                    <span className="font-semibold">
+                                        {calculateHours(startTime, endTime, hasBreak ? Number(breakMinutes) || 0 : 0).toFixed(2)}
+                                        시간
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Expected Pay Preview */}
+
+                            {salarySettings?.payType === "hourly" && (
+                                <div className="mt-3 rounded-2xl bg-white p-4">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-sm text-gray-500">예상 급여</span>
+
+                                        <span className="font-semibold">
+                                            {formatMoney(
+                                                calculateHours(startTime, endTime, hasBreak ? Number(breakMinutes) || 0 : 0) *
+                                                    hourlyWage *
+                                                    (selectedDate && isHoliday(selectedDate.slice(0, 10), holidays) ? 1.5 : 1),
+                                            )}
+                                        </span>
                                     </div>
                                 </div>
                             )}
-                        </div>
 
-                        {/* Hours Preview */}
+                            {/* Alarm */}
 
-                        <div className="mt-4 rounded-2xl bg-gray-50 p-4">
-                            <div className="flex justify-between">
-                                <span className="text-sm text-gray-500">실제 근무시간</span>
+                            <div className="mt-5 rounded-2xl bg-white p-4">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="font-medium">🔔 근무 알림</p>
 
-                                <span className="font-semibold">
-                                    {calculateHours(startTime, endTime, hasBreak ? Number(breakMinutes) || 0 : 0).toFixed(2)}
-                                    시간
-                                </span>
-                            </div>
-                        </div>
+                                        <p className="mt-1 text-xs text-gray-400">근무 전에 미리 알려드려요.</p>
+                                    </div>
 
-                        {/* Alarm */}
+                                    <button
+                                        type="button"
+                                        onClick={async () => {
+                                            if (!alarmEnabled) {
+                                                try {
+                                                    await subscribeToPush();
+                                                } catch (error) {
+                                                    console.error(error);
 
-                        <div className="mt-5 rounded-2xl bg-gray-50 p-4">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="font-medium">🔔 근무 알림</p>
+                                                    alert(error instanceof Error ? error.message : "알림 설정에 실패했어요.");
 
-                                    <p className="mt-1 text-xs text-gray-400">근무 전에 미리 알려드려요.</p>
-                                </div>
-
-                                <button
-                                    type="button"
-                                    onClick={async () => {
-                                        if (!alarmEnabled) {
-                                            try {
-                                                await subscribeToPush();
-                                            } catch (error) {
-                                                console.error(error);
-
-                                                alert(error instanceof Error ? error.message : "알림 설정에 실패했어요.");
-
-                                                return;
+                                                    return;
+                                                }
                                             }
-                                        }
 
-                                        setAlarmEnabled((prev) => !prev);
-                                    }}
-                                    className={`relative h-7 w-12 rounded-full transition ${
-                                        alarmEnabled ? "bg-black" : "bg-gray-300"
-                                    }`}
-                                >
-                                    <span
-                                        className={`absolute top-1 h-5 w-5 rounded-full bg-white transition ${
-                                            alarmEnabled ? "left-6" : "left-1"
+                                            setAlarmEnabled((prev) => !prev);
+                                        }}
+                                        className={`relative h-7 w-12 rounded-full transition ${
+                                            alarmEnabled ? "bg-black" : "bg-gray-300"
                                         }`}
-                                    />
-                                </button>
+                                    >
+                                        <span
+                                            className={`absolute top-1 h-5 w-5 rounded-full bg-white transition ${
+                                                alarmEnabled ? "left-6" : "left-1"
+                                            }`}
+                                        />
+                                    </button>
+                                </div>
+
+                                {alarmEnabled && (
+                                    <div className="mt-4">
+                                        <p className="mb-2 text-sm text-gray-500">몇 분 전에 알려드릴까요?</p>
+
+                                        <select
+                                            value={alarmMinutesBefore}
+                                            onChange={(e) => setAlarmMinutesBefore(Number(e.target.value))}
+                                            className="w-full rounded-2xl bg-gray-50 px-4 py-4 outline-none"
+                                        >
+                                            <option value={15}>15분 전</option>
+                                            <option value={30}>30분 전</option>
+                                            <option value={60}>1시간 전</option>
+                                            <option value={120}>2시간 전</option>
+                                            <option value={1440}>하루 전</option>
+                                        </select>
+                                    </div>
+                                )}
                             </div>
 
-                            {alarmEnabled && (
-                                <div className="mt-4">
-                                    <p className="mb-2 text-sm text-gray-500">몇 분 전에 알려드릴까요?</p>
+                            {/* Buttons */}
 
-                                    <select
-                                        value={alarmMinutesBefore}
-                                        onChange={(e) => setAlarmMinutesBefore(Number(e.target.value))}
-                                        className="w-full rounded-2xl bg-white px-4 py-4 outline-none"
+                            <div className="mt-5 flex gap-3">
+                                <button
+                                    onClick={handleSaveSchedule}
+                                    className="flex-1 rounded-2xl bg-black py-4 font-semibold text-white"
+                                >
+                                    {editingSchedule ? "근무 수정" : "근무 등록"}
+                                </button>
+
+                                {editingSchedule && (
+                                    <button
+                                        onClick={handleDeleteSchedule}
+                                        className="flex-1 rounded-2xl bg-red-50 py-4 font-semibold text-red-500"
                                     >
-                                        <option value={15}>15분 전</option>
-
-                                        <option value={30}>30분 전</option>
-
-                                        <option value={60}>1시간 전</option>
-
-                                        <option value={120}>2시간 전</option>
-
-                                        <option value={1440}>하루 전</option>
-                                    </select>
-                                </div>
-                            )}
+                                        근무 삭제
+                                    </button>
+                                )}
+                            </div>
                         </div>
-
-                        {/* Buttons */}
-
-                        <button
-                            onClick={handleSaveSchedule}
-                            className="mt-5 w-full rounded-2xl bg-black py-4 font-semibold text-white"
-                        >
-                            {editingSchedule ? "근무 수정" : "근무 등록"}
-                        </button>
-
-                        {editingSchedule && (
-                            <button
-                                onClick={handleDeleteSchedule}
-                                className="mt-3 w-full rounded-2xl bg-red-50 py-4 font-semibold text-red-500"
-                            >
-                                근무 삭제
-                            </button>
-                        )}
-
-                        <button
-                            onClick={() => {
-                                setIsAddModalOpen(false);
-
-                                setEditingSchedule(null);
-                            }}
-                            className="mt-3 w-full py-3 text-sm text-gray-400"
-                        >
-                            취소
-                        </button>
                     </div>
                 </div>
             )}
 
             {/* Handle Break Modal */}
-
             {isDefaultBreakConfirmOpen && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-5">
                     <div className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-xl">
@@ -1587,11 +1560,9 @@ export default function SchedulePage() {
                     </div>
                 </div>
             )}
-
             {/* --------------------------------------------------
             Current Period Tips
         -------------------------------------------------- */}
-
             {currentPayPeriod && salarySettings?.hasTips && (
                 <section className="mt-5 rounded-3xl bg-white p-5 shadow-sm">
                     <div>
@@ -1733,11 +1704,9 @@ export default function SchedulePage() {
                     </button>
                 </section>
             )}
-
             {/* --------------------------------------------------
             Current Expected Salary
         -------------------------------------------------- */}
-
             {currentPayPeriod && (
                 <section className="mt-6 rounded-3xl bg-black p-6 text-white shadow-sm">
                     <p className="text-sm text-gray-400">이번예상 급여</p>

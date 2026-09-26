@@ -174,17 +174,31 @@ export async function GET(request: Request) {
                     ppa.actual_net_pay
                 FROM pay_period_actuals ppa
                 WHERE ppa.user_id = ${user.id}
-                  AND ppa.pay_date + INTERVAL '1 day' >= ${currentMonth.start}::date
-                  AND ppa.pay_date + INTERVAL '1 day' < ${currentMonth.end}::date
-                  AND ppa.pay_date + INTERVAL '1 day' <= CURRENT_DATE
-                  AND ppa.actual_net_pay IS NOT NULL
-                  AND NOT EXISTS (
-                      SELECT 1
-                      FROM living_transactions lt
-                      WHERE lt.user_id = ${user.id}
+                AND ppa.pay_date >= ${currentMonth.start}::date
+                AND ppa.pay_date < ${currentMonth.end}::date
+                AND ppa.pay_date <= CURRENT_DATE
+                AND ppa.actual_net_pay IS NOT NULL
+
+                -- 이미 payroll 연동으로 등록된 경우
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM living_transactions lt
+                    WHERE lt.user_id = ${user.id}
                         AND lt.source_type = 'payroll'
                         AND lt.source_id = ppa.id
-                  )
+                )
+
+                -- 생활 캘린더에 같은 지급일 + 같은 금액의 수입이
+                -- 이미 직접 입력되어 있는 경우
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM living_transactions lt
+                    WHERE lt.user_id = ${user.id}
+                        AND lt.transaction_date = ppa.pay_date
+                        AND lt.type = 'income'
+                        AND lt.amount = ppa.actual_net_pay
+                )
+
                 ORDER BY
                     ppa.pay_date ASC,
                     ppa.id ASC

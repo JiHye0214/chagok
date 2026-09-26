@@ -153,6 +153,9 @@ export default function LivingManagePage() {
 
     const [isFormOpen, setIsFormOpen] = useState(false);
 
+    const [isFormMounted, setIsFormMounted] = useState(false);
+    const [isFormAnimating, setIsFormAnimating] = useState(false);
+
     const [editingFixedExpense, setEditingFixedExpense] = useState<FixedExpense | null>(null);
 
     const [isFixedFormOpen, setIsFixedFormOpen] = useState(false);
@@ -161,6 +164,14 @@ export default function LivingManagePage() {
 
     const [isCategoryFormOpen, setIsCategoryFormOpen] = useState(false);
     const [editingCategory, setEditingCategory] = useState<LivingCategory | null>(null);
+
+    const [isFixedFormMounted, setIsFixedFormMounted] = useState(false);
+    const [isFixedFormAnimating, setIsFixedFormAnimating] = useState(false);
+    const [isTransactionFormMounted, setIsTransactionFormMounted] = useState(false);
+    const [isTransactionFormAnimating, setIsTransactionFormAnimating] = useState(false);
+
+    const [isCategoryFormMounted, setIsCategoryFormMounted] = useState(false);
+    const [isCategoryFormAnimating, setIsCategoryFormAnimating] = useState(false);
 
     const [categoryForm, setCategoryForm] = useState({
         name: "",
@@ -259,6 +270,8 @@ export default function LivingManagePage() {
     }, [transactions]);
 
     const selectedTransactions = transactionsByDate.get(selectedDate) ?? [];
+
+    const selectedHoliday = holidays.find((item) => item.date === selectedDate);
 
     const selectedDateObject = new Date(`${selectedDate}T00:00:00`);
 
@@ -478,6 +491,110 @@ export default function LivingManagePage() {
             openAddForm(undefined, direction === "savings_to_living" ? "savings_to_living" : "living_to_savings");
         }
     }, [searchParams]);
+
+    useEffect(() => {
+        if (isFixedFormOpen) {
+            setIsFixedFormMounted(true);
+
+            const frame = window.requestAnimationFrame(() => {
+                window.requestAnimationFrame(() => {
+                    setIsFixedFormAnimating(true);
+                });
+            });
+
+            return () => {
+                window.cancelAnimationFrame(frame);
+            };
+        }
+
+        setIsFixedFormAnimating(false);
+
+        const timer = window.setTimeout(() => {
+            setIsFixedFormMounted(false);
+        }, 350);
+
+        return () => {
+            clearTimeout(timer);
+        };
+    }, [isFixedFormOpen]);
+
+    useEffect(() => {
+        if (isCategoryFormOpen) {
+            setIsCategoryFormMounted(true);
+
+            const frame = window.requestAnimationFrame(() => {
+                window.requestAnimationFrame(() => {
+                    setIsCategoryFormAnimating(true);
+                });
+            });
+
+            return () => {
+                window.cancelAnimationFrame(frame);
+            };
+        }
+
+        setIsCategoryFormAnimating(false);
+
+        const timer = window.setTimeout(() => {
+            setIsCategoryFormMounted(false);
+        }, 350);
+
+        return () => {
+            clearTimeout(timer);
+        };
+    }, [isCategoryFormOpen]);
+
+    useEffect(() => {
+        if (isFormOpen) {
+            setIsFormMounted(true);
+
+            const frame = window.requestAnimationFrame(() => {
+                window.requestAnimationFrame(() => {
+                    setIsFormAnimating(true);
+                });
+            });
+
+            return () => {
+                window.cancelAnimationFrame(frame);
+            };
+        }
+
+        setIsFormAnimating(false);
+
+        const timer = window.setTimeout(() => {
+            setIsFormMounted(false);
+        }, 350);
+
+        return () => {
+            clearTimeout(timer);
+        };
+    }, [isFormOpen]);
+
+    useEffect(() => {
+        if (isFormOpen) {
+            setIsTransactionFormMounted(true);
+
+            const frame = window.requestAnimationFrame(() => {
+                window.requestAnimationFrame(() => {
+                    setIsTransactionFormAnimating(true);
+                });
+            });
+
+            return () => {
+                window.cancelAnimationFrame(frame);
+            };
+        }
+
+        setIsTransactionFormAnimating(false);
+
+        const timer = window.setTimeout(() => {
+            setIsTransactionFormMounted(false);
+        }, 350);
+
+        return () => {
+            clearTimeout(timer);
+        };
+    }, [isFormOpen]);
 
     const openEditForm = (transaction: LivingTransaction) => {
         setEditingTransaction(transaction);
@@ -1050,9 +1167,26 @@ export default function LivingManagePage() {
 
                             const holiday = holidays.find((item) => item.date === date);
 
-                            const net = getDayNet(day);
-                            const hasTransactions = getDayTransactions(day).length > 0;
                             const isSelected = selectedDate === date;
+
+                            const dayTransactions = getDayTransactions(day);
+
+                            const normalTransactions = dayTransactions.filter((transaction) => transaction.type !== "transfer");
+
+                            const savingsTransactions = dayTransactions.filter((transaction) => transaction.type === "transfer");
+
+                            const normalNet = normalTransactions.reduce(
+                                (sum, transaction) => sum + getTransactionNet(transaction),
+                                0,
+                            );
+
+                            const savingsNet = savingsTransactions.reduce(
+                                (sum, transaction) => sum + getTransactionNet(transaction),
+                                0,
+                            );
+
+                            const hasNormalTransactions = normalTransactions.length > 0;
+                            const hasSavings = savingsTransactions.length > 0;
 
                             return (
                                 <button
@@ -1063,24 +1197,40 @@ export default function LivingManagePage() {
                                 >
                                     <span
                                         className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium ${
-                                            isSelected ? "bg-gray-900 text-white" : holiday ? "text-red-500" : "text-gray-700"
+                                            isSelected
+                                                ? holiday
+                                                    ? "bg-gray-900 text-red-500"
+                                                    : "bg-gray-900 text-white"
+                                                : holiday
+                                                  ? "text-red-500"
+                                                  : "text-gray-700"
                                         }`}
                                     >
                                         {day}
                                     </span>
 
-                                    {hasTransactions && (
+                                    {hasNormalTransactions && (
                                         <span
                                             className={`mt-1 max-w-full truncate px-0.5 text-[9px] font-medium ${
-                                                net > 0 ? "text-[#C66B6B]" : net < 0 ? "text-[#718FB8]" : "text-gray-400"
+                                                normalNet > 0
+                                                    ? "text-[#C66B6B]"
+                                                    : normalNet < 0
+                                                      ? "text-[#718FB8]"
+                                                      : "text-gray-400"
                                             }`}
                                         >
-                                            {net > 0 ? "+" : net < 0 ? "−" : ""}
-                                            {formatMoney(net, currency)}
+                                            {normalNet > 0 ? "+" : normalNet < 0 ? "−" : ""}
+                                            {formatMoney(normalNet, currency)}
                                         </span>
                                     )}
 
-                                    {holiday && (
+                                    {hasSavings && (
+                                        <span className="max-w-full truncate px-0.5 text-[9px] font-medium text-[#7FA58D]">
+                                            {formatMoney(Math.abs(savingsNet), currency)}
+                                        </span>
+                                    )}
+
+                                    {holiday && !hasNormalTransactions && !hasSavings && (
                                         <span className="mt-0.5 max-w-full truncate px-0.5 text-[8px] font-medium text-red-500">
                                             {holiday.name}
                                         </span>
@@ -1110,7 +1260,11 @@ export default function LivingManagePage() {
                     <div>
                         <p className="text-xs text-gray-400">선택한 날짜</p>
 
-                        <h2 className="mt-1 text-lg font-semibold">{selectedDateLabel}</h2>
+                        <h2 className={`mt-1 text-lg font-semibold ${selectedHoliday ? "text-red-500" : "text-gray-900"}`}>
+                            {selectedDateLabel}
+                        </h2>
+
+                        {selectedHoliday && <p className="mt-1 text-xs font-medium text-red-500">{selectedHoliday.name}</p>}
                     </div>
 
                     {selectedTransactions.length > 0 && <p className="text-xs text-gray-400">{selectedTransactions.length}건</p>}
@@ -1139,13 +1293,13 @@ export default function LivingManagePage() {
                                             <span
                                                 className={`text-[10px] font-semibold ${
                                                     transaction.type === "transfer"
-                                                        ? "text-gray-400"
+                                                        ? "text-[#7FA58D]"
                                                         : net > 0
                                                           ? "text-[#C66B6B]"
                                                           : "text-[#718FB8]"
                                                 }`}
                                             >
-                                                {transaction.type === "transfer" ? "이동" : net > 0 ? "수입" : "지출"}
+                                                {transaction.type === "transfer" ? "저축" : net > 0 ? "수입" : "지출"}{" "}
                                             </span>
 
                                             <p className="truncate text-sm font-medium text-gray-800">
@@ -1220,95 +1374,58 @@ export default function LivingManagePage() {
             </section>
 
             {/* Transaction modal */}
-            {isFormOpen && (
-                <div className="fixed inset-0 z-150 flex items-end justify-center bg-black/40 p-5">
-                    <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-[28px] bg-white p-5">
-                        <div className="mb-6 flex items-center justify-between">
-                            <div>
-                                <p className="text-xs text-gray-400">기록</p>
+            {isTransactionFormMounted && (
+                <div className="fixed inset-0 z-[140]">
+                    {/* Backdrop */}
+                    <button
+                        type="button"
+                        aria-label="닫기"
+                        onClick={() => setIsFormOpen(false)}
+                        className={`absolute inset-0 bg-black/30 transition-opacity duration-300 ease-out ${
+                            isTransactionFormAnimating ? "opacity-100" : "opacity-0"
+                        }`}
+                    />
 
-                                <h2 className="mt-1 text-xl font-semibold text-gray-900">
-                                    {editingTransaction ? "기록 수정" : "기록 추가"}
-                                </h2>
-                            </div>
-
-                            <button
-                                type="button"
-                                onClick={() => setIsFormOpen(false)}
-                                className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-500"
-                            >
-                                <X size={17} />
-                            </button>
+                    {/* Bottom sheet */}
+                    <div
+                        className={`absolute inset-x-0 bottom-0 mx-auto flex max-h-[95dvh] w-full max-w-md flex-col rounded-t-[2rem] bg-gray-50 shadow-2xl transform-gpu transition-transform duration-[350ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                            isTransactionFormAnimating ? "translate-y-0" : "translate-y-full"
+                        }`}
+                    >
+                        {/* Drag handle */}
+                        <div className="flex shrink-0 items-center justify-center px-6 pb-3 pt-3">
+                            <div className="h-1.5 w-10 rounded-full bg-gray-300" />
                         </div>
 
-                        <div className="space-y-4">
-                            <div className="grid grid-cols-3 gap-2">
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        setForm((prev) => ({
-                                            ...prev,
-                                            type: "expense",
-                                            categoryId: "",
-                                        }))
-                                    }
-                                    className={`rounded-2xl py-3 text-sm font-medium ${
-                                        form.type === "expense" ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500"
-                                    }`}
-                                >
-                                    지출
-                                </button>
+                        {/* Scroll area */}
+                        <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-8 pt-2">
+                            <div className="mb-6 flex items-center justify-between">
+                                <div>
+                                    <p className="text-xs text-gray-400">기록</p>
 
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        setForm((prev) => ({
-                                            ...prev,
-                                            type: "income",
-                                            categoryId: "",
-                                        }))
-                                    }
-                                    className={`rounded-2xl py-3 text-sm font-medium ${
-                                        form.type === "income" ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500"
-                                    }`}
-                                >
-                                    수입
-                                </button>
+                                    <h2 className="mt-1 text-xl font-semibold text-gray-900">
+                                        {editingTransaction ? "기록 수정" : "기록 추가"}
+                                    </h2>
+                                </div>
 
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        setForm((prev) => ({
-                                            ...prev,
-                                            type: "transfer",
-                                            categoryId: "",
-                                        }))
-                                    }
-                                    className={`rounded-2xl py-3 text-sm font-medium ${
-                                        form.type === "transfer" ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500"
-                                    }`}
-                                >
-                                    이동
-                                </button>
                             </div>
 
-                            {form.type === "transfer" && (
-                                <div className="grid grid-cols-2 gap-2">
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-3 gap-2">
                                     <button
                                         type="button"
                                         onClick={() =>
                                             setForm((prev) => ({
                                                 ...prev,
-                                                transferDirection: "living_to_savings",
+                                                type: "expense",
+                                                categoryId: "",
                                             }))
                                         }
-                                        className={`rounded-2xl py-3 text-xs font-medium ${
-                                            form.transferDirection === "living_to_savings"
-                                                ? "bg-gray-900 text-white"
-                                                : "bg-gray-100 text-gray-500"
+                                        className={`rounded-2xl py-3 text-sm font-medium ${
+                                            form.type === "expense" ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500"
                                         }`}
                                     >
-                                        생활 → 저축
+                                        지출
                                     </button>
 
                                     <button
@@ -1316,410 +1433,504 @@ export default function LivingManagePage() {
                                         onClick={() =>
                                             setForm((prev) => ({
                                                 ...prev,
-                                                transferDirection: "savings_to_living",
+                                                type: "income",
+                                                categoryId: "",
                                             }))
                                         }
-                                        className={`rounded-2xl py-3 text-xs font-medium ${
-                                            form.transferDirection === "savings_to_living"
-                                                ? "bg-gray-900 text-white"
-                                                : "bg-gray-100 text-gray-500"
+                                        className={`rounded-2xl py-3 text-sm font-medium ${
+                                            form.type === "income" ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500"
                                         }`}
                                     >
-                                        저축 → 생활
+                                        수입
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            setForm((prev) => ({
+                                                ...prev,
+                                                type: "transfer",
+                                                categoryId: "",
+                                            }))
+                                        }
+                                        className={`rounded-2xl py-3 text-sm font-medium ${
+                                            form.type === "transfer" ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500"
+                                        }`}
+                                    >
+                                        이동
                                     </button>
                                 </div>
-                            )}
 
-                            <input
-                                type="date"
-                                value={form.date}
-                                onChange={(event) =>
-                                    setForm((prev) => ({
-                                        ...prev,
-                                        date: event.target.value,
-                                    }))
-                                }
-                                className="w-full rounded-2xl bg-gray-100 px-4 py-3.5 text-sm outline-none"
-                            />
+                                {form.type === "transfer" && (
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                setForm((prev) => ({
+                                                    ...prev,
+                                                    transferDirection: "living_to_savings",
+                                                }))
+                                            }
+                                            className={`rounded-2xl py-3 text-xs font-medium ${
+                                                form.transferDirection === "living_to_savings"
+                                                    ? "bg-gray-900 text-white"
+                                                    : "bg-gray-100 text-gray-500"
+                                            }`}
+                                        >
+                                            생활 → 저축
+                                        </button>
 
-                            <div className="flex items-center rounded-2xl bg-gray-100 px-4 py-3">
-                                <span className="mr-2 text-lg font-medium text-gray-400">{getCurrencySymbol(currency)}</span>
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                setForm((prev) => ({
+                                                    ...prev,
+                                                    transferDirection: "savings_to_living",
+                                                }))
+                                            }
+                                            className={`rounded-2xl py-3 text-xs font-medium ${
+                                                form.transferDirection === "savings_to_living"
+                                                    ? "bg-gray-900 text-white"
+                                                    : "bg-gray-100 text-gray-500"
+                                            }`}
+                                        >
+                                            저축 → 생활
+                                        </button>
+                                    </div>
+                                )}
 
                                 <input
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
-                                    inputMode="decimal"
-                                    placeholder="0.00"
-                                    value={form.amount}
+                                    type="date"
+                                    value={form.date}
                                     onChange={(event) =>
                                         setForm((prev) => ({
                                             ...prev,
-                                            amount: event.target.value,
+                                            date: event.target.value,
                                         }))
                                     }
-                                    className="w-full bg-transparent text-xl font-semibold text-gray-900 outline-none"
+                                    className="w-full rounded-2xl bg-gray-100 px-4 py-3.5 text-sm outline-none"
                                 />
-                            </div>
 
-                            {form.type === "expense" && (
-                                <div>
-                                    <select
-                                        value={form.categoryId}
+                                <div className="flex items-center rounded-2xl bg-gray-100 px-4 py-3">
+                                    <span className="mr-2 text-lg font-medium text-gray-400">{getCurrencySymbol(currency)}</span>
+
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        inputMode="decimal"
+                                        placeholder="0.00"
+                                        value={form.amount}
                                         onChange={(event) =>
                                             setForm((prev) => ({
                                                 ...prev,
-                                                categoryId: event.target.value,
+                                                amount: event.target.value,
                                             }))
                                         }
-                                        className="w-full rounded-2xl bg-gray-100 px-4 py-3.5 text-sm outline-none"
-                                    >
-                                        <option value="">카테고리 선택</option>
-
-                                        {categories
-                                            .filter((category) => category.kind === "variable")
-                                            .map((category) => (
-                                                <option key={category.id} value={category.id}>
-                                                    {category.name}
-                                                </option>
-                                            ))}
-                                    </select>
-
-                                    <button
-                                        type="button"
-                                        onClick={() => openAddCategoryForm("variable")}
-                                        className={`mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed py-3 text-[13px] font-medium transition-colors ${
-                                            isFree
-                                                ? "border-gray-100 bg-gray-50 text-gray-300"
-                                                : "border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-gray-50"
-                                        }`}
-                                    >
-                                        {isFree ? <Lock size={14} /> : <Plus size={15} />}
-                                        카테고리 추가하기
-                                        {isFree && <ProBadge />}
-                                    </button>
+                                        className="w-full bg-transparent text-xl font-semibold text-gray-900 outline-none"
+                                    />
                                 </div>
-                            )}
 
-                            {form.type === "income" && (
-                                <div>
-                                    <select
-                                        value={form.categoryId}
+                                {form.type === "expense" && (
+                                    <div>
+                                        <select
+                                            value={form.categoryId}
+                                            onChange={(event) =>
+                                                setForm((prev) => ({
+                                                    ...prev,
+                                                    categoryId: event.target.value,
+                                                }))
+                                            }
+                                            className="w-full rounded-2xl bg-gray-100 px-4 py-3.5 text-sm outline-none"
+                                        >
+                                            <option value="">카테고리 선택</option>
+
+                                            {categories
+                                                .filter((category) => category.kind === "variable")
+                                                .map((category) => (
+                                                    <option key={category.id} value={category.id}>
+                                                        {category.name}
+                                                    </option>
+                                                ))}
+                                        </select>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => openAddCategoryForm("variable")}
+                                            className={`mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed py-3 text-[13px] font-medium transition-colors ${
+                                                isFree
+                                                    ? "border-gray-100 bg-gray-50 text-gray-300"
+                                                    : "border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-gray-50"
+                                            }`}
+                                        >
+                                            {isFree ? <Lock size={14} /> : <Plus size={15} />}
+                                            카테고리 추가하기
+                                            {isFree && <ProBadge />}
+                                        </button>
+                                    </div>
+                                )}
+
+                                {form.type === "income" && (
+                                    <div>
+                                        <select
+                                            value={form.categoryId}
+                                            onChange={(event) =>
+                                                setForm((prev) => ({
+                                                    ...prev,
+                                                    categoryId: event.target.value,
+                                                }))
+                                            }
+                                            className="w-full rounded-2xl bg-gray-100 px-4 py-3.5 text-sm outline-none"
+                                        >
+                                            <option value="">카테고리 선택</option>
+
+                                            {categories
+                                                .filter((category) => category.kind === "income")
+                                                .map((category) => (
+                                                    <option key={category.id} value={category.id}>
+                                                        {category.name}
+                                                    </option>
+                                                ))}
+                                        </select>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => openAddCategoryForm("income")}
+                                            className={`mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed py-3 text-[13px] font-medium transition-colors ${
+                                                isFree
+                                                    ? "border-gray-100 bg-gray-50 text-gray-300"
+                                                    : "border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-gray-50"
+                                            }`}
+                                        >
+                                            {isFree ? <Lock size={14} /> : <Plus size={15} />}
+                                            카테고리 추가하기
+                                            {isFree && <ProBadge />}
+                                        </button>
+                                    </div>
+                                )}
+
+                                {form.type !== "transfer" && (
+                                    <textarea
+                                        placeholder="메모"
+                                        value={form.memo}
                                         onChange={(event) =>
                                             setForm((prev) => ({
                                                 ...prev,
-                                                categoryId: event.target.value,
+                                                memo: event.target.value,
                                             }))
                                         }
-                                        className="w-full rounded-2xl bg-gray-100 px-4 py-3.5 text-sm outline-none"
-                                    >
-                                        <option value="">카테고리 선택</option>
+                                        rows={3}
+                                        className="w-full resize-none rounded-2xl bg-gray-100 px-4 py-3.5 text-sm outline-none"
+                                    />
+                                )}
 
-                                        {categories
-                                            .filter((category) => category.kind === "income")
-                                            .map((category) => (
-                                                <option key={category.id} value={category.id}>
-                                                    {category.name}
-                                                </option>
-                                            ))}
-                                    </select>
-
-                                    <button
-                                        type="button"
-                                        onClick={() => openAddCategoryForm("income")}
-                                        className={`mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed py-3 text-[13px] font-medium transition-colors ${
-                                            isFree
-                                                ? "border-gray-100 bg-gray-50 text-gray-300"
-                                                : "border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-gray-50"
-                                        }`}
-                                    >
-                                        {isFree ? <Lock size={14} /> : <Plus size={15} />}
-                                        카테고리 추가하기
-                                        {isFree && <ProBadge />}
-                                    </button>
-                                </div>
-                            )}
-
-                            {form.type !== "transfer" && (
-                                <textarea
-                                    placeholder="메모"
-                                    value={form.memo}
-                                    onChange={(event) =>
-                                        setForm((prev) => ({
-                                            ...prev,
-                                            memo: event.target.value,
-                                        }))
-                                    }
-                                    rows={3}
-                                    className="w-full resize-none rounded-2xl bg-gray-100 px-4 py-3.5 text-sm outline-none"
-                                />
-                            )}
-
-                            <button
-                                type="button"
-                                onClick={saveTransaction}
-                                className="w-full rounded-2xl bg-gray-900 py-3.5 text-sm font-medium text-white"
-                            >
-                                {editingTransaction ? "수정하기" : "기록하기"}
-                            </button>
-
-                            {editingTransaction && (
                                 <button
                                     type="button"
-                                    onClick={() => deleteTransaction(editingTransaction.id)}
-                                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-red-50 py-3.5 text-sm font-medium text-red-500"
+                                    onClick={saveTransaction}
+                                    className="w-full rounded-2xl bg-gray-900 py-3.5 text-sm font-medium text-white"
                                 >
-                                    <Trash2 size={16} />
-                                    삭제하기
+                                    {editingTransaction ? "수정하기" : "기록하기"}
                                 </button>
-                            )}
+
+                                {editingTransaction && (
+                                    <button
+                                        type="button"
+                                        onClick={() => deleteTransaction(editingTransaction.id)}
+                                        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-red-50 py-3.5 text-sm font-medium text-red-500"
+                                    >
+                                        <Trash2 size={16} />
+                                        삭제하기
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>
             )}
 
             {/* Fixed expense modal */}
-            {isFixedFormOpen && (
-                <div className="fixed inset-0 z-150 flex items-end justify-center bg-black/40 p-5">
-                    <div className="w-full max-w-md rounded-[28px] bg-white p-5">
-                        <div className="mb-6 flex items-center justify-between">
-                            <div>
-                                <p className="text-xs text-gray-400">고정지출</p>
+            {isFixedFormMounted && (
+                <div className="fixed inset-0 z-[150]">
+                    <button
+                        type="button"
+                        aria-label="닫기"
+                        onClick={() => setIsFixedFormOpen(false)}
+                        className={`absolute inset-0 bg-black/30 transition-opacity duration-300 ease-out ${
+                            isFixedFormAnimating ? "opacity-100" : "opacity-0"
+                        }`}
+                    />
 
-                                <h2 className="mt-1 text-xl font-semibold text-gray-900">
-                                    {editingFixedExpense ? "고정지출 수정" : "고정지출 추가"}
-                                </h2>
-                            </div>
-
-                            <button
-                                type="button"
-                                onClick={() => setIsFixedFormOpen(false)}
-                                className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-500"
-                            >
-                                <X size={17} />
-                            </button>
+                    <div
+                        className={`absolute inset-x-0 bottom-0 mx-auto flex max-h-[95dvh] w-full max-w-md flex-col rounded-t-[2rem] bg-gray-50 shadow-2xl transform-gpu transition-transform duration-[350ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                            isFixedFormAnimating ? "translate-y-0" : "translate-y-full"
+                        }`}
+                    >
+                        <div className="flex shrink-0 items-center justify-center px-6 pb-4 pt-3">
+                            <div className="h-1.5 w-10 rounded-full bg-gray-300" />
                         </div>
 
-                        <div className="space-y-4">
-                            <input
-                                type="text"
-                                placeholder="고정지출 이름"
-                                value={fixedForm.name}
-                                onChange={(event) =>
-                                    setFixedForm((prev) => ({
-                                        ...prev,
-                                        name: event.target.value,
-                                    }))
-                                }
-                                className="w-full rounded-2xl bg-gray-100 px-4 py-3.5 text-sm outline-none"
-                            />
+                        <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-8 pt-2">
+                            <div className="mb-7 flex items-center justify-between">
+                                <div>
+                                    <p className="text-xs text-gray-400">고정지출</p>
 
-                            <div className="flex items-center rounded-2xl bg-gray-100 px-4 py-3">
-                                <span className="mr-2 text-lg font-medium text-gray-400">{getCurrencySymbol(currency)}</span>
-
-                                <input
-                                    type="number"
-                                    inputMode="decimal"
-                                    placeholder="0.00"
-                                    step="0.01"
-                                    min="0"
-                                    value={fixedForm.amount}
-                                    onChange={(event) =>
-                                        setFixedForm((prev) => ({
-                                            ...prev,
-                                            amount: event.target.value,
-                                        }))
-                                    }
-                                    className="w-full bg-transparent text-xl font-semibold text-gray-900 outline-none"
-                                />
-                            </div>
-
-                            <div>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <select
-                                        value={fixedForm.categoryId}
-                                        onChange={(event) =>
-                                            setFixedForm((prev) => ({
-                                                ...prev,
-                                                categoryId: event.target.value,
-                                            }))
-                                        }
-                                        className="rounded-2xl bg-gray-100 px-4 py-3.5 text-sm outline-none"
-                                    >
-                                        <option value="">카테고리</option>
-
-                                        {categories
-                                            .filter((category) => category.kind === "fixed")
-                                            .map((category) => (
-                                                <option key={category.id} value={category.id}>
-                                                    {category.name}
-                                                </option>
-                                            ))}
-                                    </select>
-
-                                    <select
-                                        value={fixedForm.paymentDay}
-                                        onChange={(event) =>
-                                            setFixedForm((prev) => ({
-                                                ...prev,
-                                                paymentDay: event.target.value,
-                                            }))
-                                        }
-                                        className="rounded-2xl bg-gray-100 px-4 py-3.5 text-sm outline-none"
-                                    >
-                                        {Array.from({ length: 31 }, (_, index) => index + 1).map((day) => (
-                                            <option key={day} value={day}>
-                                                매월 {day}일
-                                            </option>
-                                        ))}
-                                    </select>
+                                    <h2 className="mt-1 text-2xl font-bold tracking-[-0.04em] text-gray-950">
+                                        {editingFixedExpense ? "고정지출 수정" : "고정지출 추가"}
+                                    </h2>
                                 </div>
 
                                 <button
                                     type="button"
-                                    onClick={() => openAddCategoryForm("fixed")}
-                                    className={`mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed py-3 text-[13px] font-medium transition-colors ${
-                                        isFree
-                                            ? "border-gray-100 bg-gray-50 text-gray-300"
-                                            : "border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-gray-50"
-                                    }`}
+                                    onClick={() => setIsFixedFormOpen(false)}
+                                    className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-gray-500 shadow-sm"
                                 >
-                                    {isFree ? <Lock size={14} /> : <Plus size={15} />}
-                                    카테고리 추가하기
-                                    {isFree && <ProBadge />}
+                                    <X size={17} />
                                 </button>
                             </div>
 
-                            <textarea
-                                placeholder="메모"
-                                value={fixedForm.memo}
-                                onChange={(event) =>
-                                    setFixedForm((prev) => ({
-                                        ...prev,
-                                        memo: event.target.value,
-                                    }))
-                                }
-                                rows={3}
-                                className="w-full resize-none rounded-2xl bg-gray-100 px-4 py-3.5 text-sm outline-none"
-                            />
+                            <div className="space-y-4">
+                                <input
+                                    type="text"
+                                    placeholder="고정지출 이름"
+                                    value={fixedForm.name}
+                                    onChange={(event) =>
+                                        setFixedForm((prev) => ({
+                                            ...prev,
+                                            name: event.target.value,
+                                        }))
+                                    }
+                                    className="w-full rounded-3xl bg-white px-5 py-4 text-sm shadow-sm outline-none placeholder:text-gray-300"
+                                />
 
-                            <button
-                                type="button"
-                                onClick={saveFixedExpense}
-                                className="w-full rounded-2xl bg-gray-900 py-3.5 text-sm font-medium text-white"
-                            >
-                                {editingFixedExpense ? "수정하기" : "추가하기"}
-                            </button>
+                                <div className="flex items-center rounded-3xl bg-white px-5 py-4 shadow-sm">
+                                    <span className="mr-2 text-lg font-medium text-gray-400">{getCurrencySymbol(currency)}</span>
 
-                            {editingFixedExpense && (
+                                    <input
+                                        type="number"
+                                        inputMode="decimal"
+                                        placeholder="0.00"
+                                        step="0.01"
+                                        min="0"
+                                        value={fixedForm.amount}
+                                        onChange={(event) =>
+                                            setFixedForm((prev) => ({
+                                                ...prev,
+                                                amount: event.target.value,
+                                            }))
+                                        }
+                                        className="w-full bg-transparent text-2xl font-bold text-gray-950 outline-none placeholder:text-gray-300"
+                                    />
+                                </div>
+
+                                <div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <select
+                                            value={fixedForm.categoryId}
+                                            onChange={(event) =>
+                                                setFixedForm((prev) => ({
+                                                    ...prev,
+                                                    categoryId: event.target.value,
+                                                }))
+                                            }
+                                            className="rounded-3xl bg-white px-5 py-4 text-sm shadow-sm outline-none"
+                                        >
+                                            <option value="">카테고리</option>
+
+                                            {categories
+                                                .filter((category) => category.kind === "fixed")
+                                                .map((category) => (
+                                                    <option key={category.id} value={category.id}>
+                                                        {category.name}
+                                                    </option>
+                                                ))}
+                                        </select>
+
+                                        <select
+                                            value={fixedForm.paymentDay}
+                                            onChange={(event) =>
+                                                setFixedForm((prev) => ({
+                                                    ...prev,
+                                                    paymentDay: event.target.value,
+                                                }))
+                                            }
+                                            className="rounded-3xl bg-white px-5 py-4 text-sm shadow-sm outline-none"
+                                        >
+                                            {Array.from({ length: 31 }, (_, index) => index + 1).map((day) => (
+                                                <option key={day} value={day}>
+                                                    매월 {day}일
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => openAddCategoryForm("fixed")}
+                                        className={`mt-3 flex w-full items-center justify-center gap-2 rounded-3xl border border-dashed py-3.5 text-[13px] font-medium transition-colors ${
+                                            isFree
+                                                ? "border-gray-100 bg-white text-gray-300"
+                                                : "border-gray-200 bg-white text-gray-500 hover:border-gray-300"
+                                        }`}
+                                    >
+                                        {isFree ? <Lock size={14} /> : <Plus size={15} />}
+                                        카테고리 추가하기
+                                        {isFree && <ProBadge />}
+                                    </button>
+                                </div>
+
+                                <textarea
+                                    placeholder="메모"
+                                    value={fixedForm.memo}
+                                    onChange={(event) =>
+                                        setFixedForm((prev) => ({
+                                            ...prev,
+                                            memo: event.target.value,
+                                        }))
+                                    }
+                                    rows={3}
+                                    className="w-full resize-none rounded-3xl bg-white px-5 py-4 text-sm shadow-sm outline-none placeholder:text-gray-300"
+                                />
+
                                 <button
                                     type="button"
-                                    onClick={() => deleteFixedExpense(editingFixedExpense.id)}
-                                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-red-50 py-3.5 text-sm font-medium text-red-500"
+                                    onClick={saveFixedExpense}
+                                    className="w-full rounded-2xl bg-gray-900 py-4 text-sm font-semibold text-white transition-colors hover:bg-gray-800"
                                 >
-                                    <Trash2 size={16} />
-                                    삭제하기
+                                    {editingFixedExpense ? "수정하기" : "추가하기"}
                                 </button>
-                            )}
+
+                                {editingFixedExpense && (
+                                    <button
+                                        type="button"
+                                        onClick={() => deleteFixedExpense(editingFixedExpense.id)}
+                                        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-red-50 py-4 text-sm font-medium text-red-500"
+                                    >
+                                        <Trash2 size={16} />
+                                        삭제하기
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>
             )}
 
             {/* Category modal */}
-            {isCategoryFormOpen && (
-                <div className="fixed inset-0 z-[160] flex items-end justify-center bg-black/40 p-5">
-                    <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-[28px] bg-white p-5">
-                        <div className="mb-6 flex items-center justify-between">
-                            <div>
-                                <p className="text-xs text-gray-400">카테고리</p>
+            {isCategoryFormMounted && (
+                <div className="fixed inset-0 z-[160]">
+                    <button
+                        type="button"
+                        aria-label="닫기"
+                        onClick={() => {
+                            setIsCategoryFormOpen(false);
+                            setEditingCategory(null);
+                        }}
+                        className={`absolute inset-0 bg-black/30 transition-opacity duration-300 ease-out ${
+                            isCategoryFormAnimating ? "opacity-100" : "opacity-0"
+                        }`}
+                    />
 
-                                <h2 className="mt-1 text-xl font-semibold text-gray-900">
-                                    {editingCategory ? "카테고리 수정" : "카테고리 추가"}
-                                </h2>
-                            </div>
-
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setIsCategoryFormOpen(false);
-                                    setEditingCategory(null);
-                                }}
-                                className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-500"
-                            >
-                                <X size={17} />
-                            </button>
+                    <div
+                        className={`absolute inset-x-0 bottom-0 mx-auto flex max-h-[90dvh] w-full max-w-md flex-col rounded-t-[2rem] bg-gray-50 shadow-2xl transform-gpu transition-transform duration-[350ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                            isCategoryFormAnimating ? "translate-y-0" : "translate-y-full"
+                        }`}
+                    >
+                        <div className="flex shrink-0 items-center justify-center px-6 pb-4 pt-3">
+                            <div className="h-1.5 w-10 rounded-full bg-gray-300" />
                         </div>
 
-                        <div className="space-y-4">
-                            <input
-                                type="text"
-                                placeholder="카테고리 이름"
-                                value={categoryForm.name}
-                                onChange={(event) =>
-                                    setCategoryForm((prev) => ({
-                                        ...prev,
-                                        name: event.target.value,
-                                    }))
-                                }
-                                className="w-full rounded-2xl bg-gray-100 px-4 py-3.5 text-sm outline-none"
-                                autoFocus
-                            />
-
-                            <button
-                                type="button"
-                                onClick={saveCategory}
-                                className="w-full rounded-2xl bg-gray-900 py-3.5 text-sm font-medium text-white"
-                            >
-                                {editingCategory ? "수정하기" : "추가하기"}
-                            </button>
-
-                            {categoryModalCategories.length > 0 && (
+                        <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-8 pt-2">
+                            <div className="mb-7 flex items-center justify-between">
                                 <div>
-                                    <div className="mb-2 flex items-center justify-between">
-                                        <p className="text-xs text-gray-400">현재 카테고리</p>
+                                    <p className="text-xs text-gray-400">카테고리</p>
 
-                                        {isFree && <ProBadge />}
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        {categoryModalCategories.map((category) => (
-                                            <div
-                                                key={category.id}
-                                                className="flex items-center rounded-2xl bg-[#F7F7F5] px-4 py-3"
-                                            >
-                                                <p className="min-w-0 flex-1 truncate text-sm font-medium text-gray-700">
-                                                    {category.name}
-                                                </p>
-
-                                                <button
-                                                    type="button"
-                                                    onClick={() => openEditCategoryForm(category)}
-                                                    className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
-                                                        isFree
-                                                            ? "text-gray-200"
-                                                            : "text-gray-300 hover:bg-white hover:text-gray-600"
-                                                    }`}
-                                                >
-                                                    {isFree ? <Lock size={13} /> : <Pencil size={14} />}
-                                                </button>
-
-                                                <button
-                                                    type="button"
-                                                    onClick={() => deleteCategory(category)}
-                                                    className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
-                                                        isFree
-                                                            ? "text-gray-200"
-                                                            : "text-gray-300 hover:bg-white hover:text-red-500"
-                                                    }`}
-                                                >
-                                                    {isFree ? <Lock size={13} /> : <Trash2 size={14} />}
-                                                </button>
-                                            </div>
-                                        ))}
-                                    </div>
+                                    <h2 className="mt-1 text-2xl font-bold tracking-[-0.04em] text-gray-950">
+                                        {editingCategory ? "카테고리 수정" : "카테고리 추가"}
+                                    </h2>
                                 </div>
-                            )}
+
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setIsCategoryFormOpen(false);
+                                        setEditingCategory(null);
+                                    }}
+                                    className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-gray-500 shadow-sm"
+                                >
+                                    <X size={17} />
+                                </button>
+                            </div>
+
+                            <div className="space-y-4">
+                                <input
+                                    type="text"
+                                    placeholder="카테고리 이름"
+                                    value={categoryForm.name}
+                                    onChange={(event) =>
+                                        setCategoryForm((prev) => ({
+                                            ...prev,
+                                            name: event.target.value,
+                                        }))
+                                    }
+                                    className="w-full rounded-3xl bg-white px-5 py-4 text-sm shadow-sm outline-none placeholder:text-gray-300"
+                                    autoFocus
+                                />
+
+                                <button
+                                    type="button"
+                                    onClick={saveCategory}
+                                    className="w-full rounded-2xl bg-gray-900 py-4 text-sm font-semibold text-white transition-colors hover:bg-gray-800"
+                                >
+                                    {editingCategory ? "수정하기" : "추가하기"}
+                                </button>
+
+                                {categoryModalCategories.length > 0 && (
+                                    <div>
+                                        <div className="mb-3 flex items-center justify-between">
+                                            <p className="text-xs text-gray-400">현재 카테고리</p>
+
+                                            {isFree && <ProBadge />}
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            {categoryModalCategories.map((category) => (
+                                                <div
+                                                    key={category.id}
+                                                    className="flex items-center rounded-3xl bg-white px-5 py-3.5 shadow-sm"
+                                                >
+                                                    <p className="min-w-0 flex-1 truncate text-sm font-medium text-gray-700">
+                                                        {category.name}
+                                                    </p>
+
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => openEditCategoryForm(category)}
+                                                        className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
+                                                            isFree
+                                                                ? "text-gray-200"
+                                                                : "text-gray-300 hover:bg-gray-50 hover:text-gray-600"
+                                                        }`}
+                                                    >
+                                                        {isFree ? <Lock size={13} /> : <Pencil size={14} />}
+                                                    </button>
+
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => deleteCategory(category)}
+                                                        className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
+                                                            isFree
+                                                                ? "text-gray-200"
+                                                                : "text-gray-300 hover:bg-gray-50 hover:text-red-500"
+                                                        }`}
+                                                    >
+                                                        {isFree ? <Lock size={13} /> : <Trash2 size={14} />}
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>

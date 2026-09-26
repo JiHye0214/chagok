@@ -1115,9 +1115,13 @@ export default function SalaryPage() {
 
     const isPendingPayDatePassed = pendingPayDate !== null && pendingPayDate < todayOnly;
 
-    const shouldShowPendingPay = Boolean(pendingPayPeriod) && isPendingPeriodEnded && !isPendingPayDatePassed;
+    const hasPendingPeriodSchedules = pendingPeriodSchedules.length > 0;
 
-    const shouldGoToPayHistory = Boolean(pendingPayPeriod) && isPendingPeriodEnded && isPendingPayDatePassed;
+    const shouldShowPendingPay =
+        Boolean(pendingPayPeriod) && hasPendingPeriodSchedules && isPendingPeriodEnded && !isPendingPayDatePassed;
+
+    const shouldGoToPayHistory =
+        Boolean(pendingPayPeriod) && hasPendingPeriodSchedules && isPendingPeriodEnded && isPendingPayDatePassed;
 
     useEffect(() => {
         if (!shouldShowPendingPay) {
@@ -2061,7 +2065,20 @@ export default function SalaryPage() {
                 isOpen={isSalarySettingsOpen}
                 onClose={() => setIsSalarySettingsOpen(false)}
                 onSaved={async () => {
-                    await loadSalaryData();
+                    try {
+                        const response = await fetch("/api/salary/salary-settings");
+
+                        if (!response.ok) {
+                            return;
+                        }
+
+                        const refreshedData = await response.json();
+
+                        // 여기서 이 페이지의 급여 설정 state를 갱신
+                        setSalarySettings(refreshedData);
+                    } catch (error) {
+                        console.error(error);
+                    }
                 }}
             />
         </div>

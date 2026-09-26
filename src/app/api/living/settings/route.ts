@@ -47,15 +47,10 @@ export async function PUT(request: Request) {
         const initialLivingMoney = Number(body.initialLivingMoney ?? 0);
         const initialSavingsMoney = Number(body.initialSavingsMoney ?? 0);
 
-        if (
-            !Number.isFinite(initialLivingMoney) ||
-            initialLivingMoney < 0 ||
-            !Number.isFinite(initialSavingsMoney) ||
-            initialSavingsMoney < 0
-        ) {
+        if (!Number.isFinite(initialLivingMoney) || !Number.isFinite(initialSavingsMoney) || initialSavingsMoney < 0) {
             return NextResponse.json({ error: "금액을 확인해주세요." }, { status: 400 });
         }
-
+        
         const result = await sql`
             INSERT INTO living_settings (
                 user_id,
