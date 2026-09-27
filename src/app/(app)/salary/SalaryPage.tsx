@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getPeriodsPerYear, formatDate } from "@/lib/payPeriod";
-import { calculateTaxes } from "@/lib/tax";
-import { isHoliday } from "@/lib/holiday";
+import { formatDate } from "@/lib/payPeriod";
+import { calculateExpectedSalary } from "@/lib/payroll/calculateExpectedSalary";
 import Link from "next/link";
 import { ClipboardList, Lock, Settings } from "lucide-react";
 import SalarySettingsSheet from "@/components/SalarySettingsSheet";
@@ -27,7 +26,6 @@ type SalarySettings = {
     payDate?: string;
     semiMonthlyType?: SemiMonthlyType;
     customPayDays?: number;
-    vacationPayRate?: number;
 };
 
 type WorkSchedule = {
@@ -98,27 +96,13 @@ type PayHistory = {
     updatedAt?: string;
 };
 
-type Holiday = {
-    date: string;
-    name: string;
-    global: boolean;
-};
-
 type PeriodEstimate = {
     hours: number;
     basePay: number;
-    holidayPay: number;
-    vacationPay: number;
     paychequeTips: number;
     cashTips: number;
     grossPay: number;
     deductions: number;
-    cpp: number;
-    cpp2: number;
-    ei: number;
-    federalTax: number;
-    provincialTax: number;
-    provinceName: string;
     netPay: number;
     totalIncome: number;
 };
@@ -130,27 +114,6 @@ type GraphPoint = {
     value: number;
     isEstimate: boolean;
     history?: PayHistory;
-};
-
-const calculateHours = (startTime: string, endTime: string, breakMinutes: number = 0) => {
-    if (!startTime || !endTime) {
-        return 0;
-    }
-
-    const [startHour, startMinute] = startTime.split(":").map(Number);
-    const [endHour, endMinute] = endTime.split(":").map(Number);
-
-    const start = startHour * 60 + startMinute;
-
-    let end = endHour * 60 + endMinute;
-
-    if (end < start) {
-        end += 24 * 60;
-    }
-
-    const totalMinutes = Math.max(0, end - start - breakMinutes);
-
-    return totalMinutes / 60;
 };
 
 const formatISO = (date: Date) => {
@@ -242,9 +205,8 @@ export default function SalaryPage() {
     const [schedules, setSchedules] = useState<WorkSchedule[]>([]);
     const [isSchedulesLoading, setIsSchedulesLoading] = useState(true);
 
-    const [holidays, setHolidays] = useState<Holiday[]>([]);
     const [countryCode, setCountryCode] = useState<string | null>(null);
-    const [province, setProvince] = useState<string | null>(null);
+    const [regionCode, setRegionCode] = useState<string | null>(null);
     const [currency, setCurrency] = useState<string | null>(null);
 
     const [, setCashTips] = useState("");
@@ -266,8 +228,6 @@ export default function SalaryPage() {
     const [selectedPayHistory, setSelectedPayHistory] = useState<PayHistory | null>(null);
 
     const [hoveredGraphPoint, setHoveredGraphPoint] = useState<GraphPoint | null>(null);
-
-    const hourlyWage = salarySettings?.payType === "hourly" ? Number(salarySettings.hourlyWage ?? 0) : 0;
 
     const [, setAnimatedNetPay] = useState(0);
 
@@ -331,61 +291,6 @@ export default function SalaryPage() {
 
     /*
      * --------------------------------------------------
-     * Load Holidays
-     * --------------------------------------------------
-     */
-
-    useEffect(() => {
-        if (!countryCode) {
-            setHolidays([]);
-            return;
-        }
-
-        const loadHolidays = async () => {
-            try {
-                const years = Array.from(new Set(schedules.map((schedule) => Number(schedule.date.slice(0, 4)))));
-
-                const currentYear = new Date().getFullYear();
-
-                if (!years.includes(currentYear)) {
-                    years.push(currentYear);
-                }
-
-                const results: Holiday[] = [];
-
-                for (const year of years) {
-                    const params = new URLSearchParams({
-                        year: String(year),
-                        country: countryCode,
-                    });
-
-                    if (province) {
-                        params.set("province", province);
-                    }
-
-                    const response = await fetch(`/api/holidays?${params.toString()}`);
-
-                    if (!response.ok) {
-                        continue;
-                    }
-
-                    const data: Holiday[] = await response.json();
-
-                    results.push(...data);
-                }
-
-                setHolidays(results);
-            } catch (error) {
-                console.error("공휴일 조회 실패:", error);
-                setHolidays([]);
-            }
-        };
-
-        loadHolidays();
-    }, [countryCode, province, schedules]);
-
-    /*
-     * --------------------------------------------------
      * Premium User
      * --------------------------------------------------
      */
@@ -424,12 +329,12 @@ export default function SalaryPage() {
                 const data = await response.json();
 
                 setCountryCode(data.countryCode ?? null);
-                setProvince(data.provinceCode ?? null);
+                setRegionCode(data.provinceCode ?? null);
                 setCurrency(data.currency ?? null);
             } catch (error) {
                 console.error("프로필 조회 실패:", error);
                 setCountryCode(null);
-                setProvince(null);
+                setRegionCode(null);
                 setCurrency(null);
             }
         };
@@ -875,20 +780,13 @@ export default function SalaryPage() {
           })
         : [];
 
-    const currentPeriodHours = currentPeriodSchedules.reduce(
-        (total, schedule) =>
-            total + calculateHours(schedule.startTime, schedule.endTime, schedule.hasBreak ? schedule.breakMinutes : 0),
-        0,
-    );
-
     /*
      * --------------------------------------------------
-     * Current Tips
+     * Current Period Estimate
      * --------------------------------------------------
      */
 
     const currentPeriodPaychequeTips = savedTips?.paychequeTips ?? 0;
-
     const currentPeriodCashTips = savedTips?.cashTips ?? 0;
 
     const hasPaychequeTips = Boolean(
@@ -899,84 +797,53 @@ export default function SalaryPage() {
         salarySettings?.hasTips && (salarySettings.tipType === "cash" || salarySettings.tipType === "both"),
     );
 
-    /*
-     * --------------------------------------------------
-     * Current Period Estimate
-     * --------------------------------------------------
-     */
+    const currentPeriodEstimate: PeriodEstimate | null =
+        salarySettings && countryCode && currentPayPeriod
+            ? (() => {
+                  const result = calculateExpectedSalary({
+                      settings: {
+                          country: countryCode,
+                          regionCode: regionCode ?? undefined,
+                          payType: salarySettings.payType,
+                          payFrequency: salarySettings.payFrequency,
+                          hourlyWage: salarySettings.hourlyWage,
+                          monthlySalary: salarySettings.monthlySalary,
+                          hasTips: salarySettings.hasTips,
+                          tipType: salarySettings.tipType,
+                      },
 
-    const currentBasePay =
-        salarySettings?.payType === "hourly"
-            ? currentPeriodHours * hourlyWage
-            : salarySettings?.payType === "salary"
-              ? Number(salarySettings.monthlySalary ?? 0)
-              : 0;
+                      schedules: currentPeriodSchedules,
 
-    const currentHolidaySchedules = currentPeriodSchedules.filter((schedule) => isHoliday(schedule.date.slice(0, 10), holidays));
+                      cashTips: hasCashTips ? currentPeriodCashTips : 0,
 
-    const currentHolidayHours = currentHolidaySchedules.reduce(
-        (total, schedule) =>
-            total + calculateHours(schedule.startTime, schedule.endTime, schedule.hasBreak ? schedule.breakMinutes : 0),
-        0,
-    );
+                      paychequeTips: hasPaychequeTips ? currentPeriodPaychequeTips : 0,
 
-    const currentHolidayPay = salarySettings?.payType === "hourly" ? currentHolidayHours * hourlyWage * 0.5 : 0;
+                      payPeriod: {
+                          startDate: currentPayPeriod.startDate,
+                          endDate: currentPayPeriod.endDate,
+                          payDate: currentPayPeriod.payDate,
+                      },
+                  });
 
-    const vacationPayRate = salarySettings ? Number(salarySettings.vacationPayRate ?? 4.15) : 0;
-
-    const currentVacationPay = currentBasePay * (vacationPayRate / 100);
-
-    const currentPaychequeTips = hasPaychequeTips ? currentPeriodPaychequeTips : 0;
-
-    const currentCashTips = hasCashTips ? currentPeriodCashTips : 0;
-
-    const currentTaxableGrossPay = currentBasePay + currentHolidayPay + currentVacationPay + currentPaychequeTips;
-
-    const periodsPerYear = salarySettings ? getPeriodsPerYear(salarySettings.payFrequency) : 1;
-
-    const currentAnnualGross = currentTaxableGrossPay * periodsPerYear;
-
-    const currentTaxes = calculateTaxes({
-        country: countryCode ?? "",
-        province: province ?? "",
-        annualGross: currentAnnualGross,
-    });
-
-    const currentPeriodEstimate: PeriodEstimate = {
-        hours: currentPeriodHours,
-
-        basePay: currentBasePay,
-
-        holidayPay: currentHolidayPay,
-
-        vacationPay: currentVacationPay,
-
-        paychequeTips: currentPaychequeTips,
-
-        cashTips: currentCashTips,
-
-        grossPay: currentTaxableGrossPay,
-
-        deductions: currentTaxes.totalDeductions / periodsPerYear,
-
-        cpp: currentTaxes.cpp / periodsPerYear,
-
-        cpp2: currentTaxes.cpp2 / periodsPerYear,
-
-        ei: currentTaxes.ei / periodsPerYear,
-
-        federalTax: currentTaxes.federalTax / periodsPerYear,
-
-        provincialTax: currentTaxes.provincialTax / periodsPerYear,
-
-        provinceName: currentTaxes.provinceName,
-
-        netPay: currentTaxableGrossPay - currentTaxes.totalDeductions / periodsPerYear,
-
-        totalIncome: currentTaxableGrossPay - currentTaxes.totalDeductions / periodsPerYear + currentCashTips,
-    };
+                  return {
+                      hours: result.hours,
+                      basePay: result.basePay,
+                      paychequeTips: result.paychequeTips,
+                      cashTips: result.cashTips,
+                      grossPay: result.grossPay,
+                      deductions: result.totalDeductions,
+                      netPay: result.estimatedNetPay,
+                      totalIncome: result.finalEstimatedIncome,
+                  };
+              })()
+            : null;
 
     useEffect(() => {
+        if (!currentPeriodEstimate) {
+            setAnimatedNetPay(0);
+            return;
+        }
+
         const target = currentPeriodEstimate.netPay;
 
         let startTime: number | null = null;
@@ -1008,7 +875,7 @@ export default function SalaryPage() {
         return () => {
             cancelAnimationFrame(animationFrame);
         };
-    }, [currentPeriodEstimate.netPay]);
+    }, [currentPeriodEstimate]);
 
     /*
      * --------------------------------------------------
@@ -1024,78 +891,49 @@ export default function SalaryPage() {
           })
         : [];
 
-    const pendingPeriodHours = pendingPeriodSchedules.reduce(
-        (total, schedule) =>
-            total + calculateHours(schedule.startTime, schedule.endTime, schedule.hasBreak ? schedule.breakMinutes : 0),
-        0,
-    );
+    const pendingPeriodEstimate: PeriodEstimate | null =
+        salarySettings && countryCode && pendingPayPeriod
+            ? (() => {
+                  const paychequeTips = hasPaychequeTips ? (pendingSavedTips?.paychequeTips ?? 0) : 0;
 
-    const pendingBasePay =
-        salarySettings?.payType === "hourly"
-            ? pendingPeriodHours * hourlyWage
-            : salarySettings?.payType === "salary"
-              ? Number(salarySettings.monthlySalary ?? 0)
-              : 0;
+                  const cashTips = hasCashTips ? (pendingSavedTips?.cashTips ?? 0) : 0;
 
-    const pendingHolidaySchedules = pendingPeriodSchedules.filter((schedule) => isHoliday(schedule.date.slice(0, 10), holidays));
+                  const result = calculateExpectedSalary({
+                      settings: {
+                          country: countryCode,
+                          regionCode: regionCode ?? undefined,
+                          payType: salarySettings.payType,
+                          payFrequency: salarySettings.payFrequency,
+                          hourlyWage: salarySettings.hourlyWage,
+                          monthlySalary: salarySettings.monthlySalary,
+                          hasTips: salarySettings.hasTips,
+                          tipType: salarySettings.tipType,
+                      },
 
-    const pendingHolidayHours = pendingHolidaySchedules.reduce(
-        (total, schedule) =>
-            total + calculateHours(schedule.startTime, schedule.endTime, schedule.hasBreak ? schedule.breakMinutes : 0),
-        0,
-    );
+                      schedules: pendingPeriodSchedules,
 
-    const pendingHolidayPay = salarySettings?.payType === "hourly" ? pendingHolidayHours * hourlyWage * 0.5 : 0;
+                      cashTips,
+                      paychequeTips,
 
-    const pendingVacationPay = pendingBasePay * (vacationPayRate / 100);
+                      payPeriod: {
+                          startDate: pendingPayPeriod.startDate,
+                          endDate: pendingPayPeriod.endDate,
+                          payDate: pendingPayPeriod.payDate,
+                      },
+                  });
 
-    const pendingPaychequeTips = hasPaychequeTips ? (pendingSavedTips?.paychequeTips ?? 0) : 0;
-
-    const pendingCashTips = hasCashTips ? (pendingSavedTips?.cashTips ?? 0) : 0;
-
-    const pendingTaxableGrossPay = pendingBasePay + pendingHolidayPay + pendingVacationPay + pendingPaychequeTips;
-
-    const pendingAnnualGross = pendingTaxableGrossPay * periodsPerYear;
-
-    const pendingTaxes = calculateTaxes({
-        country: countryCode ?? "",
-        province: province ?? "",
-        annualGross: pendingAnnualGross,
-    });
-
-    const pendingPeriodEstimate: PeriodEstimate = {
-        hours: pendingPeriodHours,
-
-        basePay: pendingBasePay,
-
-        holidayPay: pendingHolidayPay,
-
-        vacationPay: pendingVacationPay,
-
-        paychequeTips: pendingPaychequeTips,
-
-        cashTips: pendingCashTips,
-
-        grossPay: pendingTaxableGrossPay,
-
-        deductions: pendingTaxes.totalDeductions / periodsPerYear,
-
-        cpp: pendingTaxes.cpp / periodsPerYear,
-
-        cpp2: pendingTaxes.cpp2 / periodsPerYear,
-
-        ei: pendingTaxes.ei / periodsPerYear,
-
-        federalTax: pendingTaxes.federalTax / periodsPerYear,
-
-        provincialTax: pendingTaxes.provincialTax / periodsPerYear,
-
-        provinceName: pendingTaxes.provinceName,
-
-        netPay: pendingTaxableGrossPay - pendingTaxes.totalDeductions / periodsPerYear,
-
-        totalIncome: pendingTaxableGrossPay - pendingTaxes.totalDeductions / periodsPerYear + pendingCashTips,
-    };
+                  return {
+                      hours: result.hours,
+                      basePay: result.basePay,
+                      paychequeTips: result.paychequeTips,
+                      cashTips: result.cashTips,
+                      grossPay: result.grossPay,
+                      deductions: result.totalDeductions,
+                      netPay: result.estimatedNetPay,
+                      totalIncome: result.finalEstimatedIncome,
+                  };
+              })()
+            : null;
 
     /*
      * --------------------------------------------------
@@ -1124,7 +962,7 @@ export default function SalaryPage() {
         Boolean(pendingPayPeriod) && hasPendingPeriodSchedules && isPendingPeriodEnded && isPendingPayDatePassed;
 
     useEffect(() => {
-        if (!shouldShowPendingPay) {
+        if (!shouldShowPendingPay || !pendingPeriodEstimate) {
             setAnimatedPendingNetPay(0);
             return;
         }
@@ -1160,7 +998,7 @@ export default function SalaryPage() {
         return () => {
             cancelAnimationFrame(animationFrame);
         };
-    }, [pendingPeriodEstimate.netPay, shouldShowPendingPay]);
+    }, [pendingPeriodEstimate, shouldShowPendingPay]);
 
     /*
      * --------------------------------------------------
@@ -1195,7 +1033,7 @@ export default function SalaryPage() {
     }));
 
     const pendingGraphPoint: GraphPoint | null =
-        shouldShowPendingPay && pendingPayPeriod
+        shouldShowPendingPay && pendingPayPeriod && pendingPeriodEstimate
             ? {
                   startDate: pendingPayPeriod.startDate,
                   endDate: pendingPayPeriod.endDate,
@@ -1325,32 +1163,37 @@ export default function SalaryPage() {
                                 </Link>
                             )}
 
-                            {shouldShowPendingPay && pendingPayPeriod && pendingPeriodEstimate.netPay > 0 && (
-                                <button
-                                    type="button"
-                                    onClick={() => setIsPendingExpectedOpen(true)}
-                                    className="block w-full rounded-3xl border border-blue-100 bg-blue-50 p-5 text-left shadow-sm transition hover:bg-blue-100/70"
-                                >
-                                    <div className="flex items-start justify-between gap-4">
-                                        <div>
-                                            <p className="text-xs text-blue-500">급여 예정</p>
+                            {shouldShowPendingPay &&
+                                pendingPayPeriod &&
+                                pendingPeriodEstimate &&
+                                pendingPeriodEstimate.netPay > 0 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsPendingExpectedOpen(true)}
+                                        className="block w-full rounded-3xl border border-blue-100 bg-blue-50 p-5 text-left shadow-sm transition hover:bg-blue-100/70"
+                                    >
+                                        <div className="flex items-start justify-between gap-4">
+                                            <div>
+                                                <p className="text-xs text-blue-500">급여 예정</p>
 
-                                            <p className="mt-2 text-lg font-semibold text-gray-900">
-                                                <span className="text-blue-600">{getDdayLabel(pendingPayPeriod.payDate)}</span>{" "}
-                                                {formatMoney(animatedPendingNetPay, currency)}를 받아요{" "}
-                                            </p>
+                                                <p className="mt-2 text-lg font-semibold text-gray-900">
+                                                    <span className="text-blue-600">
+                                                        {getDdayLabel(pendingPayPeriod.payDate)}
+                                                    </span>{" "}
+                                                    {formatMoney(animatedPendingNetPay, currency)}를 받아요{" "}
+                                                </p>
 
-                                            <p className="mt-1 text-sm text-gray-500">
-                                                지급일이 다가오고 있어요. 지출을 계획해 볼까요?
-                                            </p>
+                                                <p className="mt-1 text-sm text-gray-500">
+                                                    지급일이 다가오고 있어요. 지출을 계획해 볼까요?
+                                                </p>
+                                            </div>
+
+                                            <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-blue-600 shadow-sm">
+                                                예상
+                                            </span>
                                         </div>
-
-                                        <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-blue-600 shadow-sm">
-                                            예상
-                                        </span>
-                                    </div>
-                                </button>
-                            )}
+                                    </button>
+                                )}
                         </>
                     )}
 
@@ -1370,17 +1213,17 @@ export default function SalaryPage() {
 
                                     <p className="mt-1 text-sm text-gray-500">근무 기록이 있어야 예상 급여를 계산할 수 있어요.</p>
                                 </div>
-                            ) : (
+                            ) : currentPeriodEstimate ? (
                                 <>
                                     <p className="mt-5 text-xs text-gray-400">예상 급여</p>
 
                                     <p className="mt-1 text-2xl font-bold text-gray-900">
-                                        {formatMoney(currentPeriodEstimate.netPay, currency)}{" "}
+                                        {formatMoney(currentPeriodEstimate.netPay, currency)}
                                     </p>
 
                                     <div className="mt-3 flex items-center gap-3 text-sm text-gray-500">
                                         <span>
-                                            {currentPeriodEstimate.hours.toFixed(1)}
+                                            {currentPeriodEstimate.hours.toFixed(2)}
                                             시간
                                         </span>
 
@@ -1391,11 +1234,11 @@ export default function SalaryPage() {
                                             {formatMoney(
                                                 currentPeriodEstimate.cashTips + currentPeriodEstimate.paychequeTips,
                                                 currency,
-                                            )}{" "}
+                                            )}
                                         </span>
                                     </div>
                                 </>
-                            )}
+                            ) : null}
 
                             <Link
                                 href="/salary/schedule"
@@ -1685,7 +1528,7 @@ export default function SalaryPage() {
                     Pending Expected Salary Modal
                 -------------------------------------------------- */}
 
-                    {isPendingExpectedOpen && pendingPayPeriod && (
+                    {isPendingExpectedOpen && pendingPayPeriod && pendingPeriodEstimate && (
                         <div
                             className="fixed inset-0 z-[60] flex items-end justify-center bg-gray-900/30 p-3 backdrop-blur-sm sm:items-center"
                             onClick={() => setIsPendingExpectedOpen(false)}
@@ -1775,24 +1618,6 @@ export default function SalaryPage() {
                                                     </span>
                                                 </div>
                                             )}
-
-                                            {pendingPeriodEstimate.holidayPay > 0 && (
-                                                <div className="flex justify-between">
-                                                    <span className="text-gray-500">Holiday Pay</span>
-
-                                                    <span className="font-medium text-gray-900">
-                                                        {formatMoney(pendingPeriodEstimate.holidayPay, currency)}
-                                                    </span>
-                                                </div>
-                                            )}
-
-                                            <div className="flex justify-between">
-                                                <span className="text-gray-500">Vacation Pay</span>
-
-                                                <span className="font-medium text-gray-900">
-                                                    {formatMoney(pendingPeriodEstimate.vacationPay, currency)}
-                                                </span>
-                                            </div>
 
                                             <div className="my-1 border-t border-gray-200" />
 

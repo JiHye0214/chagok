@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { getPayPeriodEndDate, formatDate, getPeriodsPerYear } from "@/lib/payPeriod";
 import { getNotificationTime, subscribeToPush } from "@/lib/notification";
 import { isHoliday } from "@/lib/holiday";
@@ -1113,6 +1112,7 @@ export default function SchedulePage() {
                     </div>
                 </div>
             )}
+
             {/* Calendar */}
             <section className="mt-5 rounded-3xl bg-white p-5 shadow-sm">
                 <div className="mb-5 flex items-center justify-between">
@@ -1199,7 +1199,9 @@ export default function SchedulePage() {
                                     <span
                                         className={
                                             hasSchedule
-                                                ? "flex h-8 w-8 items-center justify-center rounded-full bg-black text-sm font-medium text-white"
+                                                ? `flex h-8 w-8 items-center justify-center rounded-full bg-black text-sm font-medium ${
+                                                      holiday ? "text-red-500" : "text-white"
+                                                  }`
                                                 : holiday
                                                   ? "flex h-8 w-8 items-center justify-center text-sm font-medium text-red-500"
                                                   : "flex h-8 w-8 items-center justify-center text-sm text-gray-900"

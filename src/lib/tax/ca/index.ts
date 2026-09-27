@@ -17,10 +17,7 @@ const provinceNames: Record<string, string> = {
     NU: "누나부트",
 };
 
-export const calculateCanadaTaxes = (
-    annualGross: number,
-    province: string
-) => {
+export const calculateCanadaTaxes = (annualGross: number, province: string) => {
     const federalTax = calculateFederalTax(annualGross);
 
     let provincialTax = 0;
@@ -30,35 +27,43 @@ export const calculateCanadaTaxes = (
     }
 
     // 2026 CPP
-    const cpp = Math.min(
-        Math.max(0, annualGross - 3500) * 0.0595,
-        4230.45
-    );
+    const cpp = Math.min(Math.max(0, annualGross - 3500) * 0.0595, 4230.45);
 
     // 2026 CPP2
-    const cpp2 = Math.min(
-        Math.max(0, annualGross - 74600) * 0.04,
-        416
-    );
+    const cpp2 = Math.min(Math.max(0, annualGross - 74600) * 0.04, 416);
 
     // 2026 EI
-    const ei = Math.min(
-        annualGross * 0.0163,
-        1123.07
-    );
+    const ei = Math.min(annualGross * 0.0163, 1123.07);
 
     return {
-        cpp,
-        cpp2,
-        ei,
-        federalTax,
-        provincialTax,
-        provinceName: provinceNames[province] ?? province,
-        totalDeductions:
-            cpp +
-            cpp2 +
-            ei +
-            federalTax +
-            provincialTax,
+        deductions: [
+            {
+                key: "cpp",
+                name: "CPP",
+                amount: cpp,
+            },
+            {
+                key: "cpp2",
+                name: "CPP2",
+                amount: cpp2,
+            },
+            {
+                key: "ei",
+                name: "EI",
+                amount: ei,
+            },
+            {
+                key: "federalTax",
+                name: "Federal Tax",
+                amount: federalTax,
+            },
+            {
+                key: "provincialTax",
+                name: provinceNames[province] ? `${provinceNames[province]} 세금` : "Provincial Tax",
+                amount: provincialTax,
+            },
+        ],
+
+        totalDeductions: cpp + cpp2 + ei + federalTax + provincialTax,
     };
 };

@@ -202,6 +202,21 @@ export async function PATCH(request: Request) {
                 [session.user.id, language, countryCode, normalizedProvinceCode, timezone, currency, nickname],
             );
 
+            // 최초 구독 생성
+            await client.query(
+                `
+                INSERT INTO subscriptions (
+                    user_id,
+                    plan_id
+                )
+                SELECT $1, id
+                FROM plans
+                WHERE code = 'free'
+                LIMIT 1
+                `,
+                [session.user.id],
+            );
+
             // 최초 계정 연동 시 생활 기본 카테고리 생성
             for (const category of DEFAULT_LIVING_CATEGORIES) {
                 await client.query(

@@ -1,29 +1,27 @@
 import { calculateCanadaTaxes } from "./ca";
 
-export const calculateTaxes = ({
-    country,
-    province,
-    annualGross,
-}: {
-    country: string;
-    province: string;
-    annualGross: number;
-}) => {
+export type TaxDeduction = {
+    key: string;
+    name: string;
+    amount: number;
+};
+
+export type TaxCalculationResult = {
+    deductions: TaxDeduction[];
+    totalDeductions: number;
+};
+
+export const calculateTaxes = ({ country, annualGross }: { country: string; annualGross: number }): TaxCalculationResult => {
     switch (country) {
         case "CA":
-            return calculateCanadaTaxes(
-                annualGross,
-                province
-            );
+            return calculateCanadaTaxes(annualGross);
+
+        case "KR":
+            return calculateKoreaTaxes(annualGross);
 
         default:
             return {
-                cpp: 0,
-                cpp2: 0,
-                ei: 0,
-                federalTax: 0,
-                provincialTax: 0,
-                provinceName: province,
+                deductions: [],
                 totalDeductions: 0,
             };
     }

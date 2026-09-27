@@ -1,13 +1,12 @@
-export type PayFrequency =
-    | "weekly"
-    | "biweekly"
-    | "semi-monthly"
-    | "monthly"
-    | "custom";
+export type PayPeriod = {
+    startDate: string;
+    endDate: string;
+    payDate: string;
+};
 
-export type SemiMonthlyType =
-    | "first-fifteenth"
-    | "fifteenth-end";
+export type PayFrequency = "weekly" | "biweekly" | "semi-monthly" | "monthly" | "custom";
+
+export type SemiMonthlyType = "first-fifteenth" | "fifteenth-end";
 
 export const formatDate = (date: Date) => {
     const year = date.getFullYear();
@@ -79,9 +78,7 @@ export const getPayPeriodEndDate = (
             break;
 
         case "custom":
-            date.setDate(
-                date.getDate() + (Number(customPayDays) || 14) - 1,
-            );
+            date.setDate(date.getDate() + (Number(customPayDays) || 14) - 1);
             break;
 
         default:
