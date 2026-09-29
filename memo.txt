@@ -10,3 +10,6 @@ App Router
 
 시작
 npm run dev
+
+
+잠만 일단 내 진로를 좀 찾아보까
