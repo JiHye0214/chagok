@@ -141,6 +141,7 @@ export const calculateExpectedSalary = ({
      * 국가별 Payroll
      * --------------------------------------------------
      */
+    // 아니 내가 진로를 찾겠다는데 좀 도와줘봐라
 
     const payroll = calculatePayroll({
         country: settings.country,
