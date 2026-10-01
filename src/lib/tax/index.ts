@@ -11,13 +11,59 @@ export type TaxCalculationResult = {
     totalDeductions: number;
 };
 
-export const calculateTaxes = ({ country, annualGross }: { country: string; annualGross: number }): TaxCalculationResult => {
+export const calculateTaxes = ({
+    country,
+    annualGross,
+    province = "ON",
+}: {
+    country: string;
+    annualGross: number;
+    province?: string;
+}): TaxCalculationResult => {
     switch (country) {
-        case "CA":
-            return calculateCanadaTaxes(annualGross);
+        case "CA": {
+            const result = calculateCanadaTaxes({
+                annualIncome: annualGross,
+                province,
+            });
 
+            const deductions: TaxDeduction[] = [
+                {
+                    key: "federal-income-tax",
+                    name: "Federal Income Tax",
+                    amount: result.federalTax,
+                },
+                ...(province === "ON"
+                    ? [
+                          {
+                              key: "ontario-income-tax",
+                              name: "Ontario Income Tax",
+                              amount: result.provincialTax,
+                          },
+                      ]
+                    : []),
+            ].filter((deduction) => deduction.amount > 0);
+
+            const totalDeductions = deductions.reduce((total, deduction) => total + deduction.amount, 0);
+
+            return {
+                deductions,
+                totalDeductions: Math.round(totalDeductions * 100) / 100,
+            };
+        }
+
+        /*
+         * Korea is intentionally left untouched
+         * for the current Canada-first refactor.
+         *
+         * Add the existing Korea implementation back
+         * here when the Korea tax module is reviewed.
+         */
         case "KR":
-            return calculateKoreaTaxes(annualGross);
+            return {
+                deductions: [],
+                totalDeductions: 0,
+            };
 
         default:
             return {
