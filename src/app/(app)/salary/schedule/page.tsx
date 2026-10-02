@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { getPayPeriodEndDate, formatDate, getPeriodsPerYear } from "@/lib/payPeriod";
+import { getPayPeriodEndDate, formatDate } from "@/lib/payPeriod";
 import { getNotificationTime, subscribeToPush } from "@/lib/notification";
 import { isHoliday } from "@/lib/holiday";
-import { calculateTaxes } from "@/lib/tax";
+import { calculateExpectedSalary } from "@/lib/payroll/calculateExpectedSalary";
 import BackButtonHeader from "@/components/BackButtonHeader";
 import { Lock } from "lucide-react";
 
@@ -56,25 +56,6 @@ type Holiday = {
     date: string;
     name: string;
     global: boolean;
-};
-
-type PeriodEstimate = {
-    hours: number;
-    basePay: number;
-    holidayPay: number;
-    vacationPay: number;
-    paychequeTips: number;
-    cashTips: number;
-    grossPay: number;
-    deductions: number;
-    cpp: number;
-    cpp2: number;
-    ei: number;
-    federalTax: number;
-    provincialTax: number;
-    provinceName: string;
-    netPay: number;
-    totalIncome: number;
 };
 
 const WEEK_DAYS = ["일", "월", "화", "수", "목", "금", "토"];
@@ -596,20 +577,6 @@ export default function SchedulePage() {
           })
         : [];
 
-    const currentPeriodHours = currentPeriodSchedules.reduce(
-        (total, schedule) =>
-            total + calculateHours(schedule.startTime, schedule.endTime, schedule.hasBreak ? schedule.breakMinutes : 0),
-        0,
-    );
-
-    const currentHolidaySchedules = currentPeriodSchedules.filter((schedule) => isHoliday(schedule.date.slice(0, 10), holidays));
-
-    const currentHolidayHours = currentHolidaySchedules.reduce(
-        (total, schedule) =>
-            total + calculateHours(schedule.startTime, schedule.endTime, schedule.hasBreak ? schedule.breakMinutes : 0),
-        0,
-    );
-
     const hasPaychequeTips = Boolean(
         salarySettings?.hasTips && (salarySettings.tipType === "paycheque" || salarySettings.tipType === "both"),
     );
@@ -622,64 +589,35 @@ export default function SchedulePage() {
 
     const currentPeriodCashTips = hasCashTips ? Math.max(0, Number(cashTips) || 0) : 0;
 
-    const currentBasePay =
-        salarySettings?.payType === "hourly"
-            ? currentPeriodHours * hourlyWage
-            : salarySettings?.payType === "salary"
-              ? Number(salarySettings.monthlySalary ?? 0)
-              : 0;
+    const currentExpectedSalary = currentPayPeriod
+        ? calculateExpectedSalary({
+              settings: {
+                  country: countryCode ?? "CA",
+                  regionCode: province ?? "ON",
+                  payType: salarySettings?.payType ?? "hourly",
+                  payFrequency: salarySettings?.payFrequency ?? "biweekly",
+                  hourlyWage: salarySettings?.hourlyWage,
+                  monthlySalary: salarySettings?.monthlySalary,
+                  hasTips: Boolean(salarySettings?.hasTips),
+                  tipType: salarySettings?.tipType,
+                  vacationPayRate: salarySettings?.vacationPayRate,
+              },
 
-    const currentHolidayPay = salarySettings?.payType === "hourly" ? currentHolidayHours * hourlyWage * 0.5 : 0;
+              schedules: currentPeriodSchedules.map((schedule) => ({
+                  date: schedule.date.slice(0, 10),
+                  startTime: schedule.startTime,
+                  endTime: schedule.endTime,
+                  hasBreak: schedule.hasBreak,
+                  breakMinutes: schedule.breakMinutes,
+                  isHoliday: Boolean(isHoliday(schedule.date.slice(0, 10), holidays)),
+              })),
 
-    const vacationPayRate = Number(salarySettings?.vacationPayRate ?? 4.15);
+              cashTips: currentPeriodCashTips,
+              paychequeTips: currentPeriodPaychequeTips,
 
-    const currentVacationPay = currentBasePay * (vacationPayRate / 100);
-
-    const currentTaxableGrossPay = currentBasePay + currentHolidayPay + currentVacationPay + currentPeriodPaychequeTips;
-
-    const periodsPerYear = getPeriodsPerYear(salarySettings?.payFrequency ?? "biweekly");
-
-    const currentAnnualGross = currentTaxableGrossPay * periodsPerYear;
-
-    const currentTaxes = calculateTaxes({
-        country: countryCode ?? "",
-        province: province ?? "",
-        annualGross: currentAnnualGross,
-    });
-
-    const currentPeriodEstimate: PeriodEstimate = {
-        hours: currentPeriodHours,
-
-        basePay: currentBasePay,
-
-        holidayPay: currentHolidayPay,
-
-        vacationPay: currentVacationPay,
-
-        paychequeTips: currentPeriodPaychequeTips,
-
-        cashTips: currentPeriodCashTips,
-
-        grossPay: currentTaxableGrossPay,
-
-        deductions: currentTaxes.totalDeductions / periodsPerYear,
-
-        cpp: currentTaxes.cpp / periodsPerYear,
-
-        cpp2: currentTaxes.cpp2 / periodsPerYear,
-
-        ei: currentTaxes.ei / periodsPerYear,
-
-        federalTax: currentTaxes.federalTax / periodsPerYear,
-
-        provincialTax: currentTaxes.provincialTax / periodsPerYear,
-
-        provinceName: currentTaxes.provinceName,
-
-        netPay: currentTaxableGrossPay - currentTaxes.totalDeductions / periodsPerYear,
-
-        totalIncome: currentTaxableGrossPay - currentTaxes.totalDeductions / periodsPerYear + currentPeriodCashTips,
-    };
+              payPeriod: currentPayPeriod,
+          })
+        : null;
 
     /*
      * --------------------------------------------------
@@ -688,40 +626,6 @@ export default function SchedulePage() {
      */
 
     const [animatedNetPay, setAnimatedNetPay] = useState(0);
-
-    useEffect(() => {
-        const target = hasCashTips ? currentPeriodEstimate.totalIncome : currentPeriodEstimate.netPay;
-
-        let startTime: number | null = null;
-
-        let animationFrame: number;
-
-        const duration = 700;
-
-        const animate = (timestamp: number) => {
-            if (startTime === null) {
-                startTime = timestamp;
-            }
-
-            const elapsed = timestamp - startTime;
-
-            const progress = Math.min(elapsed / duration, 1);
-
-            const eased = 1 - Math.pow(1 - progress, 3);
-
-            setAnimatedNetPay(target * eased);
-
-            if (progress < 1) {
-                animationFrame = requestAnimationFrame(animate);
-            } else {
-                setAnimatedNetPay(target);
-            }
-        };
-
-        animationFrame = requestAnimationFrame(animate);
-
-        return () => cancelAnimationFrame(animationFrame);
-    }, [currentPeriodEstimate.netPay, currentPeriodEstimate.totalIncome, hasCashTips]);
 
     /*
      * --------------------------------------------------
