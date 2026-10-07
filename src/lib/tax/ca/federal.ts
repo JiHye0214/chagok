@@ -1,107 +1,50 @@
-const FEDERAL_BASIC_PERSONAL_AMOUNT_MAX = 16452;
-const FEDERAL_BASIC_PERSONAL_AMOUNT_MIN = 14829;
+import { calculateBracketTax, roundMoney, toNonNegative } from "@/lib/tax/ca/core";
+import { CPP_RULES, EI_RULES, FEDERAL_RULES } from "@/lib/tax/ca/rules/2026";
 
-const FEDERAL_BASIC_PERSONAL_AMOUNT_PHASEOUT_START = 181440;
-const FEDERAL_BASIC_PERSONAL_AMOUNT_PHASEOUT_END = 258482;
+const getFederalBasicPersonalAmount = (income: number) => {
+    const { bpaMax, bpaMin, bpaPhaseoutStart, bpaPhaseoutEnd } = FEDERAL_RULES;
 
-const FEDERAL_CEA_MAX = 1501;
-const FEDERAL_LOWEST_RATE = 0.14;
-
-const FEDERAL_TAX_BRACKETS = [
-    {
-        limit: 58523,
-        rate: 0.14,
-        constant: 0,
-    },
-    {
-        limit: 117045,
-        rate: 0.205,
-        constant: 3804,
-    },
-    {
-        limit: 181440,
-        rate: 0.26,
-        constant: 10241,
-    },
-    {
-        limit: 258482,
-        rate: 0.29,
-        constant: 15685,
-    },
-    {
-        limit: Infinity,
-        rate: 0.33,
-        constant: 26024,
-    },
-];
-
-const roundMoney = (value: number) => Math.round(value * 100) / 100;
-
-const getFederalBasicPersonalAmount = (annualIncome: number) => {
-    if (annualIncome <= FEDERAL_BASIC_PERSONAL_AMOUNT_PHASEOUT_START) {
-        return FEDERAL_BASIC_PERSONAL_AMOUNT_MAX;
+    if (income <= bpaPhaseoutStart) {
+        return bpaMax;
     }
 
-    if (annualIncome >= FEDERAL_BASIC_PERSONAL_AMOUNT_PHASEOUT_END) {
-        return FEDERAL_BASIC_PERSONAL_AMOUNT_MIN;
+    if (income >= bpaPhaseoutEnd) {
+        return bpaMin;
     }
 
-    const reduction =
-        (annualIncome - FEDERAL_BASIC_PERSONAL_AMOUNT_PHASEOUT_START) *
-        (1623 / (FEDERAL_BASIC_PERSONAL_AMOUNT_PHASEOUT_END - FEDERAL_BASIC_PERSONAL_AMOUNT_PHASEOUT_START));
+    const reduction = (income - bpaPhaseoutStart) * ((bpaMax - bpaMin) / (bpaPhaseoutEnd - bpaPhaseoutStart));
 
-    return Math.max(FEDERAL_BASIC_PERSONAL_AMOUNT_MIN, FEDERAL_BASIC_PERSONAL_AMOUNT_MAX - reduction);
-};
-
-const calculateBasicFederalTax = (annualTaxableIncome: number) => {
-    const safeIncome = Math.max(0, annualTaxableIncome);
-
-    const bracket =
-        FEDERAL_TAX_BRACKETS.find((item) => safeIncome <= item.limit) ?? FEDERAL_TAX_BRACKETS[FEDERAL_TAX_BRACKETS.length - 1];
-
-    return Math.max(0, safeIncome * bracket.rate - bracket.constant);
+    return Math.max(bpaMin, bpaMax - reduction);
 };
 
 export const calculateFederalTax = ({
     annualIncome,
+    annualTaxableIncome,
     annualCppBase = 0,
     annualEi = 0,
 }: {
     annualIncome: number;
+    // 소득공제(CPP 추가분 등)를 뺀 과세소득. 없으면 annualIncome과 같다고 봄.
+    annualTaxableIncome?: number;
     annualCppBase?: number;
     annualEi?: number;
 }) => {
-    const safeIncome = Math.max(0, Number(annualIncome) || 0);
-    const safeCppBase = Math.max(0, Number(annualCppBase) || 0);
-    const safeEi = Math.max(0, Number(annualEi) || 0);
+    const safeIncome = toNonNegative(annualIncome);
+    const taxableIncome = annualTaxableIncome === undefined ? safeIncome : toNonNegative(annualTaxableIncome);
+    const safeCppBase = toNonNegative(annualCppBase);
+    const safeEi = toNonNegative(annualEi);
 
-    /*
-     * Federal basic tax
-     *
-     * CRA 2026 payroll formula uses annual taxable income
-     * against the federal rate/constant table.
-     */
-    const basicTax = calculateBasicFederalTax(safeIncome);
+    // 1. 구간표 기준 기본 연방세 (과세소득 기준)
+    const basicTax = calculateBracketTax(taxableIncome, FEDERAL_RULES.brackets);
 
-    /*
-     * Federal non-refundable tax credits
-     *
-     * 1. Basic personal amount
-     * 2. CPP base contribution
-     * 3. EI premium
-     * 4. Canada Employment Amount
-     */
-    const basicPersonalAmount = getFederalBasicPersonalAmount(safeIncome);
-
-    const cppBaseCredit = Math.min(safeCppBase, 3519.45);
-
-    const eiCredit = Math.min(safeEi, 1123.07);
-
-    const employmentAmount = Math.min(safeIncome, FEDERAL_CEA_MAX);
+    // 2. 비환급 세액공제: 기본공제, CPP 기본분, EI, Canada Employment Amount
+    const basicPersonalAmount = getFederalBasicPersonalAmount(taxableIncome);
+    const cppBaseCredit = Math.min(safeCppBase, CPP_RULES.baseMaxCredit);
+    const eiCredit = Math.min(safeEi, EI_RULES.max);
+    const employmentAmount = Math.min(safeIncome, FEDERAL_RULES.canadaEmploymentAmountMax);
 
     const totalCreditAmount = basicPersonalAmount + cppBaseCredit + eiCredit + employmentAmount;
-
-    const federalTaxCredits = totalCreditAmount * FEDERAL_LOWEST_RATE;
+    const federalTaxCredits = totalCreditAmount * FEDERAL_RULES.lowestRate;
 
     return roundMoney(Math.max(0, basicTax - federalTaxCredits));
 };

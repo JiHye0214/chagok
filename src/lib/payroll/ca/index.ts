@@ -1,36 +1,61 @@
 import type { CanadaPayrollInput, PayrollDeduction, PayrollResult } from "@/lib/payroll/types";
 
-import { getPeriodsPerYear } from "@/lib/payPeriod";
+import { getPayPeriodDays, getPeriodsPerYear } from "@/lib/payPeriod";
 
+import { roundMoney } from "@/lib/tax/ca/core";
 import { calculateFederalTax } from "@/lib/tax/ca/federal";
 import { calculateOntarioTax } from "@/lib/tax/ca/ontario";
+import { CPP_RULES, EI_RULES } from "@/lib/tax/ca/rules/2026";
 
-const CPP_RATE = 0.0595;
-const CPP_BASE_RATE = 0.0495;
-const CPP2_RATE = 0.04;
+const {
+    rate: CPP_RATE,
+    baseRate: CPP_BASE_RATE,
+    enhancedRate: CPP_ENHANCED_RATE,
+    cpp2Rate: CPP2_RATE,
+    basicExemption: CPP_BASIC_EXEMPTION,
+    ympe: CPP_YMPE,
+    yampe: CPP_YAMPE,
+    max: CPP_MAX,
+    cpp2Max: CPP2_MAX,
+} = CPP_RULES;
 
-const CPP_BASIC_EXEMPTION = 3500;
-const CPP_YMPE = 74600;
-const CPP_YAMPE = 85000;
+const { rate: EI_RATE, maxInsurableEarnings: EI_MAX_INSURABLE_EARNINGS, max: EI_MAX } = EI_RULES;
 
-const CPP_MAX = 4230.45;
-const CPP2_MAX = 416;
+/*
+ * 주별 소득세 규칙표.
+ * 새 주를 추가할 때는 tax/ca/에 계산 함수를 만들고 여기에 한 줄만 추가.
+ */
+type ProvincialTaxInput = {
+    annualIncome: number;
+    annualTaxableIncome: number;
+    annualCppBase: number;
+    annualEi: number;
+};
 
-const EI_RATE = 0.0163;
-const EI_MAX_INSURABLE_EARNINGS = 68900;
-const EI_MAX = 1123.07;
+type ProvincialTaxRule = {
+    key: string;
+    name: string;
+    calculate: (input: ProvincialTaxInput) => number;
+};
 
-const roundMoney = (value: number) => Math.round(value * 100) / 100;
+const PROVINCIAL_TAX_RULES: Record<string, ProvincialTaxRule> = {
+    ON: { key: "ontario-income-tax", name: "Ontario Income Tax", calculate: calculateOntarioTax },
+};
 
 /**
  * CPP base + first additional contribution
- *
- * 현재 급여기간에서 실제로 공제할 CPP.
- *
- * YTD gross와 YTD CPP를 이용해서
- * 연간 최대 공제액을 넘지 않도록 한다.
  */
-const calculateCpp = ({ grossPay, ytdGrossPay, ytdCpp }: { grossPay: number; ytdGrossPay: number; ytdCpp: number }) => {
+const calculateCpp = ({
+    grossPay,
+    ytdGrossPay,
+    ytdCpp,
+    periodsPerYear,
+}: {
+    grossPay: number;
+    ytdGrossPay: number;
+    ytdCpp: number;
+    periodsPerYear: number;
+}) => {
     const previousPensionableEarnings = Math.max(0, Math.min(ytdGrossPay, CPP_YMPE));
 
     const currentPensionableEarnings = Math.max(0, Math.min(grossPay, CPP_YMPE - previousPensionableEarnings));
@@ -39,39 +64,25 @@ const calculateCpp = ({ grossPay, ytdGrossPay, ytdCpp }: { grossPay: number; ytd
 
     const contributionRoom = Math.max(0, CPP_MAX - previousContribution);
 
-    /*
-     * The $3,500 basic exemption is applied once
-     * during the year.
-     *
-     * For an expected-pay calculation without a precise
-     * pay-period allocation, the first period with
-     * pensionable earnings receives the exemption.
-     */
-    const currentContributionBase = Math.max(
-        0,
-        currentPensionableEarnings - (previousPensionableEarnings === 0 ? CPP_BASIC_EXEMPTION : 0),
-    );
+    // 기본공제($3,500)는 첫 급여에 몰아서 적용하지 않고 급여 주기마다 나눠서 적용 (CRA 방식)
+    const exemptionPerPeriod = CPP_BASIC_EXEMPTION / periodsPerYear;
+
+    const currentContributionBase = Math.max(0, currentPensionableEarnings - exemptionPerPeriod);
 
     return roundMoney(Math.min(currentContributionBase * CPP_RATE, contributionRoom));
 };
 
 /**
  * Second additional CPP contribution.
- *
- * CPP2 applies only to pensionable earnings
- * between YMPE and YAMPE.
  */
 const calculateCpp2 = ({ grossPay, ytdGrossPay, ytdCpp2 }: { grossPay: number; ytdGrossPay: number; ytdCpp2: number }) => {
     const previousEarnings = Math.max(0, Math.min(ytdGrossPay, CPP_YAMPE));
 
-    const currentEarningsAtYampee = Math.max(
-        0,
-        Math.min(ytdGrossPay + grossPay, CPP_YAMPE) - Math.max(previousEarnings, CPP_YMPE),
-    );
+    const currentCpp2Earnings = Math.max(0, Math.min(ytdGrossPay + grossPay, CPP_YAMPE) - Math.max(previousEarnings, CPP_YMPE));
 
     const contributionRoom = Math.max(0, CPP2_MAX - Math.max(0, ytdCpp2));
 
-    return roundMoney(Math.min(currentEarningsAtYampee * CPP2_RATE, contributionRoom));
+    return roundMoney(Math.min(currentCpp2Earnings * CPP2_RATE, contributionRoom));
 };
 
 /**
@@ -94,19 +105,10 @@ export const calculateCanadaPayroll = ({
     payPeriod,
     ytd,
 }: CanadaPayrollInput): PayrollResult => {
-    /*
-     * payPeriod is retained here because the payroll API
-     * needs the actual pay-period context.
-     *
-     * The current annualized tax model only needs
-     * payFrequency. We will use payPeriod when we later
-     * support date-specific/custom payroll calculations.
-     */
-    void payPeriod;
-
     const safeGrossPay = Math.max(0, Number(grossPay) || 0);
 
-    const periodsPerYear = getPeriodsPerYear(payFrequency);
+    // custom 주기는 실제 급여 기간 일수로 연간 횟수를 계산
+    const periodsPerYear = getPeriodsPerYear(payFrequency, payFrequency === "custom" ? getPayPeriodDays(payPeriod) : undefined);
 
     const safeYtd = {
         grossPay: Math.max(0, Number(ytd?.grossPay) || 0),
@@ -115,16 +117,11 @@ export const calculateCanadaPayroll = ({
         ei: Math.max(0, Number(ytd?.ei) || 0),
     };
 
-    /*
-     * -----------------------------------------
-     * 1. Current-period CPP / CPP2 / EI
-     * -----------------------------------------
-     */
-
     const cpp = calculateCpp({
         grossPay: safeGrossPay,
         ytdGrossPay: safeYtd.grossPay,
         ytdCpp: safeYtd.cpp,
+        periodsPerYear,
     });
 
     const cpp2 = calculateCpp2({
@@ -139,121 +136,65 @@ export const calculateCanadaPayroll = ({
         ytdEi: safeYtd.ei,
     });
 
-    /*
-     * -----------------------------------------
-     * 2. Annualized income
-     * -----------------------------------------
-     *
-     * Example:
-     *
-     * biweekly $1,500
-     * → $1,500 × 26
-     * → $39,000 annualized income
-     *
-     * Then annual tax is calculated and divided
-     * back into 26 pay periods.
-     */
     const annualIncome = safeGrossPay * periodsPerYear;
 
-    /*
-     * -----------------------------------------
-     * 3. Annual CPP base contribution
-     * -----------------------------------------
-     *
-     * Federal/Ontario income-tax credits use
-     * the CPP base contribution, not CPP2.
-     *
-     * CPP base maximum = $3,519.45.
-     */
-    const annualCppBase =
-        Math.min(Math.max(0, annualIncome - CPP_BASIC_EXEMPTION), CPP_YMPE - CPP_BASIC_EXEMPTION) * CPP_BASE_RATE;
+    // 연간 기준 CPP: 기본분(4.95%)은 세액공제, 추가분(1%)과 CPP2는 소득공제
+    const annualPensionableEarnings = Math.min(Math.max(0, annualIncome - CPP_BASIC_EXEMPTION), CPP_YMPE - CPP_BASIC_EXEMPTION);
 
-    /*
-     * -----------------------------------------
-     * 4. Annual EI
-     * -----------------------------------------
-     */
+    const annualCppBase = annualPensionableEarnings * CPP_BASE_RATE;
+    const annualCppEnhanced = annualPensionableEarnings * CPP_ENHANCED_RATE;
+    const annualCpp2 = Math.max(0, Math.min(annualIncome, CPP_YAMPE) - CPP_YMPE) * CPP2_RATE;
+
     const annualEi = Math.min(annualIncome, EI_MAX_INSURABLE_EARNINGS) * EI_RATE;
 
-    /*
-     * -----------------------------------------
-     * 5. Federal annual tax
-     * -----------------------------------------
-     */
+    // 소득세를 매기는 소득 = 연간 소득 - 소득공제 대상 CPP
+    const annualTaxableIncome = Math.max(0, annualIncome - annualCppEnhanced - annualCpp2);
+
     const federalAnnualTax = calculateFederalTax({
         annualIncome,
+        annualTaxableIncome,
         annualCppBase,
         annualEi,
     });
 
-    /*
-     * Convert annual tax back to this pay period.
-     */
-    const federalTax = roundMoney(federalAnnualTax / periodsPerYear);
-
-    /*
-     * -----------------------------------------
-     * 6. Ontario annual tax
-     * -----------------------------------------
-     *
-     * For this Canada implementation we only
-     * calculate Ontario as the supported province.
-     *
-     * Other provinces should not silently receive
-     * Ontario tax.
-     */
-    const provincialAnnualTax =
-        regionCode === "ON"
-            ? calculateOntarioTax({
-                  annualIncome,
-                  annualCppBase,
-                  annualEi,
-              })
-            : 0;
-
-    const provincialTax = roundMoney(provincialAnnualTax / periodsPerYear);
-
-    /*
-     * -----------------------------------------
-     * 7. Build deductions
-     * -----------------------------------------
-     */
-    const deductions: PayrollDeduction[] = [
-        {
-            key: "cpp",
-            name: "CPP",
-            amount: cpp,
-        },
-        {
-            key: "cpp2",
-            name: "CPP2",
-            amount: cpp2,
-        },
-        {
-            key: "ei",
-            name: "EI",
-            amount: ei,
-        },
+    const allDeductions: PayrollDeduction[] = [
+        { key: "cpp", name: "CPP", amount: cpp },
+        { key: "cpp2", name: "CPP2", amount: cpp2 },
+        { key: "ei", name: "EI", amount: ei },
         {
             key: "federal-income-tax",
             name: "Federal Income Tax",
-            amount: federalTax,
+            amount: roundMoney(federalAnnualTax / periodsPerYear),
         },
-        ...(regionCode === "ON"
-            ? [
-                  {
-                      key: "ontario-income-tax",
-                      name: "Ontario Income Tax",
-                      amount: provincialTax,
-                  },
-              ]
-            : []),
-    ].filter((deduction) => deduction.amount > 0);
+    ];
+
+    // 주 소득세: 규칙표에 없는 주(또는 미선택)는 조용히 0원 처리하지 않고 경고를 남김
+    const warnings: string[] = [];
+    const provincialRule = regionCode ? PROVINCIAL_TAX_RULES[regionCode] : undefined;
+
+    if (provincialRule) {
+        const provincialAnnualTax = provincialRule.calculate({ annualIncome, annualTaxableIncome, annualCppBase, annualEi });
+
+        allDeductions.push({
+            key: provincialRule.key,
+            name: provincialRule.name,
+            amount: roundMoney(provincialAnnualTax / periodsPerYear),
+        });
+    } else {
+        warnings.push(
+            regionCode
+                ? `${regionCode} 주 소득세는 아직 지원하지 않아 계산에서 제외했어요.`
+                : "지역(주)이 선택되지 않아 주 소득세를 계산에서 제외했어요.",
+        );
+    }
+
+    const deductions = allDeductions.filter((deduction) => deduction.amount > 0);
 
     const totalDeductions = roundMoney(deductions.reduce((total, deduction) => total + deduction.amount, 0));
 
     return {
         deductions,
         totalDeductions,
+        ...(warnings.length > 0 ? { warnings } : {}),
     };
 };

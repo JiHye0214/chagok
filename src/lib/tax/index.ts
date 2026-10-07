@@ -1,4 +1,4 @@
-import { calculateCanadaTaxes } from "./ca";
+import { calculateCanadaTaxes } from "./ca/core";
 
 export type TaxDeduction = {
     key: string;

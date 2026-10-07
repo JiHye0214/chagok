@@ -1,8 +1,12 @@
 import { calculatePayroll } from "@/lib/payroll/index";
+import type { PayrollCountry } from "@/lib/payroll/index";
+import { calculatePeriodHolidayPay } from "@/lib/holiday";
+import type { Holiday, HolidayPayMode } from "@/lib/holiday";
+import { getPayPeriodDays, getPeriodsPerYear } from "@/lib/payPeriod";
 import type { PayPeriod, PayFrequency } from "@/lib/payPeriod";
 
 export type ExpectedSalarySettings = {
-    country: string;
+    country: PayrollCountry;
     regionCode?: string;
 
     payType: "hourly" | "salary" | "commission" | "other";
@@ -11,6 +15,12 @@ export type ExpectedSalarySettings = {
 
     hourlyWage?: number;
     monthlySalary?: number;
+
+    // CA: 매 급여에 얹어 받는 베케이션 페이 비율 (0.04 = 4%). 없거나 0이면 없음.
+    vacationPayRate?: number;
+
+    // CA 시급제: 공휴일 수당 지급 방식. 없으면 "full" (공휴일 수당 + 일했을 때 프리미엄)
+    holidayPayMode?: HolidayPayMode;
 
     hasTips: boolean;
     tipType?: "cash" | "paycheque" | "both";
@@ -29,6 +39,11 @@ export type ExpectedSalaryResult = {
 
     basePay: number;
 
+    // 공휴일에 일한 시간의 추가분 / 공휴일 자체 수당 / 매 급여 베케이션 페이
+    premiumPay: number;
+    publicHolidayPay: number;
+    vacationPay: number;
+
     paychequeTips: number;
     cashTips: number;
 
@@ -44,6 +59,21 @@ export type ExpectedSalaryResult = {
 
     estimatedNetPay: number;
     finalEstimatedIncome: number;
+
+    // 계산에서 제외했거나 추정한 항목 안내 (예: 미지원 주)
+    warnings: string[];
+};
+
+const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+
+const toSafeNumber = (value: unknown) => {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
+};
+
+const toMinutes = (time: string) => {
+    const [hour, minute] = time.split(":").map(Number);
+    return hour * 60 + minute;
 };
 
 const calculateHours = (startTime: string, endTime: string, breakMinutes: number = 0) => {
@@ -51,20 +81,41 @@ const calculateHours = (startTime: string, endTime: string, breakMinutes: number
         return 0;
     }
 
-    const [startHour, startMinute] = startTime.split(":").map(Number);
-    const [endHour, endMinute] = endTime.split(":").map(Number);
+    const start = toMinutes(startTime);
+    let end = toMinutes(endTime);
 
-    const start = startHour * 60 + startMinute;
+    if (!Number.isFinite(start) || !Number.isFinite(end)) {
+        return 0;
+    }
 
-    let end = endHour * 60 + endMinute;
-
+    // 자정을 넘기는 근무
     if (end < start) {
         end += 24 * 60;
     }
 
-    const totalMinutes = Math.max(0, end - start - (Number(breakMinutes) || 0));
+    const totalMinutes = Math.max(0, end - start - toSafeNumber(breakMinutes));
 
     return totalMinutes / 60;
+};
+
+const calculateBasePay = (settings: ExpectedSalarySettings, periodHours: number, payPeriod: PayPeriod) => {
+    switch (settings.payType) {
+        case "hourly":
+            return periodHours * toSafeNumber(settings.hourlyWage);
+
+        case "salary": {
+            // monthlySalary를 이번 급여 주기 몫으로 환산 (biweekly면 월급*12/26)
+            // custom 주기는 실제 급여 기간 일수로 연간 횟수를 계산
+            const perYear = getPeriodsPerYear(
+                settings.payFrequency,
+                settings.payFrequency === "custom" ? getPayPeriodDays(payPeriod) : undefined,
+            );
+            return (toSafeNumber(settings.monthlySalary) * 12) / perYear;
+        }
+
+        default:
+            return 0;
+    }
 };
 
 export const calculateExpectedSalary = ({
@@ -73,75 +124,84 @@ export const calculateExpectedSalary = ({
     cashTips = 0,
     paychequeTips = 0,
     payPeriod,
+    holidays = [],
 }: {
     settings: ExpectedSalarySettings;
     schedules: ExpectedSalarySchedule[];
     cashTips?: number;
     paychequeTips?: number;
     payPeriod: PayPeriod;
+    // 공휴일 목록 (CA 시급제일 때 공휴일 수당 계산에 사용)
+    holidays?: Holiday[];
 }): ExpectedSalaryResult => {
-    /*
-     * --------------------------------------------------
-     * Tips
-     * --------------------------------------------------
-     */
+    const warnings: string[] = [];
+    const isCanada = settings.country === "CA";
 
-    const safeCashTips = Math.max(0, Number(cashTips) || 0);
-
-    const safePaychequeTips = Math.max(0, Number(paychequeTips) || 0);
-
+    // 팁: 설정에서 허용한 종류만 반영
     const hasPaychequeTips = settings.hasTips && (settings.tipType === "paycheque" || settings.tipType === "both");
-
     const hasCashTips = settings.hasTips && (settings.tipType === "cash" || settings.tipType === "both");
 
-    const actualPaychequeTips = hasPaychequeTips ? safePaychequeTips : 0;
+    const actualPaychequeTips = hasPaychequeTips ? Math.max(0, toSafeNumber(paychequeTips)) : 0;
+    const actualCashTips = hasCashTips ? Math.max(0, toSafeNumber(cashTips)) : 0;
 
-    const actualCashTips = hasCashTips ? safeCashTips : 0;
-
-    /*
-     * --------------------------------------------------
-     * 근무시간
-     * --------------------------------------------------
-     */
-
-    const periodHours = schedules.reduce(
-        (total, schedule) =>
-            total + calculateHours(schedule.startTime, schedule.endTime, schedule.hasBreak ? schedule.breakMinutes : 0),
-        0,
+    // 근무시간 (일정별로 계산해 두고 합계와 날짜별 시간에 모두 사용)
+    const scheduleHours = schedules.map((schedule) =>
+        calculateHours(schedule.startTime, schedule.endTime, schedule.hasBreak ? schedule.breakMinutes : 0),
     );
 
-    /*
-     * --------------------------------------------------
-     * 기본급
-     * --------------------------------------------------
-     */
+    const periodHours = scheduleHours.reduce((total, hours) => total + hours, 0);
 
-    const hourlyWage = settings.payType === "hourly" ? Number(settings.hourlyWage ?? 0) : 0;
+    // 기본급
+    const basePay = round2(calculateBasePay(settings, periodHours, payPeriod));
 
-    const basePay =
-        settings.payType === "hourly"
-            ? periodHours * hourlyWage
-            : settings.payType === "salary"
-              ? Number(settings.monthlySalary ?? 0)
-              : 0;
+    // 베케이션 페이 비율 (CA만)
+    const vacationPayRate = isCanada ? Math.max(0, toSafeNumber(settings.vacationPayRate)) : 0;
 
-    /*
-     * --------------------------------------------------
-     * 급여기간 Gross
-     *
-     * 여기까지는 모든 국가에서 공통으로 이해할 수
-     * 있는 급여 계산만 한다.
-     * --------------------------------------------------
-     */
+    // 공휴일 수당 (CA 시급제만. 월급제는 공휴일에도 월급이 그대로 나오므로 따로 더하지 않음)
+    let premiumPay = 0;
+    let publicHolidayPay = 0;
 
-    const grossPay = basePay + actualPaychequeTips;
+    if (isCanada && settings.payType === "hourly" && holidays.length > 0) {
+        const hoursByDate: Record<string, number> = {};
 
-    /*
-     * --------------------------------------------------
-     * 국가별 Payroll
-     * --------------------------------------------------
-     */
+        schedules.forEach((schedule, index) => {
+            hoursByDate[schedule.date] = (hoursByDate[schedule.date] ?? 0) + scheduleHours[index];
+        });
 
+        // 직전 4주 급여 기록이 없으므로, 이번 급여 기간의 하루 평균 임금 × 28일로 추정
+        const periodDays = getPayPeriodDays(payPeriod);
+        const estimatedRegularWagesBeforeHoliday = periodDays > 0 ? (basePay / periodDays) * 28 : 0;
+
+        const holidayPay = calculatePeriodHolidayPay({
+            province: settings.regionCode ?? "",
+            hourlyWage: toSafeNumber(settings.hourlyWage),
+            startDate: payPeriod.startDate,
+            endDate: payPeriod.endDate,
+            hoursByDate,
+            holidays,
+            regularWagesBeforeHoliday: estimatedRegularWagesBeforeHoliday,
+            vacationPayRate,
+            mode: settings.holidayPayMode ?? "full",
+        });
+
+        premiumPay = holidayPay.premiumPay;
+        publicHolidayPay = holidayPay.publicHolidayPay;
+
+        if (publicHolidayPay > 0) {
+            warnings.push("공휴일 수당은 직전 4주 급여를 이번 급여 기간 기준으로 추정해서 계산했어요.");
+        }
+
+        warnings.push(...holidayPay.warnings);
+    }
+
+    // 베케이션 페이: 임금(기본급 + 공휴일 수당)에 비율 적용. 팁은 임금이 아니므로 제외.
+    const wages = basePay + premiumPay + publicHolidayPay;
+    const vacationPay = round2(wages * vacationPayRate);
+
+    // 세전 금액 (페이첵에 찍히는 금액)
+    const grossPay = round2(wages + vacationPay + actualPaychequeTips);
+
+    // 국가별 세금/공제
     const payroll = calculatePayroll({
         country: settings.country,
         regionCode: settings.regionCode,
@@ -150,39 +210,24 @@ export const calculateExpectedSalary = ({
         payPeriod,
     });
 
-    /*
-     * --------------------------------------------------
-     * 예상 실수령액
-     * --------------------------------------------------
-     */
+    warnings.push(...(payroll.warnings ?? []));
 
-    const estimatedNetPay = grossPay - payroll.totalDeductions;
-
-    /*
-     * --------------------------------------------------
-     * 최종 예상 수입
-     * --------------------------------------------------
-     */
-
-    const finalEstimatedIncome = estimatedNetPay + actualCashTips;
+    const totalDeductions = round2(payroll.totalDeductions);
+    const estimatedNetPay = round2(grossPay - totalDeductions);
 
     return {
         hours: periodHours,
-
         basePay,
-
+        premiumPay,
+        publicHolidayPay,
+        vacationPay,
         paychequeTips: actualPaychequeTips,
-
         cashTips: actualCashTips,
-
         grossPay,
-
         deductions: payroll.deductions,
-
-        totalDeductions: payroll.totalDeductions,
-
+        totalDeductions,
         estimatedNetPay,
-
-        finalEstimatedIncome,
+        finalEstimatedIncome: round2(estimatedNetPay + actualCashTips),
+        warnings,
     };
 };

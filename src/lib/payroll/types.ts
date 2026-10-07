@@ -9,6 +9,8 @@ export type PayrollDeduction = {
 export type PayrollResult = {
     deductions: PayrollDeduction[];
     totalDeductions: number;
+    // 계산에서 제외했거나 추정한 항목 안내 (예: 미지원 주). UI에서 "예상 금액" 근처에 표시.
+    warnings?: string[];
 };
 
 export type PayrollYtd = {
