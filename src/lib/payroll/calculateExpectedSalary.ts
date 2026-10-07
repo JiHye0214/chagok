@@ -1,6 +1,8 @@
-import { calculatePayroll } from "@/lib/payroll/index";
-import type { PayrollCountry } from "@/lib/payroll/index";
+// lib/payroll/calculateExpectedSalary.ts
+import { calculatePayroll } from "@/lib/payroll/calculatePayroll";
+import type { PayrollCountry } from "@/lib/payroll/calculatePayroll";
 import { calculatePeriodHolidayPay } from "@/lib/holiday";
+import { getDefaultHolidayPayMode } from "@/lib/labor/rules";
 import type { Holiday, HolidayPayMode } from "@/lib/holiday";
 import { getPayPeriodDays, getPeriodsPerYear } from "@/lib/payPeriod";
 import type { PayPeriod, PayFrequency } from "@/lib/payPeriod";
@@ -19,7 +21,7 @@ export type ExpectedSalarySettings = {
     // CA: 매 급여에 얹어 받는 베케이션 페이 비율 (0.04 = 4%). 없거나 0이면 없음.
     vacationPayRate?: number;
 
-    // CA 시급제: 공휴일 수당 지급 방식. 없으면 "full" (공휴일 수당 + 일했을 때 프리미엄)
+    // 시급제: 공휴일 수당 지급 방식. 없으면 CA는 "full"(공휴일 수당 + 일했을 때 프리미엄), KR은 "none"
     holidayPayMode?: HolidayPayMode;
 
     hasTips: boolean;
@@ -157,22 +159,36 @@ export const calculateExpectedSalary = ({
     // 베케이션 페이 비율 (CA만)
     const vacationPayRate = isCanada ? Math.max(0, toSafeNumber(settings.vacationPayRate)) : 0;
 
-    // 공휴일 수당 (CA 시급제만. 월급제는 공휴일에도 월급이 그대로 나오므로 따로 더하지 않음)
+    // 공휴일 수당 (시급제만. 월급제는 공휴일에도 월급이 그대로 나오므로 따로 더하지 않음)
     let premiumPay = 0;
     let publicHolidayPay = 0;
 
-    if (isCanada && settings.payType === "hourly" && holidays.length > 0) {
+    if (settings.payType === "hourly" && holidays.length > 0) {
+        const holidayDates = new Set(holidays.map((holiday) => holiday.date));
         const hoursByDate: Record<string, number> = {};
+        let regularDayHours = 0;
+        let regularDayCount = 0;
 
         schedules.forEach((schedule, index) => {
-            hoursByDate[schedule.date] = (hoursByDate[schedule.date] ?? 0) + scheduleHours[index];
+            const hours = scheduleHours[index];
+
+            hoursByDate[schedule.date] = (hoursByDate[schedule.date] ?? 0) + hours;
+
+            if (hours > 0 && !holidayDates.has(schedule.date)) {
+                regularDayHours += hours;
+                regularDayCount += 1;
+            }
         });
 
-        // 직전 4주 급여 기록이 없으므로, 이번 급여 기간의 하루 평균 임금 × 28일로 추정
+        // [CA] 직전 4주 급여 기록이 없으므로, 이번 급여 기간의 하루 평균 임금 × 28일로 추정
         const periodDays = getPayPeriodDays(payPeriod);
         const estimatedRegularWagesBeforeHoliday = periodDays > 0 ? (basePay / periodDays) * 28 : 0;
 
+        // [KR] 하루 소정근로시간 추정: 공휴일이 아닌 근무일의 평균 (최대 8시간, 근무 기록이 없으면 8시간)
+        const scheduledHoursPerDay = regularDayCount > 0 ? Math.min(8, regularDayHours / regularDayCount) : 8;
+
         const holidayPay = calculatePeriodHolidayPay({
+            country: settings.country,
             province: settings.regionCode ?? "",
             hourlyWage: toSafeNumber(settings.hourlyWage),
             startDate: payPeriod.startDate,
@@ -181,14 +197,19 @@ export const calculateExpectedSalary = ({
             holidays,
             regularWagesBeforeHoliday: estimatedRegularWagesBeforeHoliday,
             vacationPayRate,
-            mode: settings.holidayPayMode ?? "full",
+            scheduledHoursPerDay,
+            mode: settings.holidayPayMode ?? getDefaultHolidayPayMode(settings.country),
         });
 
         premiumPay = holidayPay.premiumPay;
         publicHolidayPay = holidayPay.publicHolidayPay;
 
         if (publicHolidayPay > 0) {
-            warnings.push("공휴일 수당은 직전 4주 급여를 이번 급여 기간 기준으로 추정해서 계산했어요.");
+            warnings.push(
+                isCanada
+                    ? "공휴일 수당은 직전 4주 급여를 이번 급여 기간 기준으로 추정해서 계산했어요."
+                    : "유급휴일 수당은 공휴일이 원래 근무하는 날일 때만 해당돼요. 하루 근무시간은 이번 기간 평균(최대 8시간)으로 추정했어요.",
+            );
         }
 
         warnings.push(...holidayPay.warnings);

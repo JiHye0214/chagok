@@ -1,3 +1,4 @@
+// lib/tax/ca/rules/2026.ts
 /*
  * 2026 캐나다 급여 세금 규칙. 숫자는 이 파일에만 둔다.
  * 출처: CRA T4127 (Payroll Deductions Formulas), Ontario 규칙.

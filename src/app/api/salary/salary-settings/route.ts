@@ -1,6 +1,22 @@
-import { getPayPeriodEndDate } from "@/lib/payPeriod";
-import { sql } from "@/lib/db";
+// (기존 salary-settings/route.ts 자리에 그대로 교체)
 import { getCurrentUser } from "@/lib/auth/user";
+import { sql } from "@/lib/db";
+import { EMPLOYMENT_TYPES, PAY_FREQUENCIES, PAY_TYPES, SEMI_MONTHLY_TYPES, TIP_TYPES } from "@/lib/api/constants";
+import { toSalarySettingsDto } from "@/lib/api/mappers";
+import { badRequest, handleRouteError, readJsonBody, unauthorized } from "@/lib/api/response";
+import {
+    ValidationError,
+    parseBoolean,
+    parseEnum,
+    parseInteger,
+    parseOptionalAmount,
+    parseOptionalDate,
+    parseOptionalEnum,
+} from "@/lib/api/validate";
+import { getPayPeriodEndDate } from "@/lib/payPeriod";
+import { isPayrollCountry } from "@/lib/payroll";
+import type { PayrollCountry } from "@/lib/payroll";
+import { parseCountryOptions } from "@/lib/payroll/countryOptions";
 
 const getDateDifference = (fromDate: string, toDate: string) => {
     const from = new Date(`${fromDate}T00:00:00`);
@@ -13,32 +29,63 @@ const getDateDifference = (fromDate: string, toDate: string) => {
     return Math.round((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24));
 };
 
+// 값이 없으면 null = "변경 없음" (예전 화면이 country를 안 보내도 기존 값이 유지됨)
+const parseOptionalCountry = (value: unknown): PayrollCountry | null => {
+    if (value === undefined || value === null || value === "") {
+        return null;
+    }
+
+    const country = typeof value === "string" ? value.toUpperCase() : "";
+
+    if (!isPayrollCountry(country)) {
+        throw new ValidationError("지원하지 않는 국가입니다.");
+    }
+
+    return country;
+};
+
+const parseOptionalRegion = (value: unknown): string | null => {
+    if (value === undefined || value === null || value === "") {
+        return null;
+    }
+
+    const region = typeof value === "string" ? value.toUpperCase() : "";
+
+    if (!/^[A-Z0-9]{1,3}$/.test(region)) {
+        throw new ValidationError("지역 코드가 올바르지 않습니다.");
+    }
+
+    return region;
+};
+
+const getStoredCountry = async (userId: string): Promise<PayrollCountry> => {
+    const [row] = await sql`SELECT country FROM salary_settings WHERE user_id = ${userId} LIMIT 1`;
+
+    return isPayrollCountry(row?.country) ? row.country : "CA";
+};
+
 export async function GET() {
     try {
         const user = await getCurrentUser();
 
         if (!user) {
-            return Response.json({ error: "Unauthorized" }, { status: 401 });
+            return unauthorized();
         }
 
         const result = await sql`
             SELECT
-                id,
+                country,
                 province,
+                employment_type,
+                country_options,
                 pay_type,
                 pay_frequency,
                 hourly_wage,
                 monthly_salary,
                 has_tips,
                 tip_type,
-                TO_CHAR(
-                    pay_period_start_date,
-                    'YYYY-MM-DD'
-                ) AS pay_period_start_date,
-                TO_CHAR(
-                    pay_date,
-                    'YYYY-MM-DD'
-                ) AS pay_date,
+                TO_CHAR(pay_period_start_date, 'YYYY-MM-DD') AS pay_period_start_date,
+                TO_CHAR(pay_date, 'YYYY-MM-DD') AS pay_date,
                 pay_date_offset,
                 semi_monthly_type,
                 custom_pay_days
@@ -47,35 +94,9 @@ export async function GET() {
             LIMIT 1
         `;
 
-        const row = result[0];
-
-        if (!row) {
-            return Response.json(null);
-        }
-
-        return Response.json({
-            regionCode: row.province,
-            payType: row.pay_type,
-            payFrequency: row.pay_frequency,
-            hourlyWage: row.hourly_wage,
-            monthlySalary: row.monthly_salary,
-            hasTips: row.has_tips,
-            tipType: row.tip_type,
-            payPeriodStartDate: row.pay_period_start_date,
-            payDate: row.pay_date,
-            payDateOffset: row.pay_date_offset,
-            semiMonthlyType: row.semi_monthly_type,
-            customPayDays: row.custom_pay_days,
-        });
+        return Response.json(result[0] ? toSalarySettingsDto(result[0]) : null);
     } catch (error) {
-        console.error("Salary settings GET error:", error);
-
-        return Response.json(
-            {
-                error: "급여 설정을 불러오지 못했습니다.",
-            },
-            { status: 500 },
-        );
+        return handleRouteError("Salary settings GET error:", error, "급여 설정을 불러오지 못했습니다.");
     }
 }
 
@@ -84,76 +105,75 @@ export async function PUT(request: Request) {
         const user = await getCurrentUser();
 
         if (!user) {
-            return Response.json({ error: "Unauthorized" }, { status: 401 });
+            return unauthorized();
         }
 
-        const body = await request.json();
+        const body = await readJsonBody(request);
 
-        const regionCode = body.regionCode ?? null;
-        const payType = body.payType ?? null;
-        const payFrequency = body.payFrequency ?? null;
+        if (!body) {
+            return badRequest("요청 본문이 올바르지 않습니다.");
+        }
 
-        const hourlyWage = body.hourlyWage === "" || body.hourlyWage == null ? null : Number(body.hourlyWage);
+        const country = parseOptionalCountry(body.country);
+        const regionCode = parseOptionalRegion(body.regionCode);
+        const employmentType = parseOptionalEnum(body.employmentType, "소득 유형", EMPLOYMENT_TYPES);
 
-        const monthlySalary = body.monthlySalary === "" || body.monthlySalary == null ? null : Number(body.monthlySalary);
+        const payType = parseEnum(body.payType, "급여 유형", PAY_TYPES);
+        const payFrequency = parseEnum(body.payFrequency, "급여 주기", PAY_FREQUENCIES);
 
-        const hasTips = Boolean(body.hasTips);
+        const hourlyWage = parseOptionalAmount(body.hourlyWage, "시급");
+        const monthlySalary = parseOptionalAmount(body.monthlySalary, "월급");
 
-        const tipType = body.tipType ?? null;
+        const hasTips = parseBoolean(body.hasTips, false);
+        const tipType = parseOptionalEnum(body.tipType, "팁 종류", TIP_TYPES);
 
-        const payPeriodStartDate = body.payPeriodStartDate || null;
+        const payPeriodStartDate = parseOptionalDate(body.payPeriodStartDate, "급여 기간 시작일");
+        const payDate = parseOptionalDate(body.payDate, "급여일");
 
-        const payDate = body.payDate || null;
+        const semiMonthlyType = parseOptionalEnum(body.semiMonthlyType, "반월급 유형", SEMI_MONTHLY_TYPES);
 
-        const semiMonthlyType = body.semiMonthlyType ?? null;
+        const customPayDays =
+            body.customPayDays === undefined || body.customPayDays === null || body.customPayDays === ""
+                ? null
+                : parseInteger(body.customPayDays, "급여 주기 일수", { min: 1, max: 366 });
 
-        const customPayDays = body.customPayDays ?? null;
+        // 나라별 옵션: 보내지 않으면 기존 값 유지. 보낼 때는 그 나라가 허용하는 항목만 통과.
+        let countryOptionsJson: string | null = null;
+
+        if (body.countryOptions !== undefined && body.countryOptions !== null) {
+            const optionsCountry = country ?? (await getStoredCountry(user.id));
+            const parsed = parseCountryOptions(optionsCountry, body.countryOptions);
+
+            if (!parsed.ok) {
+                throw new ValidationError(parsed.error);
+            }
+
+            countryOptionsJson = JSON.stringify(parsed.value);
+        }
 
         let payDateOffset: number | null = null;
 
         if (payPeriodStartDate && payDate) {
-            const endDate = getPayPeriodEndDate(payPeriodStartDate, payFrequency, semiMonthlyType, customPayDays);
+            const endDate = getPayPeriodEndDate(
+                payPeriodStartDate,
+                payFrequency,
+                semiMonthlyType ?? undefined,
+                customPayDays ?? undefined,
+            );
 
             if (endDate) {
                 payDateOffset = getDateDifference(endDate, payDate);
             }
         }
 
-        const existing = await sql`
-            SELECT id
-            FROM salary_settings
-            WHERE user_id = ${user.id}
-            LIMIT 1
-        `;
-
-        if (existing.length > 0) {
-            const result = await sql`
-                UPDATE salary_settings
-                SET
-                    province = ${regionCode},
-                    pay_type = ${payType},
-                    pay_frequency = ${payFrequency},
-                    hourly_wage = ${hourlyWage},
-                    monthly_salary = ${monthlySalary},
-                    has_tips = ${hasTips},
-                    tip_type = ${tipType},
-                    pay_period_start_date = ${payPeriodStartDate},
-                    pay_date = ${payDate},
-                    pay_date_offset = ${payDateOffset},
-                    semi_monthly_type = ${semiMonthlyType},
-                    custom_pay_days = ${customPayDays},
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE user_id = ${user.id}
-                RETURNING *
-            `;
-
-            return Response.json(result[0]);
-        }
-
+        // 한 번의 upsert (사용자당 1행: salary_settings_one_per_user 유니크 인덱스 사용)
         const result = await sql`
             INSERT INTO salary_settings (
                 user_id,
+                country,
                 province,
+                employment_type,
+                country_options,
                 pay_type,
                 pay_frequency,
                 hourly_wage,
@@ -168,7 +188,10 @@ export async function PUT(request: Request) {
             )
             VALUES (
                 ${user.id},
+                COALESCE(${country}::text, 'CA'),
                 ${regionCode},
+                ${employmentType},
+                COALESCE(${countryOptionsJson}::jsonb, '{}'::jsonb),
                 ${payType},
                 ${payFrequency},
                 ${hourlyWage},
@@ -181,19 +204,43 @@ export async function PUT(request: Request) {
                 ${semiMonthlyType},
                 ${customPayDays}
             )
-            RETURNING *
+            ON CONFLICT (user_id) DO UPDATE SET
+                country = COALESCE(${country}::text, salary_settings.country),
+                province = EXCLUDED.province,
+                employment_type = COALESCE(${employmentType}::text, salary_settings.employment_type),
+                country_options = COALESCE(${countryOptionsJson}::jsonb, salary_settings.country_options),
+                pay_type = EXCLUDED.pay_type,
+                pay_frequency = EXCLUDED.pay_frequency,
+                hourly_wage = EXCLUDED.hourly_wage,
+                monthly_salary = EXCLUDED.monthly_salary,
+                has_tips = EXCLUDED.has_tips,
+                tip_type = EXCLUDED.tip_type,
+                pay_period_start_date = EXCLUDED.pay_period_start_date,
+                pay_date = EXCLUDED.pay_date,
+                pay_date_offset = EXCLUDED.pay_date_offset,
+                semi_monthly_type = EXCLUDED.semi_monthly_type,
+                custom_pay_days = EXCLUDED.custom_pay_days,
+                updated_at = NOW()
+            RETURNING
+                country,
+                province,
+                employment_type,
+                country_options,
+                pay_type,
+                pay_frequency,
+                hourly_wage,
+                monthly_salary,
+                has_tips,
+                tip_type,
+                TO_CHAR(pay_period_start_date, 'YYYY-MM-DD') AS pay_period_start_date,
+                TO_CHAR(pay_date, 'YYYY-MM-DD') AS pay_date,
+                pay_date_offset,
+                semi_monthly_type,
+                custom_pay_days
         `;
 
-        return Response.json(result[0]);
+        return Response.json(toSalarySettingsDto(result[0]));
     } catch (error) {
-        console.error("Salary settings PUT error:", error);
-
-        return Response.json(
-            {
-                error: "급여 설정 저장에 실패했습니다.",
-                details: error instanceof Error ? error.message : String(error),
-            },
-            { status: 500 },
-        );
+        return handleRouteError("Salary settings PUT error:", error, "급여 설정 저장에 실패했습니다.");
     }
 }

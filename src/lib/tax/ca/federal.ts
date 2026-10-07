@@ -1,3 +1,4 @@
+// lib/tax/ca/federal.ts
 import { calculateBracketTax, roundMoney, toNonNegative } from "@/lib/tax/ca/core";
 import { CPP_RULES, EI_RULES, FEDERAL_RULES } from "@/lib/tax/ca/rules/2026";
 

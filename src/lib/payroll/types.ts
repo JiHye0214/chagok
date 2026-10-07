@@ -1,3 +1,4 @@
+// lib/payroll/types.ts
 import type { PayFrequency, PayPeriod } from "@/lib/payPeriod";
 
 export type PayrollDeduction = {

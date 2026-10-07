@@ -1,4 +1,5 @@
-import { getCanadaLaborRule } from "@/lib/labor/ca";
+// lib/holiday.ts
+import { getHolidayLaborRule } from "@/lib/labor/rules";
 
 export type Holiday = {
     date: string;
@@ -25,13 +26,16 @@ type HolidayPayInput = {
     hourlyWage: number;
     hours: number;
 
+    // 기본값 "CA". 캐나다는 province(ON 등), 한국은 "KR"
+    country?: string;
     province: string;
 
     holidays: Holiday[];
 
-    // Public Holiday Pay 계산에 필요한 값
+    // Public Holiday Pay 계산에 필요한 값 (나라별로 필요한 값만 사용됨)
     regularWagesBeforeHoliday?: number;
     vacationPayBeforeHoliday?: number;
+    scheduledHoursPerDay?: number;
 };
 
 /*
@@ -87,10 +91,12 @@ export function calculateHolidayPay({
     date,
     hourlyWage,
     hours,
+    country = "CA",
     province,
     holidays,
     regularWagesBeforeHoliday = 0,
     vacationPayBeforeHoliday = 0,
+    scheduledHoursPerDay = 8,
 }: HolidayPayInput): HolidayPayResult {
     const holiday = isHoliday(date, holidays);
 
@@ -103,16 +109,16 @@ export function calculateHolidayPay({
         };
     }
 
-    const rule = getCanadaLaborRule(province);
+    const rule = getHolidayLaborRule(country, province);
 
-    // 규칙이 없는 주는 조용히 0원 처리하지 않고 경고를 남긴다
+    // 규칙이 없는 나라/주는 조용히 0원 처리하지 않고 경고를 남긴다
     if (!rule) {
         return {
             isHoliday: true,
             holiday,
             premiumPay: 0,
             publicHolidayPay: 0,
-            warnings: [`${province || "지역 미선택"}의 공휴일 수당 규칙은 아직 지원하지 않아 계산에서 제외했어요.`],
+            warnings: [`${country === "CA" ? province || "지역 미선택" : country}의 공휴일 수당 규칙은 아직 지원하지 않아 계산에서 제외했어요.`],
         };
     }
 
@@ -120,7 +126,12 @@ export function calculateHolidayPay({
         isHoliday: true,
         holiday,
         premiumPay: rule.calculatePremiumPay({ hourlyWage, hours }),
-        publicHolidayPay: rule.calculatePublicHolidayPay({ regularWagesBeforeHoliday, vacationPayBeforeHoliday }),
+        publicHolidayPay: rule.calculatePublicHolidayPay({
+            hourlyWage,
+            regularWagesBeforeHoliday,
+            vacationPayBeforeHoliday,
+            scheduledHoursPerDay,
+        }),
     };
 }
 
@@ -131,6 +142,7 @@ export function calculateHolidayPay({
  * vacationPayRate는 매 급여에 얹어 받는 베케이션 페이 비율 (Public Holiday Pay 계산에 포함됨).
  */
 export function calculatePeriodHolidayPay({
+    country = "CA",
     province,
     hourlyWage,
     startDate,
@@ -139,8 +151,10 @@ export function calculatePeriodHolidayPay({
     holidays,
     regularWagesBeforeHoliday,
     vacationPayRate = 0,
+    scheduledHoursPerDay = 8,
     mode = "full",
 }: {
+    country?: string;
     province: string;
     hourlyWage: number;
     startDate: string;
@@ -149,6 +163,7 @@ export function calculatePeriodHolidayPay({
     holidays: Holiday[];
     regularWagesBeforeHoliday: number;
     vacationPayRate?: number;
+    scheduledHoursPerDay?: number;
     mode?: HolidayPayMode;
 }) {
     if (mode === "none") {
@@ -164,10 +179,12 @@ export function calculatePeriodHolidayPay({
             date: holiday.date,
             hourlyWage,
             hours: hoursByDate[holiday.date] ?? 0,
+            country,
             province,
             holidays,
             regularWagesBeforeHoliday,
             vacationPayBeforeHoliday: regularWagesBeforeHoliday * vacationPayRate,
+            scheduledHoursPerDay,
         });
 
         premiumPay += result.premiumPay;

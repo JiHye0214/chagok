@@ -1,3 +1,4 @@
+// lib/payPeriod.ts
 export type PayPeriod = {
     startDate: string;
     endDate: string;
