@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { formatDate } from "@/lib/payPeriod";
 import { getCurrencySymbol } from "@/lib/salary/format";
+import { useUpgrade } from "@/components/UpgradeProvider";
 
 type TripCity = {
     id?: number;
@@ -181,6 +182,8 @@ const getDestinationLabel = (destinations: TripDestination[]) => {
 };
 
 export default function TravelDetailPage() {
+    const { openUpgrade } = useUpgrade();
+
     const [planCode, setPlanCode] = useState<"free" | "pro">("free");
     const isPro = planCode === "pro";
 
@@ -1171,7 +1174,7 @@ export default function TravelDetailPage() {
                 const data = await response.json().catch(() => null);
 
                 if (data?.code === "TRIP_EXPENSE_CATEGORY_PRO_ONLY") {
-                    alert("여행 경비 카테고리 추가는 Pro에서 사용할 수 있어요.");
+                    openUpgrade("trip-category");
                     return;
                 }
 
@@ -1268,7 +1271,7 @@ export default function TravelDetailPage() {
 
     const handleDeleteCategory = async (categoryId: number) => {
         if (!isPro) {
-            alert("여행 경비 카테고리 관리는 Pro 플랜에서 사용할 수 있어요.");
+            openUpgrade("trip-category");
             return;
         }
 
@@ -2162,9 +2165,7 @@ export default function TravelDetailPage() {
                                                             event.stopPropagation();
 
                                                             if (isLocked) {
-                                                                alert(
-                                                                    "무료 플랜에서는 여행 하나당 지출을 최대 30개까지 저장할 수 있어요.",
-                                                                );
+                                                                openUpgrade("trip-expense-limit");
                                                             }
                                                         }}
                                                     >

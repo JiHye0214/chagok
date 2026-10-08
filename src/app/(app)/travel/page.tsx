@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { formatDate } from "@/lib/payPeriod";
+import { useUpgrade } from "@/components/UpgradeProvider";
 import TravelGlobe from "./TravelGlobe";
 import { Lock, NotebookTabs } from "lucide-react";
 
@@ -120,6 +121,8 @@ const formatCityName = (value: string) => {
 };
 
 export default function TravelPage() {
+    const { openUpgrade } = useUpgrade();
+
     const isSelectingCityRef = useRef(false);
 
     const [isAddModalOpen] = useState(false);
@@ -652,6 +655,14 @@ export default function TravelPage() {
                                 <p className="mt-4 text-sm font-semibold text-gray-900">Travel Statistics</p>
 
                                 <p className="mt-1 text-xs text-gray-500">Pro에서 여행 통계를 확인할 수 있어요.</p>
+
+                                <button
+                                    type="button"
+                                    onClick={() => openUpgrade("trip-stats")}
+                                    className="mt-4 rounded-full bg-gray-900 px-4 py-2 text-xs font-medium text-white"
+                                >
+                                    Pro 알아보기
+                                </button>
                             </div>
                         </div>
                     )}

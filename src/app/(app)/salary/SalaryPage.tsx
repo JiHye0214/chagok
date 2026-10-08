@@ -808,7 +808,7 @@ export default function SalaryPage() {
                             onClick={() => setIsPendingExpectedOpen(false)}
                         >
                             <div
-                                className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-[2rem] bg-white p-6 shadow-2xl"
+                                className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-[2rem] bg-white p-6 shadow-2xl scrollbar-hide"
                                 onClick={(event) => event.stopPropagation()}
                             >
                                 {/* Header */}

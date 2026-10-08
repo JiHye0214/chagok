@@ -80,7 +80,7 @@ function SavingsDollar({ progress }: { progress: number }) {
                     height: `${clampedProgress}%`,
                 }}
             >
-                <span className="absolute inset-x-0 bottom-[-1px] flex h-28 items-center justify-center text-[92px] font-semibold leading-none text-[#D9A441]">
+                <span className="absolute inset-x-0 bottom-[-1px] flex h-28 items-center justify-center text-[92px] font-semibold leading-none">
                     $
                 </span>
             </div>

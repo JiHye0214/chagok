@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, X, GripVertical, Lock } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import BackButtonHeader from "@/components/BackButtonHeader";
+import { useUpgrade } from "@/components/UpgradeProvider";
 
 type TransactionType = "income" | "expense" | "transfer";
 
@@ -125,6 +126,8 @@ const ProBadge = () => (
 );
 
 export default function LivingManagePage() {
+    const { openUpgrade } = useUpgrade();
+
     const searchParams = useSearchParams();
 
     const [currentDate, setCurrentDate] = useState(() => new Date());
@@ -465,7 +468,7 @@ export default function LivingManagePage() {
 
     const openAddForm = (date?: string, transferDirection?: "living_to_savings" | "savings_to_living") => {
         if (isLivingTransactionLimitReached) {
-            alert("무료 플랜에서는 생활 기록을 최대 300개까지 저장할 수 있어요.\n기존 기록을 삭제하면 다시 추가할 수 있어요.");
+            openUpgrade("living-limit");
             return;
         }
 
@@ -695,7 +698,7 @@ export default function LivingManagePage() {
 
     const openAddFixedForm = () => {
         if (isFixedExpenseLimitReached) {
-            alert("무료 플랜에서는 고정지출을 최대 5개까지 저장할 수 있어요.\n기존 고정지출을 삭제하면 다시 추가할 수 있어요.");
+            openUpgrade("fixed-expense");
             return;
         }
 
@@ -844,7 +847,7 @@ export default function LivingManagePage() {
 
     const openAddCategoryForm = (kind: CategoryKind) => {
         if (isFree) {
-            alert("카테고리 관리는 Pro 플랜에서 사용할 수 있어요.");
+            openUpgrade("living-category");
             return;
         }
 
@@ -860,7 +863,7 @@ export default function LivingManagePage() {
 
     const openEditCategoryForm = (category: LivingCategory) => {
         if (isFree) {
-            alert("카테고리 관리는 Pro 플랜에서 사용할 수 있어요.");
+            openUpgrade("living-category");
             return;
         }
 
@@ -876,7 +879,7 @@ export default function LivingManagePage() {
 
     const saveCategory = async () => {
         if (isFree) {
-            alert("카테고리 관리는 Pro 플랜에서 사용할 수 있어요.");
+            openUpgrade("living-category");
             return;
         }
 
@@ -947,7 +950,7 @@ export default function LivingManagePage() {
 
     const deleteCategory = async (category: LivingCategory) => {
         if (isFree) {
-            alert("카테고리 관리는 Pro 플랜에서 사용할 수 있어요.");
+            openUpgrade("living-category");
             return;
         }
 
@@ -1341,9 +1344,7 @@ export default function LivingManagePage() {
                         type="button"
                         onClick={() => {
                             if (isLivingTransactionLimitReached) {
-                                alert(
-                                    "무료 플랜에서는 생활 기록을 최대 300개까지 저장할 수 있어요.\n기존 기록을 삭제하면 다시 추가할 수 있어요.",
-                                );
+                                openUpgrade("living-limit");
                                 return;
                             }
 

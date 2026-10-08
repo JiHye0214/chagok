@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, Lock, Plane, Star } from "lucide-react";
 import { formatDate } from "@/lib/payPeriod";
 import BackButtonHeader from "@/components/BackButtonHeader";
+import { useUpgrade } from "@/components/UpgradeProvider";
 import { getCurrencySymbol } from "@/lib/salary/format";
 
 type TripCity = {
@@ -123,6 +124,8 @@ const getDestinationLabel = (destinations: TripDestination[]) => {
 };
 
 export default function TravelListPage() {
+    const { openUpgrade } = useUpgrade();
+
     /*
      * ---------------------------------------------------------
      * 여행 목록
@@ -670,7 +673,7 @@ export default function TravelListPage() {
                 type="button"
                 onClick={() => {
                     if (!canAddTrip) {
-                        alert("무료 플랜에서는 여행을 최대 3개까지 저장할 수 있어요.");
+                        openUpgrade("trip-limit");
                         return;
                     }
 

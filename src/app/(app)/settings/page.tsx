@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ChevronRight, LogOut, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth/auth-client";
+import { useUpgrade } from "@/components/UpgradeProvider";
 import { LANGUAGES, getCountry, getCountryLabel, getRegionLabel } from "@/lib/countries";
 
 type Profile = {
@@ -16,6 +17,7 @@ type Profile = {
 
 export default function SettingsPage() {
     const router = useRouter();
+    const { isPro, openUpgrade } = useUpgrade();
 
     const [profile, setProfile] = useState<Profile | null>(null);
     const [loading, setLoading] = useState(true);
@@ -135,6 +137,24 @@ export default function SettingsPage() {
                         </div>
 
                         <ChevronRight size={18} strokeWidth={1.7} className="text-gray-300" />
+                    </button>
+                </div>
+            </section>
+
+            <section className="mt-8">
+                <h2 className="mb-3 px-1 text-xs font-medium text-gray-400">요금제</h2>
+
+                <div className="overflow-hidden rounded-2xl bg-white">
+                    <button
+                        type="button"
+                        onClick={() => openUpgrade("general")}
+                        className="flex w-full items-center justify-between px-4 py-4 text-left"
+                    >
+                        <span className="text-sm text-gray-900">내 요금제</span>
+                        <span className="flex items-center gap-1 text-sm text-gray-400">
+                            {isPro ? "Pro" : "무료"}
+                            <ChevronRight size={16} strokeWidth={1.7} className="text-gray-300" />
+                        </span>
                     </button>
                 </div>
             </section>
