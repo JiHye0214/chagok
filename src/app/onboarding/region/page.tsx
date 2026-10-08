@@ -1,26 +1,33 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-
-const regions = [
-    {
-        code: "BC",
-        label: "British Columbia",
-        timezone: "Pacific Time",
-        timezoneOffset: "(GMT-7)",
-        timezoneCode: "America/Vancouver",
-    },
-    {
-        code: "ON",
-        label: "Ontario",
-        timezone: "Eastern Time",
-        timezoneOffset: "(GMT-4)",
-        timezoneCode: "America/Toronto",
-    },
-];
+import { getCountry } from "@/lib/countries";
+import type { CountryConfig } from "@/lib/countries";
 
 export default function RegionPage() {
     const router = useRouter();
+
+    // 앞 단계에서 고른 국가. 지역을 고르는 나라가 아니면 이 화면에 머물지 않는다.
+    const [country, setCountry] = useState<CountryConfig | null>(null);
+
+    useEffect(() => {
+        const savedCountry = getCountry(localStorage.getItem("chagok_country"));
+
+        if (!savedCountry) {
+            router.replace("/onboarding/country");
+            return;
+        }
+
+        if (!savedCountry.hasRegions) {
+            router.replace("/auth/login");
+            return;
+        }
+
+        setCountry(savedCountry);
+    }, [router]);
+
+    const regions = country?.regions ?? [];
 
     const handleRegionSelect = (regionCode: string, timezoneCode: string) => {
         localStorage.setItem("chagok_region", regionCode);
@@ -28,6 +35,10 @@ export default function RegionPage() {
 
         router.push("/auth/login");
     };
+
+    if (!country) {
+        return null;
+    }
 
     return (
         <div className="h-full w-full">
@@ -54,17 +65,18 @@ export default function RegionPage() {
                                 <button
                                     key={region.code}
                                     type="button"
-                                    onClick={() => handleRegionSelect(region.code, region.timezoneCode)}
+                                    onClick={() => handleRegionSelect(region.code, region.timezone)}
                                     className="flex w-full translate-y-3 items-center justify-between rounded-2xl border border-gray-200 bg-white px-5 py-4 text-left opacity-0 animate-[onboardingFadeUp_0.6s_ease-out_forwards] transition hover:border-gray-400"
                                     style={{
                                         animationDelay: `${0.35 + index * 0.1}s`,
                                     }}
                                 >
                                     <div>
-                                        <p className="text-sm font-medium text-gray-900">{region.label}</p>
+                                        <p className="text-sm font-medium text-gray-900">{region.name}</p>
 
                                         <p className="mt-1 text-xs text-gray-400">
-                                            {region.timezone} {region.timezoneOffset}
+                                            {region.timezoneName} {region.timezoneOffset}
+                                            {!region.payrollSupported && " · 세금 계산 준비 중"}
                                         </p>
                                     </div>
 

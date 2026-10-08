@@ -1,19 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-
-const languages = [
-    {
-        code: "ko",
-        label: "한국어",
-        englishLabel: "Korean",
-    },
-    {
-        code: "en",
-        label: "English",
-        englishLabel: "English",
-    },
-];
+import { LANGUAGES } from "@/lib/countries";
 
 export default function LanguagePage() {
     const router = useRouter();
@@ -44,7 +32,7 @@ export default function LanguagePage() {
 
                         {/* Languages */}
                         <div className="mt-10 space-y-3">
-                            {languages.map((language, index) => (
+                            {LANGUAGES.map((language, index) => (
                                 <button
                                     key={language.code}
                                     type="button"

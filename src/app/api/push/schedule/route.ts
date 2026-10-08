@@ -1,7 +1,14 @@
 import { sql } from "@/lib/db";
+import { getCurrentUser } from "@/lib/auth/user";
 
 export async function POST(request: Request) {
     try {
+        const user = await getCurrentUser();
+
+        if (!user) {
+            return Response.json({ success: false, message: "로그인이 필요해요." }, { status: 401 });
+        }
+
         const data = await request.json();
 
         const {
@@ -33,6 +40,7 @@ export async function POST(request: Request) {
 
         await sql`
             INSERT INTO push_schedules (
+                user_id,
                 id,
                 send_at,
                 title,
@@ -40,6 +48,7 @@ export async function POST(request: Request) {
                 subscription
             )
             VALUES (
+                ${user.id},
                 ${id},
                 ${sendAt},
                 ${title},
@@ -53,6 +62,7 @@ export async function POST(request: Request) {
                 body = EXCLUDED.body,
                 subscription = EXCLUDED.subscription,
                 sent = FALSE
+            WHERE push_schedules.user_id = EXCLUDED.user_id
         `;
 
         return Response.json({

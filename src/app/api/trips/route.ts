@@ -259,6 +259,24 @@ export async function POST(request: Request) {
         }
 
         // ----------------------------------------
+        // 여행 통화: 요청에 올바른 통화가 있으면 그것을, 없으면 내 프로필 통화를 쓴다.
+        const [profileRow] = await sql`
+            SELECT currency
+            FROM user_profiles
+            WHERE user_id = ${user.id}
+            LIMIT 1
+        `;
+
+        const requestedCurrency = typeof currency === "string" ? currency.trim().toUpperCase() : "";
+        const tripCurrency = /^[A-Z]{3}$/.test(requestedCurrency)
+            ? requestedCurrency
+            : ((profileRow?.currency as string | undefined) ?? null);
+
+        if (!tripCurrency) {
+            return NextResponse.json({ error: "프로필 정보를 먼저 설정해주세요." }, { status: 400 });
+        }
+
+        // ----------------------------------------
         // 기존 trips 컬럼에는 첫 번째 목적지를 임시 저장
         // ----------------------------------------
 
@@ -303,7 +321,7 @@ export async function POST(request: Request) {
 
                 ${tripType === "upcoming" ? Number(budget) || 0 : null},
 
-                ${currency || "CAD"},
+                ${tripCurrency},
 
                 ${tripType === "completed" ? Number(rating) || 0 : 0}
             )

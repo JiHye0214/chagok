@@ -1,37 +1,30 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-
-const countries = [
-    {
-        code: "KR",
-        label: "대한민국",
-        englishLabel: "South Korea",
-        timezone: "Asia/Seoul",
-    },
-    {
-        code: "CA",
-        label: "캐나다",
-        englishLabel: "Canada",
-    },
-];
+import { COUNTRIES, getCountry } from "@/lib/countries";
 
 export default function CountryPage() {
     const router = useRouter();
 
     const handleCountrySelect = (countryCode: string) => {
-        localStorage.setItem("chagok_country", countryCode);
+        const country = getCountry(countryCode);
 
-        if (countryCode === "CA") {
-            localStorage.removeItem("chagok_region");
+        if (!country) {
+            return;
+        }
+
+        localStorage.setItem("chagok_country", country.code);
+        localStorage.removeItem("chagok_region");
+
+        // 지역을 고르는 나라는 지역 선택에서 시간대가 정해진다
+        if (country.hasRegions) {
             localStorage.removeItem("chagok_timezone");
 
             router.push("/onboarding/region");
             return;
         }
 
-        localStorage.removeItem("chagok_region");
-        localStorage.setItem("chagok_timezone", "Asia/Seoul");
+        localStorage.setItem("chagok_timezone", country.defaultTimezone);
 
         router.push("/auth/login");
     };
@@ -56,7 +49,7 @@ export default function CountryPage() {
 
                         {/* Countries */}
                         <div className="mt-10 space-y-3">
-                            {countries.map((country, index) => (
+                            {COUNTRIES.map((country, index) => (
                                 <button
                                     key={country.code}
                                     type="button"
@@ -66,9 +59,9 @@ export default function CountryPage() {
                                         animationDelay: `${0.35 + index * 0.1}s`,
                                     }}
                                 >
-                                    <span className="text-sm font-medium text-gray-900">{country.label}</span>
+                                    <span className="text-sm font-medium text-gray-900">{country.nameKo}</span>
 
-                                    <span className="text-xs text-gray-400">{country.englishLabel}</span>
+                                    <span className="text-xs text-gray-400">{country.nameEn}</span>
                                 </button>
                             ))}
                         </div>

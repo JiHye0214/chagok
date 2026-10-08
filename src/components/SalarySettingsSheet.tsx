@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { getPayPeriodEndDate } from "@/lib/payPeriod";
+import { getCurrencySymbol } from "@/lib/salary/format";
+import { getDefaultHolidayPayMode } from "@/lib/labor/rules";
+import { isPayrollCountry } from "@/lib/payroll";
+import type { HolidayPayMode } from "@/lib/holiday";
 
 type PayType = "hourly" | "salary" | "commission" | "other";
 
@@ -13,8 +17,13 @@ type SemiMonthlyType = "first-fifteenth" | "fifteenth-end";
 
 type RegionCode = string;
 
+type CountryOptionsInput = {
+    // 분수 (0.04 = 4%)
+    vacationPayRate?: number;
+    holidayPayMode?: HolidayPayMode;
+};
+
 type SalarySettings = {
-    regionCode?: RegionCode;
     payType: PayType;
     payFrequency: PayFrequency;
     hasTips: boolean;
@@ -26,6 +35,7 @@ type SalarySettings = {
     payDateOffset?: number | null;
     semiMonthlyType?: SemiMonthlyType;
     customPayDays?: number;
+    countryOptions?: CountryOptionsInput;
 };
 
 type UserProfile = {
@@ -59,6 +69,12 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved }: Salary
     const [semiMonthlyType, setSemiMonthlyType] = useState<SemiMonthlyType>("first-fifteenth");
 
     const [customPayDays, setCustomPayDays] = useState(14);
+
+    // 베케이션 페이는 화면에서는 퍼센트(4), 저장할 때는 분수(0.04)로 다룬다
+    const [vacationPayPercent, setVacationPayPercent] = useState("4");
+    const [holidayPayMode, setHolidayPayMode] = useState<HolidayPayMode | null>(null);
+
+    const [saveError, setSaveError] = useState<string | null>(null);
 
     /*
      * 근무 지역은 Salary Settings가 아니라
@@ -180,7 +196,17 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved }: Salary
                     setSemiMonthlyType(settings.semiMonthlyType ?? "first-fifteenth");
 
                     setCustomPayDays(settings.customPayDays ?? 14);
+
+                    const savedRate = settings.countryOptions?.vacationPayRate;
+
+                    setVacationPayPercent(
+                        savedRate !== undefined ? String(Math.round(savedRate * 10000) / 100) : "4",
+                    );
+
+                    setHolidayPayMode(settings.countryOptions?.holidayPayMode ?? null);
                 }
+
+                setSaveError(null);
             } catch (error) {
                 console.error("급여 설정 조회 실패:", error);
             }
@@ -225,6 +251,15 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved }: Salary
         return countryLabels[countryCode] ?? countryCode;
     };
 
+    const upperCountry = countryCode?.toUpperCase() ?? null;
+    const isSupportedCountry = isPayrollCountry(upperCountry);
+
+    // 선택하지 않았으면 그 나라의 기본값
+    const effectiveHolidayPayMode: HolidayPayMode | null =
+        holidayPayMode ?? (upperCountry ? getDefaultHolidayPayMode(upperCountry) : null);
+
+    const showVacationPay = upperCountry === "CA" && payType === "hourly";
+
     /*
      * Salary Settings 저장
      */
@@ -235,13 +270,51 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved }: Salary
          * 지역이 없는 국가는 정상적으로 저장 가능하다.
          */
         if (!countryCode) {
-            alert("프로필의 국가 설정을 확인해주세요.");
+            setSaveError("프로필의 국가 설정을 확인해주세요.");
             return;
         }
 
-        const settings: SalarySettings = {
-            ...(regionCode ? { regionCode } : {}),
+        if (payType === "hourly" && !(Number(hourlyWage) > 0)) {
+            setSaveError("시급을 입력해주세요.");
+            return;
+        }
 
+        if (payType === "salary" && !(Number(monthlySalary) > 0)) {
+            setSaveError("월급을 입력해주세요.");
+            return;
+        }
+
+        const needsStartDate = payFrequency === "weekly" || payFrequency === "biweekly" || payFrequency === "custom";
+
+        if (needsStartDate && !payPeriodStartDate) {
+            setSaveError("급여 기간 시작일을 입력해주세요.");
+            return;
+        }
+
+        let countryOptions: CountryOptionsInput | undefined;
+
+        if (isSupportedCountry) {
+            countryOptions = {};
+
+            if (upperCountry === "CA" && vacationPayPercent !== "") {
+                const percent = Number(vacationPayPercent);
+
+                if (!Number.isFinite(percent) || percent < 0 || percent > 20) {
+                    setSaveError("베케이션 페이 비율은 0~20% 사이로 입력해주세요.");
+                    return;
+                }
+
+                countryOptions.vacationPayRate = Math.round(percent * 100) / 10000;
+            }
+
+            if (holidayPayMode) {
+                countryOptions.holidayPayMode = holidayPayMode;
+            }
+        }
+
+        setSaveError(null);
+
+        const settings: SalarySettings = {
             payType,
             payFrequency,
             hasTips,
@@ -252,8 +325,11 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved }: Salary
 
             monthlySalary: payType === "salary" ? Math.max(0, Number(monthlySalary) || 0) : undefined,
 
-            payPeriodStartDate,
-            payDate,
+            // 비어 있으면 보내지 않는다 (빈 문자열을 보내면 서버가 날짜 오류로 거부함)
+            payPeriodStartDate: payPeriodStartDate || undefined,
+            payDate: payDate || undefined,
+
+            countryOptions,
 
             semiMonthlyType: payFrequency === "semi-monthly" ? semiMonthlyType : undefined,
 
@@ -283,7 +359,7 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved }: Salary
         } catch (error) {
             console.error(error);
 
-            alert("급여 설정 저장에 실패했어요.");
+            setSaveError("급여 설정 저장에 실패했어요. 잠시 후 다시 시도해주세요.");
         } finally {
             setIsSaving(false);
         }
@@ -392,7 +468,7 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved }: Salary
                                             semiMonthlyType === "first-fifteenth" ? "bg-black text-white" : "bg-gray-100"
                                         }`}
                                     >
-                                        1일 ~ 15일 / 16일 ~ 말일
+                                        1일 ~ 15일 / 16일 ~ 말일 (월 2회)
                                     </button>
 
                                     <button
@@ -402,7 +478,7 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved }: Salary
                                             semiMonthlyType === "fifteenth-end" ? "bg-black text-white" : "bg-gray-100"
                                         }`}
                                     >
-                                        16일 ~ 다음달 15일
+                                        16일 ~ 다음달 15일 (월 1회)
                                     </button>
                                 </div>
                             )}
@@ -433,9 +509,7 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved }: Salary
                             <h2 className="text-lg font-semibold">시급</h2>
 
                             <div className="mt-4 flex items-center rounded-2xl bg-gray-100 px-4">
-                                <span className="text-gray-500">
-                                    {currency === "KRW" ? "₩" : currency === "USD" ? "$" : "C$"}
-                                </span>
+                                <span className="text-gray-500">{getCurrencySymbol(currency)}</span>
 
                                 <input
                                     type="number"
@@ -460,9 +534,7 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved }: Salary
                             <h2 className="text-lg font-semibold">월급</h2>
 
                             <div className="mt-4 flex items-center rounded-2xl bg-gray-100 px-4">
-                                <span className="text-gray-500">
-                                    {currency === "KRW" ? "₩" : currency === "USD" ? "$" : "C$"}
-                                </span>
+                                <span className="text-gray-500">{getCurrencySymbol(currency)}</span>
 
                                 <input
                                     type="number"
@@ -570,6 +642,66 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved }: Salary
                         </div>
                     </section>
 
+                    {/* Vacation / Holiday Pay */}
+                    {isSupportedCountry && (showVacationPay || payType === "hourly") && (
+                        <section className="mt-5 rounded-3xl bg-white p-6 shadow-sm">
+                            <h2 className="text-lg font-semibold">휴가 · 공휴일 수당</h2>
+
+                            {showVacationPay && (
+                                <div className="mt-4">
+                                    <p className="mb-2 text-sm text-gray-500">베케이션 페이 (매 급여에 얹어서 받는 비율)</p>
+
+                                    <div className="flex items-center rounded-2xl bg-gray-100 px-4">
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            max="20"
+                                            step="0.01"
+                                            value={vacationPayPercent}
+                                            onChange={(e) => setVacationPayPercent(e.target.value)}
+                                            placeholder="4"
+                                            className="w-full bg-transparent px-2 py-4 outline-none"
+                                        />
+
+                                        <span className="shrink-0 text-gray-500">%</span>
+                                    </div>
+
+                                    <p className="mt-2 text-xs leading-5 text-gray-400">
+                                        온타리오 기본은 4%이고, 한 직장에서 5년 이상 일했다면 6%예요.
+                                        급여명세서에 적힌 비율을 그대로 입력하세요.
+                                    </p>
+                                </div>
+                            )}
+
+                            {payType === "hourly" && (
+                                <div className="mt-5">
+                                    <p className="mb-2 text-sm text-gray-500">공휴일 수당 방식</p>
+
+                                    <div className="space-y-2">
+                                        {(
+                                            [
+                                                ["full", "공휴일마다 수당을 받고, 일하면 가산 수당도 받아요"],
+                                                ["worked-only", "공휴일에 일한 날만 받아요"],
+                                                ["none", "공휴일 수당을 따로 받지 않아요"],
+                                            ] as [HolidayPayMode, string][]
+                                        ).map(([value, label]) => (
+                                            <button
+                                                type="button"
+                                                key={value}
+                                                onClick={() => setHolidayPayMode(value)}
+                                                className={`w-full rounded-2xl p-4 text-left text-sm ${
+                                                    effectiveHolidayPayMode === value ? "bg-black text-white" : "bg-gray-100"
+                                                }`}
+                                            >
+                                                {label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </section>
+                    )}
+
                     {/* Work Region */}
                     <section className="mt-5 rounded-3xl bg-white p-6 shadow-sm">
                         <h2 className="text-lg font-semibold">근무 지역</h2>
@@ -590,6 +722,8 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved }: Salary
                     </section>
 
                     {/* Save */}
+                    {saveError && <p className="mt-4 text-center text-sm text-red-500">{saveError}</p>}
+
                     <button
                         type="button"
                         onClick={handleSave}

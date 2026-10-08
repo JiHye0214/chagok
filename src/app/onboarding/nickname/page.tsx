@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { getCountry, getOnboardingStepNumber } from "@/lib/countries";
 
 export default function NicknamePage() {
     const router = useRouter();
@@ -44,7 +45,7 @@ export default function NicknamePage() {
         checkProfile();
     }, [router]);
 
-    const stepNumber = country === "CA" ? "05" : "04";
+    const stepNumber = getOnboardingStepNumber("nickname", country);
 
     const isValidNickname = /^[가-힣a-z0-9._]{3,20}$/.test(nickname);
 
@@ -62,19 +63,16 @@ export default function NicknamePage() {
 
         const provinceCode = localStorage.getItem("chagok_region");
 
-        const timezone = localStorage.getItem("chagok_timezone");
+        const selectedCountry = getCountry(countryCode);
 
-        // 현재 지원 국가에 따라 통화 자동 설정
-        let currency = "";
-
-        if (countryCode === "KR") {
-            currency = "KRW";
-        } else if (countryCode === "CA") {
-            currency = "CAD";
+        if (!selectedCountry) {
+            setError("사용자 정보를 확인할 수 없어요. 처음부터 다시 진행해 주세요.");
+            return;
         }
 
-        if (!countryCode || !timezone || !currency) {
-            setError("사용자 정보를 확인할 수 없어요. 처음부터 다시 진행해 주세요.");
+        // 지역을 고르는 나라인데 지역이 없으면 지역 선택으로 돌려보낸다
+        if (selectedCountry.hasRegions && !provinceCode) {
+            router.push("/onboarding/region");
             return;
         }
 
@@ -90,10 +88,9 @@ export default function NicknamePage() {
                 body: JSON.stringify({
                     nickname: trimmedNickname,
                     language,
-                    countryCode,
-                    provinceCode,
-                    timezone,
-                    currency,
+                    countryCode: selectedCountry.code,
+                    provinceCode: selectedCountry.hasRegions ? provinceCode : null,
+                    // 통화와 시간대는 서버가 국가·지역에서 정한다
                 }),
             });
 

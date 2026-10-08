@@ -138,6 +138,11 @@ export async function GET(request: Request) {
                   AND t.end_date >= ${currentMonth.start}::date
                   AND t.end_date < ${currentMonth.end}::date
                   AND t.end_date <= CURRENT_DATE
+                  -- 프로필 통화와 같은 통화의 여행만 (환율 변환을 하지 않으므로)
+                  AND (
+                      t.currency IS NULL
+                      OR t.currency = (SELECT currency FROM user_profiles WHERE user_id = ${user.id})
+                  )
                   AND NOT EXISTS (
                       SELECT 1
                       FROM living_transactions lt
@@ -178,6 +183,12 @@ export async function GET(request: Request) {
                 AND ppa.pay_date < ${currentMonth.end}::date
                 AND ppa.pay_date <= CURRENT_DATE
                 AND ppa.actual_net_pay IS NOT NULL
+
+                -- 프로필 통화와 같은 통화로 기록된 급여만 (국가를 바꾸기 전 기록 제외)
+                AND (
+                    ppa.currency_code IS NULL
+                    OR ppa.currency_code = (SELECT currency FROM user_profiles WHERE user_id = ${user.id})
+                )
 
                 -- 이미 payroll 연동으로 등록된 경우
                 AND NOT EXISTS (
@@ -363,7 +374,7 @@ export async function GET(request: Request) {
                 payroll: pendingPayroll,
             },
 
-            currency: profileResult[0]?.currency ?? "CAD",
+            currency: profileResult[0]?.currency ?? null,
         });
     } catch (error) {
         console.error("GET /api/living error:", error);

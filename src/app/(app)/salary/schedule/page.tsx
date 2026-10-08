@@ -1,62 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { getPayPeriodEndDate, formatDate } from "@/lib/payPeriod";
+import { formatDate, getSurroundingPayPeriods } from "@/lib/payPeriod";
 import { getNotificationTime, subscribeToPush } from "@/lib/notification";
 import { isHoliday } from "@/lib/holiday";
-import { calculateExpectedSalary } from "@/lib/payroll/calculateExpectedSalary";
 import BackButtonHeader from "@/components/BackButtonHeader";
 import { Lock } from "lucide-react";
+import { useCountUp, usePeriodEstimate, useSalaryData } from "@/lib/salary/hooks";
+import { buildPeriodEstimate, summarizeEstimate } from "@/lib/salary/estimate";
+import { fetchHolidays } from "@/lib/salary/loaders";
+import { estimateDayPay, hasHolidayPremium } from "@/lib/salary/dayPay";
+import { formatCurrency, getCurrencySymbol } from "@/lib/salary/format";
+import type { HolidayData, PeriodTipsData, WorkScheduleData } from "@/lib/salary/types";
 
-type PayType = "hourly" | "salary" | "commission" | "other";
-
-type PayFrequency = "weekly" | "biweekly" | "semi-monthly" | "monthly" | "custom";
-
-type SemiMonthlyType = "first-fifteenth" | "fifteenth-end";
-
-type SalarySettings = {
-    payType: PayType;
-    payFrequency: PayFrequency;
-    hasTips: boolean;
-    tipType?: "cash" | "paycheque" | "both";
-    hourlyWage?: number;
-    monthlySalary?: number;
-    payPeriodStartDate?: string;
-    payDate?: string;
-    semiMonthlyType?: SemiMonthlyType;
-    customPayDays?: number;
-    vacationPayRate?: number;
-};
-
-type WorkSchedule = {
-    id: number;
-    date: string;
-    startTime: string;
-    endTime: string;
-    hasBreak: boolean;
-    breakMinutes: number;
-    alarmEnabled: boolean;
-    alarmMinutesBefore: number;
-};
-
-type PayPeriod = {
-    startDate: string;
-    endDate: string;
-    payDate: string;
-};
-
-type PayPeriodTips = {
-    payPeriodStart: string;
-    payPeriodEnd: string;
-    cashTips: number;
-    paychequeTips: number;
-};
-
-type Holiday = {
-    date: string;
-    name: string;
-    global: boolean;
-};
+type WorkSchedule = WorkScheduleData;
 
 const WEEK_DAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -82,84 +39,8 @@ const calculateHours = (startTime: string, endTime: string, breakMinutes: number
     return totalMinutes / 60;
 };
 
-const formatISO = (date: Date) => {
-    const year = date.getFullYear();
-
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-
-    const day = String(date.getDate()).padStart(2, "0");
-
-    return `${year}-${month}-${day}`;
-};
-
 const formatDisplayDate = (value: string) => {
     return formatDate(new Date(`${value}T00:00:00`));
-};
-
-const formatMoney = (value: number) => {
-    return `$${Number(value || 0).toFixed(2)}`;
-};
-
-const shiftPayPeriod = (
-    startDate: string,
-    payDate: string,
-    frequency: PayFrequency,
-    semiMonthlyType?: SemiMonthlyType,
-    customPayDays?: number,
-): PayPeriod => {
-    const currentEndDate = getPayPeriodEndDate(startDate, frequency, semiMonthlyType, customPayDays);
-
-    const nextStart = new Date(`${currentEndDate}T00:00:00`);
-
-    // 이전 급여기간 종료일의 다음 날
-    nextStart.setDate(nextStart.getDate() + 1);
-
-    const nextStartDate = formatISO(nextStart);
-
-    // 급여일도 다음 기간으로 이동
-    const nextPayDate = new Date(`${payDate}T00:00:00`);
-
-    switch (frequency) {
-        case "weekly":
-            nextPayDate.setDate(nextPayDate.getDate() + 7);
-            break;
-
-        case "biweekly":
-            nextPayDate.setDate(nextPayDate.getDate() + 14);
-            break;
-
-        case "monthly":
-            nextPayDate.setMonth(nextPayDate.getMonth() + 1);
-            break;
-
-        case "semi-monthly":
-            if (semiMonthlyType === "first-fifteenth") {
-                if (nextPayDate.getDate() === 1) {
-                    nextPayDate.setDate(16);
-                } else {
-                    nextPayDate.setMonth(nextPayDate.getMonth() + 1);
-                    nextPayDate.setDate(1);
-                }
-            } else {
-                if (nextPayDate.getDate() === 16) {
-                    nextPayDate.setMonth(nextPayDate.getMonth() + 1);
-                    nextPayDate.setDate(1);
-                } else {
-                    nextPayDate.setDate(16);
-                }
-            }
-            break;
-
-        case "custom":
-            nextPayDate.setDate(nextPayDate.getDate() + (Number(customPayDays) || 14));
-            break;
-    }
-
-    return {
-        startDate: nextStartDate,
-        endDate: getPayPeriodEndDate(nextStartDate, frequency, semiMonthlyType, customPayDays),
-        payDate: formatISO(nextPayDate),
-    };
 };
 
 export default function SchedulePage() {
@@ -183,15 +64,19 @@ export default function SchedulePage() {
      * --------------------------------------------------
      */
 
-    const [schedules, setSchedules] = useState<WorkSchedule[]>([]);
+    // 프로필·급여 설정·근무 일정은 세 급여 화면이 같은 훅으로 불러온다
+    const salaryData = useSalaryData();
 
-    const [isSchedulesLoading, setIsSchedulesLoading] = useState(true);
+    const { profile, settings: salarySettings, schedules, isLoading, setSchedules } = salaryData;
 
-    const [holidays, setHolidays] = useState<Holiday[]>([]);
+    const countryCode = profile?.countryCode ?? null;
+    const provinceCode = profile?.provinceCode ?? null;
+    const currency = profile?.currency ?? null;
 
-    const [countryCode, setCountryCode] = useState<string | null>(null);
-    const [province, setProvince] = useState<string | null>(null);
-    const [currency, setCurrency] = useState<string | null>(null);
+    const formatMoney = (value: number) => formatCurrency(value, currency);
+
+    // 달력에 보이는 달의 공휴일
+    const [holidays, setHolidays] = useState<HolidayData[]>([]);
 
     /*
      * --------------------------------------------------
@@ -251,10 +136,6 @@ export default function SchedulePage() {
 
     const [isDefaultBreakConfirmOpen, setIsDefaultBreakConfirmOpen] = useState(false);
 
-    const [showAllSchedules, setShowAllSchedules] = useState(false);
-
-    const [salarySettings, setSalarySettings] = useState<SalarySettings | null>(null);
-
     /*
      * --------------------------------------------------
      * Tips
@@ -265,8 +146,6 @@ export default function SchedulePage() {
 
     const [paychequeTips, setPaychequeTips] = useState("");
 
-    const [savedTips, setSavedTips] = useState<PayPeriodTips | null>(null);
-
     /*
      * --------------------------------------------------
      * Salary
@@ -274,34 +153,6 @@ export default function SchedulePage() {
      */
 
     const hourlyWage = salarySettings?.payType === "hourly" ? Number(salarySettings.hourlyWage ?? 0) : 0;
-
-    /*
-     * --------------------------------------------------
-     * Load Schedules
-     * --------------------------------------------------
-     */
-
-    useEffect(() => {
-        const loadSchedules = async () => {
-            try {
-                const response = await fetch("/api/salary/work-schedules");
-
-                if (!response.ok) {
-                    throw new Error("근무 기록 조회 실패");
-                }
-
-                const data: WorkSchedule[] = await response.json();
-
-                setSchedules(data);
-            } catch (error) {
-                console.error(error);
-            } finally {
-                setIsSchedulesLoading(false);
-            }
-        };
-
-        loadSchedules();
-    }, []);
 
     /*
      * --------------------------------------------------
@@ -331,67 +182,36 @@ export default function SchedulePage() {
 
     /*
      * --------------------------------------------------
-     * Load Salary Settings
+     * Current Pay Period
      * --------------------------------------------------
      */
 
+    const today = formatDate(new Date());
+
+    const currentPayPeriod = useMemo(
+        () => (salarySettings ? (getSurroundingPayPeriods(salarySettings, today)?.current ?? null) : null),
+        [salarySettings, today],
+    );
+
+    // 이번 급여 기간의 저장된 팁과 공휴일
+    const periodData = usePeriodEstimate(salaryData, currentPayPeriod);
+
+    const savedTips = periodData.tips;
+
     useEffect(() => {
-        const loadSalarySettings = async () => {
-            try {
-                const response = await fetch("/api/salary/salary-settings");
+        setCashTips(savedTips && savedTips.cashTips > 0 ? String(savedTips.cashTips) : "");
 
-                if (!response.ok) {
-                    throw new Error("급여 설정 조회 실패");
-                }
-
-                const data: SalarySettings | null = await response.json();
-
-                setSalarySettings(data);
-            } catch (error) {
-                console.error("급여 설정 조회 실패:", error);
-            }
-        };
-
-        loadSalarySettings();
-    }, []);
+        setPaychequeTips(savedTips && savedTips.paychequeTips > 0 ? String(savedTips.paychequeTips) : "");
+    }, [savedTips]);
 
     /*
      * --------------------------------------------------
-     * Load Profile
+     * Load Holidays (달력에 보이는 달)
      * --------------------------------------------------
      */
 
-    useEffect(() => {
-        const loadProfile = async () => {
-            try {
-                const response = await fetch("/api/user/profile");
-
-                if (!response.ok) {
-                    throw new Error("프로필 조회 실패");
-                }
-
-                const data = await response.json();
-
-                setCountryCode(data.countryCode ?? null);
-                setProvince(data.province ?? null);
-                setCurrency(data.currency ?? null);
-            } catch (error) {
-                console.error("프로필 조회 실패:", error);
-
-                setCountryCode(null);
-                setProvince(null);
-                setCurrency(null);
-            }
-        };
-
-        loadProfile();
-    }, []);
-
-    /*
-     * --------------------------------------------------
-     * Load Holidays
-     * --------------------------------------------------
-     */
+    const monthStart = formatDate(new Date(year, month, 1));
+    const monthEnd = formatDate(new Date(year, month + 1, 0));
 
     useEffect(() => {
         if (!countryCode) {
@@ -399,132 +219,26 @@ export default function SchedulePage() {
             return;
         }
 
-        const loadHolidays = async () => {
-            try {
-                const params = new URLSearchParams({
-                    year: String(year),
-                    country: countryCode,
-                });
+        let cancelled = false;
 
-                if (province) {
-                    params.set("province", province);
+        fetchHolidays({ country: countryCode, province: provinceCode, period: { startDate: monthStart, endDate: monthEnd } })
+            .then((result) => {
+                if (!cancelled) {
+                    setHolidays(result.holidays);
                 }
-
-                const response = await fetch(`/api/holidays?${params.toString()}`);
-
-                if (!response.ok) {
-                    throw new Error("공휴일 조회 실패");
-                }
-
-                const data: Holiday[] = await response.json();
-
-                setHolidays(data);
-            } catch (error) {
+            })
+            .catch((error) => {
                 console.error("공휴일 조회 실패:", error);
 
-                setHolidays([]);
-            }
-        };
-
-        loadHolidays();
-    }, [year, countryCode, province]);
-
-    /*
-     * --------------------------------------------------
-     * Current Pay Period
-     * --------------------------------------------------
-     */
-
-    const getCurrentPayPeriod = (): PayPeriod | null => {
-        if (!salarySettings?.payPeriodStartDate || !salarySettings?.payDate) {
-            return null;
-        }
-
-        let period: PayPeriod = {
-            startDate: salarySettings.payPeriodStartDate,
-
-            endDate: getPayPeriodEndDate(
-                salarySettings.payPeriodStartDate,
-                salarySettings.payFrequency,
-                salarySettings.semiMonthlyType,
-                salarySettings.customPayDays,
-            ),
-
-            payDate: salarySettings.payDate,
-        };
-
-        const today = new Date();
-
-        const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-
-        let periodEnd = new Date(`${period.endDate}T00:00:00`);
-
-        while (periodEnd < todayOnly) {
-            period = shiftPayPeriod(
-                period.startDate,
-                period.payDate,
-                salarySettings.payFrequency,
-                salarySettings.semiMonthlyType,
-                salarySettings.customPayDays,
-            );
-
-            periodEnd = new Date(`${period.endDate}T00:00:00`);
-        }
-
-        return period;
-    };
-
-    const currentPayPeriod = getCurrentPayPeriod();
-
-    /*
-     * --------------------------------------------------
-     * Load Current Period Tips
-     * --------------------------------------------------
-     */
-
-    useEffect(() => {
-        if (!currentPayPeriod) {
-            setSavedTips(null);
-
-            setCashTips("");
-
-            setPaychequeTips("");
-
-            return;
-        }
-
-        const loadTips = async () => {
-            try {
-                const response = await fetch(
-                    `/api/pay-period-tips?startDate=${encodeURIComponent(
-                        currentPayPeriod.startDate,
-                    )}&endDate=${encodeURIComponent(currentPayPeriod.endDate)}`,
-                );
-
-                if (!response.ok) {
-                    throw new Error("팁 조회 실패");
+                if (!cancelled) {
+                    setHolidays([]);
                 }
+            });
 
-                const data: PayPeriodTips | null = await response.json();
-
-                setSavedTips(data);
-
-                setCashTips(data && data.cashTips > 0 ? String(data.cashTips) : "");
-
-                setPaychequeTips(data && data.paychequeTips > 0 ? String(data.paychequeTips) : "");
-            } catch (error) {
-                console.error("팁 조회 실패:", error);
-
-                setSavedTips(null);
-
-                setCashTips("");
-
-                setPaychequeTips("");
-            }
+        return () => {
+            cancelled = true;
         };
-
-        loadTips();
-    }, [currentPayPeriod?.startDate, currentPayPeriod?.endDate]);
+    }, [countryCode, provinceCode, monthStart, monthEnd]);
 
     /*
      * --------------------------------------------------
@@ -566,16 +280,11 @@ export default function SchedulePage() {
     /*
      * --------------------------------------------------
      * Current Period Estimate
+     *
+     * 입력 중인(아직 저장하지 않은) 팁도 바로 예상 급여에 반영한다.
+     * 계산 자체는 급여 화면·급여 기록 화면과 같은 lib/salary/estimate를 쓴다.
      * --------------------------------------------------
      */
-
-    const currentPeriodSchedules = currentPayPeriod
-        ? schedules.filter((schedule) => {
-              const scheduleDate = schedule.date.slice(0, 10);
-
-              return scheduleDate >= currentPayPeriod.startDate && scheduleDate <= currentPayPeriod.endDate;
-          })
-        : [];
 
     const hasPaychequeTips = Boolean(
         salarySettings?.hasTips && (salarySettings.tipType === "paycheque" || salarySettings.tipType === "both"),
@@ -585,47 +294,41 @@ export default function SchedulePage() {
         salarySettings?.hasTips && (salarySettings.tipType === "cash" || salarySettings.tipType === "both"),
     );
 
-    const currentPeriodPaychequeTips = hasPaychequeTips ? Math.max(0, Number(paychequeTips) || 0) : 0;
+    const estimateOutcome = useMemo(
+        () =>
+            currentPayPeriod
+                ? buildPeriodEstimate({
+                      profile,
+                      settings: salarySettings,
+                      schedules,
+                      holidays: periodData.holidays,
+                      tips: {
+                          payPeriodStart: currentPayPeriod.startDate,
+                          payPeriodEnd: currentPayPeriod.endDate,
+                          cashTips: Math.max(0, Number(cashTips) || 0),
+                          paychequeTips: Math.max(0, Number(paychequeTips) || 0),
+                      },
+                      period: currentPayPeriod,
+                  })
+                : null,
+        [currentPayPeriod, profile, salarySettings, schedules, periodData.holidays, cashTips, paychequeTips],
+    );
 
-    const currentPeriodCashTips = hasCashTips ? Math.max(0, Number(cashTips) || 0) : 0;
+    const currentPeriodEstimate = useMemo(
+        () => (estimateOutcome?.status === "ok" ? summarizeEstimate(estimateOutcome.estimate) : null),
+        [estimateOutcome],
+    );
 
-    const currentExpectedSalary = currentPayPeriod
-        ? calculateExpectedSalary({
-              settings: {
-                  country: countryCode ?? "CA",
-                  regionCode: province ?? "ON",
-                  payType: salarySettings?.payType ?? "hourly",
-                  payFrequency: salarySettings?.payFrequency ?? "biweekly",
-                  hourlyWage: salarySettings?.hourlyWage,
-                  monthlySalary: salarySettings?.monthlySalary,
-                  hasTips: Boolean(salarySettings?.hasTips),
-                  tipType: salarySettings?.tipType,
-                  vacationPayRate: salarySettings?.vacationPayRate,
-              },
+    const currentPeriodHolidayPay = currentPeriodEstimate
+        ? currentPeriodEstimate.publicHolidayPay + currentPeriodEstimate.premiumPay
+        : 0;
 
-              schedules: currentPeriodSchedules.map((schedule) => ({
-                  date: schedule.date.slice(0, 10),
-                  startTime: schedule.startTime,
-                  endTime: schedule.endTime,
-                  hasBreak: schedule.hasBreak,
-                  breakMinutes: schedule.breakMinutes,
-                  isHoliday: Boolean(isHoliday(schedule.date.slice(0, 10), holidays)),
-              })),
+    const vacationPayRate = salarySettings?.countryOptions?.vacationPayRate;
+    const holidayPayMode = salarySettings?.countryOptions?.holidayPayMode ?? null;
 
-              cashTips: currentPeriodCashTips,
-              paychequeTips: currentPeriodPaychequeTips,
+    const premiumContext = { country: countryCode, region: provinceCode, mode: holidayPayMode };
 
-              payPeriod: currentPayPeriod,
-          })
-        : null;
-
-    /*
-     * --------------------------------------------------
-     * Animated Expected Salary
-     * --------------------------------------------------
-     */
-
-    const [animatedNetPay, setAnimatedNetPay] = useState(0);
+    const animatedNetPay = useCountUp(currentPeriodEstimate?.netPay ?? 0, Boolean(currentPeriodEstimate));
 
     /*
      * --------------------------------------------------
@@ -900,7 +603,7 @@ export default function SchedulePage() {
             return;
         }
 
-        const newTips: PayPeriodTips = {
+        const newTips: PeriodTipsData = {
             payPeriodStart: currentPayPeriod.startDate,
 
             payPeriodEnd: currentPayPeriod.endDate,
@@ -925,9 +628,9 @@ export default function SchedulePage() {
                 throw new Error("팁 저장 실패");
             }
 
-            const saved: PayPeriodTips = await response.json();
+            const saved = (await response.json()) as PeriodTipsData;
 
-            setSavedTips(saved);
+            periodData.setTips(saved);
 
             setCashTips(saved.cashTips > 0 ? String(saved.cashTips) : "");
 
@@ -961,7 +664,7 @@ export default function SchedulePage() {
      * --------------------------------------------------
      */
 
-    if (isSchedulesLoading) {
+    if (isLoading) {
         return (
             <div className="flex h-[calc(100vh-152px)] items-center justify-center">
                 <p className="text-sm text-gray-400">불러오는 중...</p>
@@ -1077,10 +780,9 @@ export default function SchedulePage() {
                                 schedule.hasBreak ? schedule.breakMinutes : 0,
                             );
 
-                            const basePay = hours * hourlyWage;
-                            const premiumPay = holiday ? basePay * 0.5 : 0;
-
-                            return total + basePay + premiumPay;
+                            return (
+                                total + estimateDayPay({ hours, hourlyWage, isHoliday: Boolean(holiday), ...premiumContext })
+                            );
                         }, 0);
 
                         const isPayPeriodDay = currentPayPeriod
@@ -1163,7 +865,20 @@ export default function SchedulePage() {
                     </div>
 
                     <span className="text-xs font-medium text-gray-400">
-                        {currentMonthSchedules.length}회 / {currentPeriodEstimate.hours.toFixed(2)}시간
+                        {currentMonthSchedules.length}회 /{" "}
+                        {currentMonthSchedules
+                            .reduce(
+                                (total, schedule) =>
+                                    total +
+                                    calculateHours(
+                                        schedule.startTime,
+                                        schedule.endTime,
+                                        schedule.hasBreak ? schedule.breakMinutes : 0,
+                                    ),
+                                0,
+                            )
+                            .toFixed(2)}
+                        시간
                     </span>
                 </div>
             </section>
@@ -1225,9 +940,11 @@ export default function SchedulePage() {
                                                 {isHoliday(selectedDate.slice(0, 10), holidays)?.name}
                                             </p>
 
-                                            <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[8px] font-semibold text-red-500">
-                                                PREMIUM
-                                            </span>
+                                            {hasHolidayPremium(premiumContext) && (
+                                                <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[8px] font-semibold text-red-500">
+                                                    PREMIUM
+                                                </span>
+                                            )}
                                         </div>
                                     )}
                                 </div>
@@ -1345,9 +1062,18 @@ export default function SchedulePage() {
 
                                         <span className="font-semibold">
                                             {formatMoney(
-                                                calculateHours(startTime, endTime, hasBreak ? Number(breakMinutes) || 0 : 0) *
-                                                    hourlyWage *
-                                                    (selectedDate && isHoliday(selectedDate.slice(0, 10), holidays) ? 1.5 : 1),
+                                                estimateDayPay({
+                                                    hours: calculateHours(
+                                                        startTime,
+                                                        endTime,
+                                                        hasBreak ? Number(breakMinutes) || 0 : 0,
+                                                    ),
+                                                    hourlyWage,
+                                                    isHoliday: Boolean(
+                                                        selectedDate && isHoliday(selectedDate.slice(0, 10), holidays),
+                                                    ),
+                                                    ...premiumContext,
+                                                }),
                                             )}
                                         </span>
                                     </div>
@@ -1486,7 +1212,7 @@ export default function SchedulePage() {
                             <p className="mb-2 text-sm text-gray-500">현금으로 받은 팁</p>
 
                             <div className="flex items-center rounded-2xl bg-gray-100 px-4">
-                                <span className="text-gray-500">{currency === "KRW" ? "₩" : "$"}</span>
+                                <span className="text-gray-500">{getCurrencySymbol(currency)}</span>
 
                                 <input
                                     type="number"
@@ -1516,7 +1242,7 @@ export default function SchedulePage() {
                             <p className="mb-2 text-sm text-gray-500">급여에 포함되는 팁</p>
 
                             <div className="flex items-center rounded-2xl bg-gray-100 px-4">
-                                <span className="text-gray-500">{currency === "KRW" ? "₩" : "$"}</span>
+                                <span className="text-gray-500">{getCurrencySymbol(currency)}</span>
 
                                 <input
                                     type="number"
@@ -1547,7 +1273,7 @@ export default function SchedulePage() {
                                 <p className="mb-2 text-sm text-gray-500">급여에 포함되는 팁</p>
 
                                 <div className="flex items-center rounded-2xl bg-gray-100 px-4">
-                                    <span className="text-gray-500">{currency === "KRW" ? "₩" : "$"}</span>
+                                    <span className="text-gray-500">{getCurrencySymbol(currency)}</span>
 
                                     <input
                                         type="number"
@@ -1575,7 +1301,7 @@ export default function SchedulePage() {
                                 <p className="mb-2 text-sm text-gray-500">현금으로 받은 팁</p>
 
                                 <div className="flex items-center rounded-2xl bg-gray-100 px-4">
-                                    <span className="text-gray-500">{currency === "KRW" ? "₩" : "$"}</span>
+                                    <span className="text-gray-500">{getCurrencySymbol(currency)}</span>
 
                                     <input
                                         type="number"
@@ -1613,9 +1339,27 @@ export default function SchedulePage() {
             {/* --------------------------------------------------
             Current Expected Salary
         -------------------------------------------------- */}
-            {currentPayPeriod && (
+            {currentPayPeriod && !currentPeriodEstimate && (
                 <section className="mt-6 rounded-3xl bg-black p-6 text-white shadow-sm">
-                    <p className="text-sm text-gray-400">이번예상 급여</p>
+                    <p className="text-sm text-gray-400">이번 예상 급여</p>
+
+                    <p className="mt-3 text-sm text-gray-300">
+                        {estimateOutcome?.status === "unsupported-country"
+                            ? "아직 이 나라의 급여 계산을 지원하지 않아요."
+                            : estimateOutcome?.status === "no-profile"
+                              ? "프로필에서 국가를 설정하면 예상 급여를 계산할 수 있어요."
+                              : "급여 설정을 먼저 해주세요."}
+                    </p>
+                </section>
+            )}
+
+            {currentPayPeriod && !salarySettings?.payPeriodStartDate && salarySettings && (
+                <p className="mt-3 text-xs text-gray-400">급여 설정에서 급여 기간 시작일을 입력하면 더 정확해져요.</p>
+            )}
+
+            {currentPayPeriod && currentPeriodEstimate && (
+                <section className="mt-6 rounded-3xl bg-black p-6 text-white shadow-sm">
+                    <p className="text-sm text-gray-400">이번 예상 급여</p>
 
                     <div className="mt-2 flex items-start gap-2">
                         <p className="text-4xl font-bold tabular-nums">{formatMoney(animatedNetPay)}</p>
@@ -1648,19 +1392,26 @@ export default function SchedulePage() {
                                 </div>
                             )}
 
-                            {currentHolidaySchedules.length > 0 && (
+                            {currentPeriodHolidayPay > 0 && (
                                 <div className="flex justify-between">
-                                    <span className="text-gray-400">Holiday Pay</span>
+                                    <span className="text-gray-400">공휴일 수당</span>
 
-                                    <span>{formatMoney(currentPeriodEstimate.holidayPay)}</span>
+                                    <span>{formatMoney(currentPeriodHolidayPay)}</span>
                                 </div>
                             )}
 
-                            <div className="flex justify-between">
-                                <span className="text-gray-400">Vacation Pay ({vacationPayRate}%)</span>
+                            {currentPeriodEstimate.vacationPay > 0 && (
+                                <div className="flex justify-between">
+                                    <span className="text-gray-400">
+                                        휴가 수당
+                                        {vacationPayRate !== undefined
+                                            ? ` (${Math.round(vacationPayRate * 10000) / 100}%)`
+                                            : ""}
+                                    </span>
 
-                                <span>{formatMoney(currentPeriodEstimate.vacationPay)}</span>
-                            </div>
+                                    <span>{formatMoney(currentPeriodEstimate.vacationPay)}</span>
+                                </div>
+                            )}
 
                             <div className="mt-4 border-t border-gray-800 pt-4">
                                 <div className="flex justify-between">
@@ -1681,6 +1432,12 @@ export default function SchedulePage() {
 
                                 <span className="font-semibold">{formatMoney(currentPeriodEstimate.netPay)}</span>
                             </div>
+
+                            {currentPeriodEstimate.warnings.map((warning) => (
+                                <p key={warning} className="pt-2 text-xs leading-5 text-amber-300">
+                                    {warning}
+                                </p>
+                            ))}
 
                             {hasCashTips && (
                                 <div className="mt-4 border-t border-gray-800 pt-4">
@@ -1705,34 +1462,34 @@ export default function SchedulePage() {
 
                                     <div className="flex justify-between">
                                         <span className="text-gray-400">기본 급여</span>
-                                        <span>{formatMoney(570.03)}</span>
+                                        <span>{formatMoney(currency === "KRW" ? Math.round(570.03 * 1000) : 570.03)}</span>
                                     </div>
 
                                     <div className="flex justify-between">
                                         <span className="text-gray-400">Holiday Pay</span>
-                                        <span>{formatMoney(28.5)}</span>
+                                        <span>{formatMoney(currency === "KRW" ? Math.round(28.5 * 1000) : 28.5)}</span>
                                     </div>
 
                                     <div className="flex justify-between">
                                         <span className="text-gray-400">Vacation Pay</span>
-                                        <span>{formatMoney(24.85)}</span>
+                                        <span>{formatMoney(currency === "KRW" ? Math.round(24.85 * 1000) : 24.85)}</span>
                                     </div>
 
                                     <div className="border-t border-gray-800 pt-4">
                                         <div className="flex justify-between">
                                             <span className="text-gray-300">세전 급여</span>
-                                            <span>{formatMoney(623.38)}</span>
+                                            <span>{formatMoney(currency === "KRW" ? Math.round(623.38 * 1000) : 623.38)}</span>
                                         </div>
                                     </div>
 
                                     <div className="flex justify-between">
                                         <span className="text-gray-400">예상 공제</span>
-                                        <span>- {formatMoney(123.42)}</span>
+                                        <span>- {formatMoney(currency === "KRW" ? Math.round(123.42 * 1000) : 123.42)}</span>
                                     </div>
 
                                     <div className="flex justify-between">
                                         <span className="text-gray-300">실수령 급여</span>
-                                        <span>{formatMoney(499.96)}</span>
+                                        <span>{formatMoney(currency === "KRW" ? Math.round(499.96 * 1000) : 499.96)}</span>
                                     </div>
                                 </div>
                             </div>

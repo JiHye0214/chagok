@@ -13,10 +13,14 @@ export type {
     KoreaPayrollInput,
 } from "./types";
 
-export type PayrollCountry = "CA" | "KR";
+// 급여 계산이 지원하는 나라. 나라를 추가할 때 여기와 아래 switch에 추가한다.
+export const PAYROLL_COUNTRIES = ["CA", "KR"] as const;
+
+export type PayrollCountry = (typeof PAYROLL_COUNTRIES)[number];
 
 // DB/설정에서 온 string을 안전하게 좁힐 때 사용
-export const isPayrollCountry = (value: unknown): value is PayrollCountry => value === "CA" || value === "KR";
+export const isPayrollCountry = (value: unknown): value is PayrollCountry =>
+    typeof value === "string" && (PAYROLL_COUNTRIES as readonly string[]).includes(value);
 
 /*
  * 나라별로 받는 값이 다르므로 country를 기준으로 구분되는 유니온.

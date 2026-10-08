@@ -63,8 +63,9 @@ export const parsePayHistoryInput = (body: Record<string, unknown>) => {
         throw new ValidationError("급여 기간의 시작일이 종료일보다 늦습니다.");
     }
 
-    const optionalAmount = (value: unknown, label: string) =>
-        value === undefined || value === null || value === "" ? 0 : parseAmount(value, label);
+    // 안 보낸 값은 null → 저장할 때 기존 값을 유지한다. (0으로 덮어쓰면 수정할 때 저장돼 있던 팁이 사라짐)
+    const optionalAmount = (value: unknown, label: string): number | null =>
+        value === undefined || value === null || value === "" ? null : parseAmount(value, label);
 
     const currencyCode =
         body.currencyCode === undefined || body.currencyCode === null || body.currencyCode === ""

@@ -19,7 +19,7 @@ export default function BackButtonHeader({
             <Link
                 href={href}
                 className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-gray-500 shadow-sm"
-                aria-label={`${title}로 돌아가기`}
+                aria-label="뒤로 가기"
             >
                 <ArrowLeft size={19} strokeWidth={1.8} />
             </Link>

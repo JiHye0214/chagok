@@ -5,7 +5,7 @@ import { calculatePeriodHolidayPay } from "@/lib/holiday";
 import { getDefaultHolidayPayMode } from "@/lib/labor/rules";
 import type { Holiday, HolidayPayMode } from "@/lib/holiday";
 import { getPayPeriodDays, getPeriodsPerYear } from "@/lib/payPeriod";
-import type { PayPeriod, PayFrequency } from "@/lib/payPeriod";
+import type { PayPeriod, PayFrequency, SemiMonthlyType } from "@/lib/payPeriod";
 
 export type ExpectedSalarySettings = {
     country: PayrollCountry;
@@ -14,6 +14,9 @@ export type ExpectedSalarySettings = {
     payType: "hourly" | "salary" | "commission" | "other";
 
     payFrequency: PayFrequency;
+
+    // semi-monthly일 때의 규칙 (연간 지급 횟수 계산에 사용)
+    semiMonthlyType?: SemiMonthlyType;
 
     hourlyWage?: number;
     monthlySalary?: number;
@@ -111,6 +114,7 @@ const calculateBasePay = (settings: ExpectedSalarySettings, periodHours: number,
             const perYear = getPeriodsPerYear(
                 settings.payFrequency,
                 settings.payFrequency === "custom" ? getPayPeriodDays(payPeriod) : undefined,
+                settings.semiMonthlyType,
             );
             return (toSafeNumber(settings.monthlySalary) * 12) / perYear;
         }
@@ -172,9 +176,12 @@ export const calculateExpectedSalary = ({
         schedules.forEach((schedule, index) => {
             const hours = scheduleHours[index];
 
-            hoursByDate[schedule.date] = (hoursByDate[schedule.date] ?? 0) + hours;
+            // 화면이 날짜를 '2026-09-07T00:00:00.000Z' 같은 긴 형식으로 줄 수 있어 앞 10자리(YYYY-MM-DD)만 사용
+            const dateKey = schedule.date.slice(0, 10);
 
-            if (hours > 0 && !holidayDates.has(schedule.date)) {
+            hoursByDate[dateKey] = (hoursByDate[dateKey] ?? 0) + hours;
+
+            if (hours > 0 && !holidayDates.has(dateKey)) {
                 regularDayHours += hours;
                 regularDayCount += 1;
             }
@@ -228,6 +235,7 @@ export const calculateExpectedSalary = ({
         regionCode: settings.regionCode,
         grossPay,
         payFrequency: settings.payFrequency,
+        semiMonthlyType: settings.semiMonthlyType,
         payPeriod,
     });
 

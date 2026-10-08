@@ -1,7 +1,14 @@
 import { sql } from "@/lib/db";
+import { getCurrentUser } from "@/lib/auth/user";
 
 export async function DELETE(request: Request) {
     try {
+        const user = await getCurrentUser();
+
+        if (!user) {
+            return Response.json({ success: false, message: "로그인이 필요해요." }, { status: 401 });
+        }
+
         const { id } = await request.json();
 
         if (!id) {
@@ -19,6 +26,7 @@ export async function DELETE(request: Request) {
         const result = await sql`
             DELETE FROM push_schedules
             WHERE id = ${id}
+              AND user_id = ${user.id}
             RETURNING id
         `;
 

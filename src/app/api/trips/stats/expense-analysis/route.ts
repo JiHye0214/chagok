@@ -26,6 +26,15 @@ export async function GET() {
 
         const planCode = subscription?.plan_code ?? "free";
 
+        const [profileRow] = await sql`
+            SELECT currency
+            FROM user_profiles
+            WHERE user_id = ${user.id}
+            LIMIT 1
+        `;
+
+        const profileCurrency = (profileRow?.currency as string | undefined) ?? "";
+
         if (planCode === "free") {
             return NextResponse.json(
                 {
@@ -154,7 +163,7 @@ export async function GET() {
 
                 people,
 
-                currency: trip.currency || "CAD",
+                currency: trip.currency || profileCurrency,
 
                 totalExpense,
 
@@ -202,7 +211,7 @@ export async function GET() {
             return result;
         }, {});
 
-        const currency = Object.entries(currencyCounts).sort(([, countA], [, countB]) => countB - countA)[0]?.[0] ?? "CAD";
+        const currency = Object.entries(currencyCounts).sort(([, countA], [, countB]) => countB - countA)[0]?.[0] ?? profileCurrency;
 
         // --------------------------------------------------------
         // 최종 응답

@@ -1,5 +1,5 @@
 // lib/payroll/types.ts
-import type { PayFrequency, PayPeriod } from "@/lib/payPeriod";
+import type { PayFrequency, PayPeriod, SemiMonthlyType } from "@/lib/payPeriod";
 
 export type PayrollDeduction = {
     key: string;
@@ -24,6 +24,8 @@ export type PayrollYtd = {
 export type PayrollInput = {
     grossPay: number;
     payFrequency: PayFrequency;
+    // 급여 주기가 semi-monthly일 때의 규칙. 연간 지급 횟수(24회/12회) 계산에 필요
+    semiMonthlyType?: SemiMonthlyType;
     payPeriod: PayPeriod;
 };
 

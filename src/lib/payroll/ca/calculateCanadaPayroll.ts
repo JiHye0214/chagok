@@ -82,6 +82,7 @@ export const calculateCanadaPayroll = ({
     grossPay,
     regionCode,
     payFrequency,
+    semiMonthlyType,
     payPeriod,
     ytd,
 }: CanadaPayrollInput): PayrollResult => {
@@ -91,6 +92,7 @@ export const calculateCanadaPayroll = ({
     const periodsPerYear = getPeriodsPerYear(
         payFrequency,
         payFrequency === "custom" ? getPayPeriodDays(payPeriod) : undefined,
+        semiMonthlyType,
     );
 
     const safeYtd = {

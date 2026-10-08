@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createAuthClient } from "better-auth/react";
+import { getCountry, getOnboardingStepNumber } from "@/lib/countries";
 
 const authClient = createAuthClient();
 
@@ -30,7 +31,9 @@ export default function LoginPage() {
         });
     };
 
-    const stepNumber = country === "CA" ? "04" : "03";
+    const countryConfig = getCountry(country);
+
+    const stepNumber = getOnboardingStepNumber("login", country);
 
     return (
         <main className="h-[100dvh] w-full overflow-hidden bg-gray-50">
@@ -83,7 +86,7 @@ export default function LoginPage() {
                             </button>
 
                             {/* Kakao - Korea only */}
-                            {country === "KR" && (
+                            {countryConfig?.loginProviders.includes("kakao") && (
                                 <button
                                     type="button"
                                     onClick={handleKakaoLogin}
@@ -104,7 +107,7 @@ export default function LoginPage() {
                 <button
                     type="button"
                     onClick={() => {
-                        if (country === "CA") {
+                        if (countryConfig?.hasRegions) {
                             window.location.href = "/onboarding/region";
                         } else {
                             window.location.href = "/onboarding/country";

@@ -1,4 +1,4 @@
-// (기존 pay-period-tips/route.ts 자리에 그대로 교체)
+// (기존 salary/pay-period-tips/route.ts 자리에 그대로 교체)  URL: /api/salary/pay-period-tips
 import { getCurrentUser } from "@/lib/auth/user";
 import { sql } from "@/lib/db";
 import { toPayPeriodTipsDto } from "@/lib/api/mappers";

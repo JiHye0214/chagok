@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { Pool } from "pg";
 import { auth } from "@/lib/auth/auth";
+import { DEFAULT_LANGUAGE, isSupportedLanguage, resolveLocation } from "@/lib/countries";
 
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
@@ -25,12 +26,6 @@ const DEFAULT_LIVING_CATEGORIES = [
     { name: "이자/배당", kind: "income", sortOrder: 5 },
     { name: "기타", kind: "income", sortOrder: 6 },
 ];
-
-const SUPPORTED_COUNTRIES = ["KR", "CA"];
-
-const SUPPORTED_CURRENCIES = ["KRW", "CAD", "USD"];
-
-const SUPPORTED_CANADA_PROVINCES = ["BC", "ON"];
 
 export async function GET(request: Request) {
     try {
@@ -89,17 +84,27 @@ export async function PATCH(request: Request) {
 
         const body = await request.json();
 
-        const nickname = typeof body.nickname === "string" ? body.nickname.trim() : "";
+        const existingResult = await client.query(
+            `
+            SELECT nickname, language, country_code, province_code, timezone, currency
+            FROM user_profiles
+            WHERE user_id = $1
+            LIMIT 1
+            `,
+            [session.user.id],
+        );
 
-        const language = typeof body.language === "string" ? body.language : "ko";
+        const existing = existingResult.rows[0];
 
-        const countryCode = typeof body.countryCode === "string" ? body.countryCode.toUpperCase() : "";
+        /*
+         * 이미 프로필이 있으면 보내지 않은 항목은 기존 값을 유지한다.
+         * (닉네임만 바꾸는 화면 등) 최초 가입에서는 모든 항목이 필요하다.
+         */
+        const nickname = body.nickname !== undefined ? (typeof body.nickname === "string" ? body.nickname.trim() : "") : (existing?.nickname ?? "");
 
-        const provinceCode = typeof body.provinceCode === "string" && body.provinceCode ? body.provinceCode.toUpperCase() : null;
+        const hasLanguageInput = body.language !== undefined && body.language !== null && body.language !== "";
 
-        const timezone = typeof body.timezone === "string" ? body.timezone : "";
-
-        const currency = typeof body.currency === "string" ? body.currency.toUpperCase() : "";
+        const language = hasLanguageInput ? body.language : (existing?.language ?? DEFAULT_LANGUAGE);
 
         // 닉네임 검증
         if (!nicknameRegex.test(nickname)) {
@@ -111,62 +116,55 @@ export async function PATCH(request: Request) {
             );
         }
 
-        // 국가 검증
-        if (!SUPPORTED_COUNTRIES.includes(countryCode)) {
-            return NextResponse.json(
-                {
-                    error: "지원하지 않는 국가예요.",
-                },
-                { status: 400 },
-            );
+        if (!isSupportedLanguage(language)) {
+            return NextResponse.json({ error: "지원하지 않는 언어예요." }, { status: 400 });
         }
 
-        // 통화 검증
-        if (!SUPPORTED_CURRENCIES.includes(currency)) {
-            return NextResponse.json(
-                {
-                    error: "지원하지 않는 통화예요.",
-                },
-                { status: 400 },
-            );
+        /*
+         * 국가·지역 검증.
+         * 통화와 시간대는 화면이 보낸 값을 믿지 않고 국가·지역(lib/countries)에서 정한다.
+         * (한국인데 USD, 맞지 않는 시간대 같은 조합 방지)
+         *
+         * 국가·지역을 보내지 않은 수정(닉네임만 바꾸기 등)은 기존 값을 그대로 둔다.
+         */
+        const hasLocationInput = body.countryCode !== undefined || body.provinceCode !== undefined;
+
+        let countryCode: string;
+        let normalizedProvinceCode: string | null;
+        let currency: string;
+        let timezone: string;
+
+        if (existing && !hasLocationInput) {
+            countryCode = existing.country_code;
+            normalizedProvinceCode = existing.province_code ?? null;
+            currency = existing.currency;
+            timezone = existing.timezone;
+        } else {
+            // 국가 없이 지역만 보내면 기존 국가의 지역을 바꾸는 것으로 본다
+            const countryInput = body.countryCode !== undefined ? body.countryCode : existing?.country_code;
+
+            const location = resolveLocation(countryInput, body.provinceCode);
+
+            if (!location.ok) {
+                return NextResponse.json({ error: location.error }, { status: 400 });
+            }
+
+            ({ countryCode, provinceCode: normalizedProvinceCode, currency, timezone } = location.value);
         }
 
-        // 캐나다인 경우에만 지역 사용
-        if (countryCode === "CA" && (!provinceCode || !SUPPORTED_CANADA_PROVINCES.includes(provinceCode))) {
-            return NextResponse.json(
-                {
-                    error: "캐나다 지역 정보를 확인할 수 없어요.",
-                },
-                { status: 400 },
-            );
-        }
+        const hasCountryChanged = Boolean(existing) && existing.country_code !== countryCode;
 
-        // 한국은 province_code를 사용하지 않음
-        const normalizedProvinceCode = countryCode === "CA" ? provinceCode : null;
-
-        // 필수 프로필 정보 검증
-        if (!timezone) {
+        // 국가 변경은 데이터를 모두 지우므로, 화면에서 명시적으로 확인한 요청만 허용한다.
+        if (hasCountryChanged && body.confirmReset !== true) {
             return NextResponse.json(
-                {
-                    error: "사용자 정보를 확인할 수 없어요. 처음부터 다시 진행해 주세요.",
-                },
-                { status: 400 },
+                { error: "국가를 바꾸면 금액 관련 데이터가 모두 삭제돼요. 확인 후 다시 시도해 주세요." },
+                { status: 409 },
             );
         }
 
         await client.query("BEGIN");
 
-        const existingProfile = await client.query(
-            `
-            SELECT user_id
-            FROM user_profiles
-            WHERE user_id = $1
-            LIMIT 1
-            `,
-            [session.user.id],
-        );
-
-        if (existingProfile.rows.length > 0) {
+        if (existing) {
             await client.query(
                 `
                 UPDATE user_profiles
@@ -182,6 +180,36 @@ export async function PATCH(request: Request) {
                 `,
                 [language, countryCode, normalizedProvinceCode, timezone, currency, nickname, session.user.id],
             );
+
+            /*
+             * 국가가 바뀌면 금액과 관련된 데이터를 모두 지운다. (통화가 바뀌어 기존 금액을 해석할 수 없기 때문)
+             * 삭제: 생활 내역 / 고정지출 / 저축 목표 / 생활 시작 금액, 급여 설정 / 근무 일정 / 급여 기록 / 팁, 여행(경비 포함)
+             * 유지: 프로필, 닉네임, 구독, 생활 카테고리
+             * 모두 하나의 트랜잭션이라 중간에 실패하면 프로필 변경도 함께 취소된다.
+             */
+            if (hasCountryChanged) {
+                const userId = session.user.id;
+
+                const statements = [
+                    "DELETE FROM living_pending_imports WHERE user_id = $1",
+                    "DELETE FROM living_transactions WHERE user_id = $1",
+                    "DELETE FROM living_fixed_expenses WHERE user_id = $1",
+                    "DELETE FROM savings_goals WHERE user_id = $1",
+                    "DELETE FROM living_settings WHERE user_id = $1",
+                    "DELETE FROM pay_period_tips WHERE user_id = $1",
+                    "DELETE FROM pay_period_actuals WHERE user_id = $1",
+                    "DELETE FROM work_schedules WHERE user_id = $1",
+                    "DELETE FROM salary_settings WHERE user_id = $1",
+                    "DELETE FROM trip_expenses WHERE trip_id IN (SELECT id FROM trips WHERE user_id = $1)",
+                    "DELETE FROM trip_expense_categories WHERE trip_id IN (SELECT id FROM trips WHERE user_id = $1)",
+                    "DELETE FROM trip_destinations WHERE trip_id IN (SELECT id FROM trips WHERE user_id = $1)",
+                    "DELETE FROM trips WHERE user_id = $1",
+                ];
+
+                for (const statement of statements) {
+                    await client.query(statement, [userId]);
+                }
+            }
         } else {
             // 최초 프로필 생성
             await client.query(
@@ -246,6 +274,7 @@ export async function PATCH(request: Request) {
             provinceCode: normalizedProvinceCode,
             timezone,
             currency,
+            hasCountryChanged,
         });
     } catch (error) {
         await client.query("ROLLBACK");

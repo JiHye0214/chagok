@@ -1,6 +1,7 @@
+// (기존 auth/me/route.ts 자리에 그대로 교체)  URL: /api/auth/me
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/user";
-import { sql } from "@/lib/db";
+import { getPlanCode } from "@/lib/api/plan";
 
 export async function GET() {
     const user = await getCurrentUser();
@@ -9,20 +10,11 @@ export async function GET() {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const [subscription] = await sql`
-        SELECT
-            p.code AS plan_code
-        FROM subscriptions s
-        JOIN plans p
-            ON p.id = s.plan_id
-        WHERE s.user_id = ${user.id}
-        LIMIT 1
-    `;
-
     return NextResponse.json({
         id: user.id,
         name: user.name,
         email: user.email,
-        planCode: subscription?.plan_code ?? "free",
+        // 활성(active)이고 만료되지 않은 구독만 인정 (취소·만료된 유료 구독이 계속 유료로 보이던 문제 수정)
+        planCode: await getPlanCode(user.id),
     });
 }

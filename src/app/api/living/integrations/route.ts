@@ -8,6 +8,17 @@ const FREE_LIVING_TRANSACTION_LIMIT = 300;
 
 const toNumber = (value: unknown) => Number(value ?? 0);
 
+async function getProfileCurrency(userId: string) {
+    const [profile] = await sql`
+        SELECT currency
+        FROM user_profiles
+        WHERE user_id = ${userId}
+        LIMIT 1
+    `;
+
+    return (profile?.currency as string | null | undefined) ?? null;
+}
+
 async function getPlanCode(userId: string) {
     const [subscription] = await sql`
         SELECT
@@ -119,6 +130,7 @@ export async function POST(request: Request) {
                     t.id,
                     t.title,
                     t.city,
+                    t.currency,
                     TO_CHAR(t.end_date, 'YYYY-MM-DD') AS end_date,
                     COALESCE(SUM(te.amount), 0) AS total_expense
                 FROM trips t
@@ -130,6 +142,7 @@ export async function POST(request: Request) {
                     t.id,
                     t.title,
                     t.city,
+                    t.currency,
                     t.end_date
                 LIMIT 1
             `;
@@ -145,6 +158,17 @@ export async function POST(request: Request) {
 
             const trip = tripResult[0];
             const amount = toNumber(trip.total_expense);
+
+            const profileCurrency = await getProfileCurrency(user.id);
+
+            if (trip.currency && profileCurrency && trip.currency !== profileCurrency) {
+                return NextResponse.json(
+                    {
+                        error: `여행 통화(${trip.currency})가 내 통화(${profileCurrency})와 달라 생활비에 반영할 수 없어요.`,
+                    },
+                    { status: 400 },
+                );
+            }
 
             if (amount <= 0) {
                 return NextResponse.json(
@@ -249,7 +273,8 @@ export async function POST(request: Request) {
             SELECT
                 id,
                 TO_CHAR(pay_date, 'YYYY-MM-DD') AS pay_date,
-                actual_net_pay
+                actual_net_pay,
+                currency_code
             FROM pay_period_actuals
             WHERE id = ${sourceId}
               AND user_id = ${user.id}
@@ -266,6 +291,17 @@ export async function POST(request: Request) {
         }
 
         const payroll = payrollResult[0];
+
+        const payrollProfileCurrency = await getProfileCurrency(user.id);
+
+        if (payroll.currency_code && payrollProfileCurrency && payroll.currency_code !== payrollProfileCurrency) {
+            return NextResponse.json(
+                {
+                    error: `이 급여는 ${payroll.currency_code}로 기록돼 있어 내 통화(${payrollProfileCurrency})의 생활비에 반영할 수 없어요.`,
+                },
+                { status: 400 },
+            );
+        }
 
         if (payroll.actual_net_pay === null) {
             return NextResponse.json(

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ChevronRight, LogOut, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth/auth-client";
+import { LANGUAGES, getCountry, getCountryLabel, getRegionLabel } from "@/lib/countries";
 
 type Profile = {
     nickname: string | null;
@@ -11,21 +12,6 @@ type Profile = {
     countryCode: string | null;
     provinceCode: string | null;
     currency: string | null;
-};
-
-const countryLabels: Record<string, string> = {
-    KR: "한국",
-    CA: "캐나다",
-};
-
-const provinceLabels: Record<string, string> = {
-    BC: "British Columbia",
-    ON: "Ontario",
-};
-
-const languageLabels: Record<string, string> = {
-    ko: "한국어",
-    en: "English",
 };
 
 export default function SettingsPage() {
@@ -160,29 +146,39 @@ export default function SettingsPage() {
                     <div className="flex items-center justify-between px-4 py-4">
                         <span className="text-sm text-gray-900">언어</span>
                         <span className="text-sm text-gray-400">
-                            {loading ? "-" : languageLabels[profile?.language ?? ""] || "-"}
+                            {loading ? "-" : LANGUAGES.find((language) => language.code === profile?.language)?.label || "-"}
                         </span>
                     </div>
 
                     <div className="mx-4 border-t border-gray-100" />
 
-                    <div className="flex items-center justify-between px-4 py-4">
+                    <button
+                        type="button"
+                        onClick={() => router.push("/settings/country")}
+                        className="flex w-full items-center justify-between px-4 py-4 text-left"
+                    >
                         <span className="text-sm text-gray-900">국가</span>
-                        <span className="text-sm text-gray-400">
-                            {loading ? "-" : countryLabels[profile?.countryCode ?? ""] || "-"}
+                        <span className="flex items-center gap-1 text-sm text-gray-400">
+                            {loading ? "-" : getCountryLabel(profile?.countryCode, { short: true }) || "-"}
+                            <ChevronRight size={16} strokeWidth={1.7} className="text-gray-300" />
                         </span>
-                    </div>
+                    </button>
 
-                    {profile?.countryCode === "CA" && (
+                    {getCountry(profile?.countryCode)?.hasRegions && (
                         <>
                             <div className="mx-4 border-t border-gray-100" />
 
-                            <div className="flex items-center justify-between px-4 py-4">
+                            <button
+                                type="button"
+                                onClick={() => router.push("/settings/country")}
+                                className="flex w-full items-center justify-between px-4 py-4 text-left"
+                            >
                                 <span className="text-sm text-gray-900">지역</span>
-                                <span className="text-sm text-gray-400">
-                                    {provinceLabels[profile?.provinceCode ?? ""] || "-"}
+                                <span className="flex items-center gap-1 text-sm text-gray-400">
+                                    {getRegionLabel(profile?.countryCode, profile?.provinceCode) || "-"}
+                                    <ChevronRight size={16} strokeWidth={1.7} className="text-gray-300" />
                                 </span>
-                            </div>
+                            </button>
                         </>
                     )}
 

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ChevronRight, CircleDollarSign, Coins, Settings } from "lucide-react";
 import LivingStartSheet from "@/components/LivingStartSheet";
 import { useRouter } from "next/navigation";
+import { formatCurrency } from "@/lib/salary/format";
 
 type CategorySpending = {
     name: string;
@@ -47,19 +48,10 @@ type LivingSummary = {
         travel: PendingTravel[];
         payroll: PendingPayroll[];
     };
-    currency: "CAD" | "KRW" | "USD";
+    currency: string | null;
 };
 
-const formatMoney = (amount: number, currency: "CAD" | "KRW" | "USD") => {
-    const locale = currency === "KRW" ? "ko-KR" : currency === "USD" ? "en-US" : "en-CA";
-
-    return new Intl.NumberFormat(locale, {
-        style: "currency",
-        currency,
-        minimumFractionDigits: currency === "KRW" ? 0 : 2,
-        maximumFractionDigits: currency === "KRW" ? 0 : 2,
-    }).format(amount);
-};
+const formatMoney = (amount: number, currency: string | null) => formatCurrency(amount, currency);
 
 const getCurrentMonth = () => {
     const now = new Date();
@@ -316,7 +308,7 @@ export default function LivingPage() {
                                                 <p className="mt-0.5 text-sm text-gray-500">
                                                     여행 지출{" "}
                                                     <span className="font-medium text-gray-900">
-                                                        {formatMoney(travel.amount, data?.currency ?? "CAD")}
+                                                        {formatMoney(travel.amount, data?.currency ?? null)}
                                                     </span>
                                                 </p>
                                             )}
@@ -327,7 +319,7 @@ export default function LivingPage() {
                                                 <span className="text-xs font-medium text-gray-400">기록 필요</span>
                                             ) : (
                                                 <span className="text-lg font-bold tracking-tight text-gray-950">
-                                                    {formatMoney(travel.amount, data?.currency ?? "CAD")}
+                                                    {formatMoney(travel.amount, data?.currency ?? null)}
                                                 </span>
                                             )}
                                         </div>
@@ -406,7 +398,7 @@ export default function LivingPage() {
                                                 <p className="mt-2 text-lg font-semibold text-gray-900">
                                                     이번 급여{" "}
                                                     <span className="text-blue-600">
-                                                        {formatMoney(payroll.amount ?? 0, data?.currency ?? "CAD")}
+                                                        {formatMoney(payroll.amount ?? 0, data?.currency ?? null)}
                                                     </span>
                                                     이 입력되어 있어요
                                                 </p>
@@ -469,7 +461,7 @@ export default function LivingPage() {
                                     <h2 className="mt-1 text-lg font-bold">이번 달 남은 금액</h2>
 
                                     <p className="mt-2 text-3xl font-bold">
-                                        {formatMoney(data?.balance ?? 0, data?.currency ?? "CAD")}
+                                        {formatMoney(data?.balance ?? 0, data?.currency ?? null)}
                                     </p>
                                 </div>
 
@@ -481,7 +473,7 @@ export default function LivingPage() {
                                     <div className="flex items-center justify-between">
                                         <span>수입</span>
 
-                                        <span>+ {formatMoney(data?.income ?? 0, data?.currency ?? "CAD")}</span>
+                                        <span>+ {formatMoney(data?.income ?? 0, data?.currency ?? null)}</span>
                                     </div>
 
                                     <div className="flex items-center justify-between">
@@ -493,7 +485,7 @@ export default function LivingPage() {
                                                 planCode === "pro"
                                                     ? (data?.expense ?? 0) - (data?.fixedExpense ?? 0)
                                                     : (data?.expense ?? 0),
-                                                data?.currency ?? "CAD",
+                                                data?.currency ?? null,
                                             )}
                                         </span>
                                     </div>
@@ -502,7 +494,7 @@ export default function LivingPage() {
                                         <div className="flex items-center justify-between">
                                             <span>고정 지출</span>
 
-                                            <span>- {formatMoney(data?.fixedExpense ?? 0, data?.currency ?? "CAD")}</span>
+                                            <span>- {formatMoney(data?.fixedExpense ?? 0, data?.currency ?? null)}</span>
                                         </div>
                                     )}
                                 </div>
@@ -532,7 +524,7 @@ export default function LivingPage() {
                                 <p className="text-md font-medium text-gray-900">
                                     {formatMoney(
                                         data?.variableSpending?.reduce((sum, item) => sum + item.amount, 0) ?? 0,
-                                        data?.currency ?? "CAD",
+                                        data?.currency ?? null,
                                     )}
                                 </p>
                             </div>
@@ -572,7 +564,7 @@ export default function LivingPage() {
 
                                                         <div className="flex items-center gap-3">
                                                             <span className="text-sm font-medium text-gray-900">
-                                                                {formatMoney(category.amount, data?.currency ?? "CAD")}
+                                                                {formatMoney(category.amount, data?.currency ?? null)}
                                                             </span>
 
                                                             <span className="text-xs text-gray-400">
@@ -619,7 +611,7 @@ export default function LivingPage() {
                         <div className="mt-2 flex items-start justify-between gap-3">
                             <div>
                                 <p className="text-3xl font-bold">
-                                    {formatMoney(data?.savings.current ?? 0, data?.currency ?? "CAD")}
+                                    {formatMoney(data?.savings.current ?? 0, data?.currency ?? null)}
                                 </p>
 
                                 <div className="mt-5 space-y-1.5">
@@ -627,7 +619,7 @@ export default function LivingPage() {
                                         <span className="text-xs text-gray-400">목표</span>
 
                                         <span className="text-sm font-medium text-gray-900">
-                                            {formatMoney(data?.savings.goal ?? 0, data?.currency ?? "CAD")}
+                                            {formatMoney(data?.savings.goal ?? 0, data?.currency ?? null)}
                                         </span>
                                     </div>
 
@@ -635,7 +627,7 @@ export default function LivingPage() {
                                         <span className="text-xs text-gray-400">남은 금액</span>
 
                                         <span className="text-sm font-medium text-gray-900">
-                                            {formatMoney(remainingSavings, data?.currency ?? "CAD")}
+                                            {formatMoney(remainingSavings, data?.currency ?? null)}
                                         </span>
                                     </div>
                                 </div>

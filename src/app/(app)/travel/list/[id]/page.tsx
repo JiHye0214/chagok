@@ -21,6 +21,7 @@ import {
     Lock,
 } from "lucide-react";
 import { formatDate } from "@/lib/payPeriod";
+import { getCurrencySymbol } from "@/lib/salary/format";
 
 type TripCity = {
     id?: number;
@@ -1900,7 +1901,7 @@ export default function TravelDetailPage() {
                         <p className="text-sm text-gray-400">여행 예산</p>
 
                         <p className="mt-1 text-3xl font-bold tracking-tight text-gray-950">
-                            ${Number(trip.budget ?? 0).toLocaleString()}
+                            {getCurrencySymbol(trip.currency ?? null)}{Number(trip.budget ?? 0).toLocaleString()}
                         </p>
 
                         <p className="mt-4 text-sm text-gray-400">
@@ -1912,7 +1913,7 @@ export default function TravelDetailPage() {
                             </span>
                             을 썼어요
                             <span className="ml-1">
-                                ($
+                                ({getCurrencySymbol(trip.currency ?? null)}
                                 {totalExpense.toLocaleString(undefined, {
                                     minimumFractionDigits: 2,
                                     maximumFractionDigits: 2,
@@ -1930,12 +1931,12 @@ export default function TravelDetailPage() {
                     <div className="rounded-3xl bg-white p-5 shadow-sm">
                         <p className="text-sm text-gray-400">총 지출</p>
 
-                        <p className="mt-1 text-3xl font-bold tracking-tight text-gray-950">${totalExpense.toLocaleString()}</p>
+                        <p className="mt-1 text-3xl font-bold tracking-tight text-gray-950">{getCurrencySymbol(trip.currency ?? null)}{totalExpense.toLocaleString()}</p>
 
                         {nights > 0 && (
                             <p className="mt-4 text-sm text-gray-400">
                                 1박당 평균{" "}
-                                <span className="font-bold text-gray-900">${(totalExpense / (nights + 1)).toFixed(2)}</span>을
+                                <span className="font-bold text-gray-900">{getCurrencySymbol(trip.currency ?? null)}{(totalExpense / (nights + 1)).toFixed(2)}</span>을
                                 썼어요
                             </p>
                         )}
@@ -1959,7 +1960,7 @@ export default function TravelDetailPage() {
                                     <p className="text-xs text-gray-400">{displayCategory?.name}</p>
 
                                     <p className="mt-1 text-2xl font-semibold tracking-tight tabular-nums">
-                                        $
+                                        {getCurrencySymbol(trip.currency ?? null)}
                                         {animatedAmount.toLocaleString(undefined, {
                                             minimumFractionDigits: 2,
                                             maximumFractionDigits: 2,
@@ -2206,7 +2207,7 @@ export default function TravelDetailPage() {
                                                     isSelected ? "bg-gray-50" : ""
                                                 }`}
                                             >
-                                                $
+                                                {getCurrencySymbol(trip.currency ?? null)}
                                                 {categoryTotal.toLocaleString(undefined, {
                                                     minimumFractionDigits: 2,
                                                     maximumFractionDigits: 2,
@@ -2247,12 +2248,12 @@ export default function TravelDetailPage() {
                                             key={date.toISOString()}
                                             className="w-[100px] min-w-[100px] max-w-[100px] px-2 pt-4 text-center text-xs font-semibold text-gray-900"
                                         >
-                                            ${getDateTotal(date).toFixed(2)}
+                                            {getCurrencySymbol(trip.currency ?? null)}{getDateTotal(date).toFixed(2)}
                                         </td>
                                     ))}
 
                                     <td className="w-[78px] min-w-[78px] max-w-[78px] pt-4 pl-3 text-center text-sm font-semibold text-gray-900">
-                                        $
+                                        {getCurrencySymbol(trip.currency ?? null)}
                                         {totalExpense.toLocaleString(undefined, {
                                             minimumFractionDigits: 2,
                                             maximumFractionDigits: 2,

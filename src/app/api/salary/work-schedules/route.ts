@@ -1,4 +1,4 @@
-// (기존 work-schedules/route.ts 자리에 그대로 교체)
+// (기존 salary/work-schedules/route.ts 자리에 그대로 교체)  URL: /api/salary/work-schedules
 import { getCurrentUser } from "@/lib/auth/user";
 import { sql } from "@/lib/db";
 import { toWorkScheduleDto } from "@/lib/api/mappers";
@@ -19,7 +19,7 @@ const parseScheduleInput = (body: Record<string, unknown>) => ({
 });
 
 /*
- * GET /api/work-schedules?from=YYYY-MM-DD&to=YYYY-MM-DD
+ * GET /api/salary/work-schedules?from=YYYY-MM-DD&to=YYYY-MM-DD
  * from/to는 선택. 급여 계산에는 해당 급여 기간만 필요하므로 화면에서 기간을 넘기면 응답이 작아진다.
  */
 export async function GET(request: Request) {
@@ -175,7 +175,7 @@ export async function PUT(request: Request) {
     }
 }
 
-// DELETE /api/work-schedules?id=123  (기존처럼 본문 { id } 도 가능)
+// DELETE /api/salary/work-schedules?id=123  (기존처럼 본문 { id } 도 가능)
 export async function DELETE(request: Request) {
     try {
         const user = await getCurrentUser();

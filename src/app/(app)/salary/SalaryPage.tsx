@@ -1,60 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { formatDate } from "@/lib/payPeriod";
-import { calculateExpectedSalary } from "@/lib/payroll/calculateExpectedSalary";
+import { useEffect, useMemo, useState } from "react";
+import { formatDate, getSurroundingPayPeriods } from "@/lib/payPeriod";
 import Link from "next/link";
 import { ClipboardList, Lock, Settings } from "lucide-react";
 import SalarySettingsSheet from "@/components/SalarySettingsSheet";
-
-type PayType = "hourly" | "salary" | "commission" | "other";
-
-type PayFrequency = "weekly" | "biweekly" | "semi-monthly" | "monthly" | "custom";
-
-type SemiMonthlyType = "first-fifteenth" | "fifteenth-end";
-
-type TipType = "cash" | "paycheque" | "both";
-
-type SalarySettings = {
-    payType: PayType;
-    payFrequency: PayFrequency;
-    hasTips: boolean;
-    tipType?: TipType;
-    hourlyWage?: number;
-    monthlySalary?: number;
-    payPeriodStartDate?: string;
-    payDate?: string;
-    semiMonthlyType?: SemiMonthlyType;
-    customPayDays?: number;
-};
-
-type WorkSchedule = {
-    id: number;
-    date: string;
-    startTime: string;
-    endTime: string;
-    hasBreak: boolean;
-    breakMinutes: number;
-};
-
-type PayPeriod = {
-    startDate: string;
-    endDate: string;
-    payDate: string;
-};
-
-type PayPeriods = {
-    previous: PayPeriod | null;
-    current: PayPeriod | null;
-    next: PayPeriod | null;
-};
-
-type PayPeriodTips = {
-    payPeriodStart: string;
-    payPeriodEnd: string;
-    cashTips: number;
-    paychequeTips: number;
-};
+import { useCountUp, usePeriodEstimate, useSalaryData } from "@/lib/salary/hooks";
+import { getSchedulesInPeriod, summarizeEstimate } from "@/lib/salary/estimate";
+import { getPayPeriodStatus } from "@/lib/salary/status";
+import { formatCurrency as formatMoney } from "@/lib/salary/format";
+import type { PeriodEstimateOutcome } from "@/lib/salary/types";
 
 type Adjustment = {
     type: "add" | "subtract";
@@ -92,19 +47,10 @@ type PayHistory = {
 
     calculatedNetPay?: number;
 
+    currencyCode?: string | null;
+
     createdAt?: string;
     updatedAt?: string;
-};
-
-type PeriodEstimate = {
-    hours: number;
-    basePay: number;
-    paychequeTips: number;
-    cashTips: number;
-    grossPay: number;
-    deductions: number;
-    netPay: number;
-    totalIncome: number;
 };
 
 type GraphPoint = {
@@ -114,40 +60,6 @@ type GraphPoint = {
     value: number;
     isEstimate: boolean;
     history?: PayHistory;
-};
-
-const formatISO = (date: Date) => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
-
-    return `${year}-${month}-${day}`;
-};
-
-const getCurrencyLocale = (currencyCode: string) => {
-    switch (currencyCode) {
-        case "KRW":
-            return "ko-KR";
-        case "CAD":
-            return "en-CA";
-        case "USD":
-            return "en-US";
-        default:
-            return "en-CA";
-    }
-};
-
-const formatMoney = (value: number, currencyCode: string | null) => {
-    if (!currencyCode) {
-        return "";
-    }
-
-    return new Intl.NumberFormat(getCurrencyLocale(currencyCode), {
-        style: "currency",
-        currency: currencyCode,
-        minimumFractionDigits: currencyCode === "KRW" ? 0 : 2,
-        maximumFractionDigits: currencyCode === "KRW" ? 0 : 2,
-    }).format(value);
 };
 
 const formatDisplayDate = (value: string) => {
@@ -198,96 +110,41 @@ const getDdayLabel = (targetDate: string) => {
     return `${Math.abs(days)}일 전`;
 };
 
+// 계산할 수 없을 때 카드에 보여줄 안내
+const getEstimateProblemMessage = (outcome: PeriodEstimateOutcome | null) => {
+    switch (outcome?.status) {
+        case "unsupported-country":
+            return "아직 이 나라의 급여 계산을 지원하지 않아요.";
+
+        case "no-profile":
+            return "프로필에서 국가를 설정하면 예상 급여를 계산할 수 있어요.";
+
+        case "no-settings":
+            return "급여 설정을 먼저 해주세요.";
+
+        default:
+            return null;
+    }
+};
+
 export default function SalaryPage() {
+    const salaryData = useSalaryData();
+
+    const { profile, settings: salarySettings, schedules, isLoading, reloadSettings } = salaryData;
+
+    const currency = profile?.currency ?? null;
+
     const [planCode, setPlanCode] = useState<"free" | "pro">("free");
     const [isSalarySettingsOpen, setIsSalarySettingsOpen] = useState(false);
 
-    const [schedules, setSchedules] = useState<WorkSchedule[]>([]);
-    const [isSchedulesLoading, setIsSchedulesLoading] = useState(true);
-
-    const [countryCode, setCountryCode] = useState<string | null>(null);
-    const [regionCode, setRegionCode] = useState<string | null>(null);
-    const [currency, setCurrency] = useState<string | null>(null);
-
-    const [, setCashTips] = useState("");
-    const [, setPaychequeTips] = useState("");
-
-    const [savedTips, setSavedTips] = useState<PayPeriodTips | null>(null);
-
-    const [pendingSavedTips, setPendingSavedTips] = useState<PayPeriodTips | null>(null);
-
-    const [salarySettings, setSalarySettings] = useState<SalarySettings | null>(null);
-    const [isSalarySettingsLoading, setIsSalarySettingsLoading] = useState(true);
-
-    const [latestActualPay, setLatestActualPay] = useState<number | null>(null);
-
     const [payHistory, setPayHistory] = useState<PayHistory[]>([]);
+    const [isPayHistoryLoaded, setIsPayHistoryLoaded] = useState(false);
 
     const [isPendingExpectedOpen, setIsPendingExpectedOpen] = useState(false);
 
     const [selectedPayHistory, setSelectedPayHistory] = useState<PayHistory | null>(null);
 
     const [hoveredGraphPoint, setHoveredGraphPoint] = useState<GraphPoint | null>(null);
-
-    const [, setAnimatedNetPay] = useState(0);
-
-    const [animatedPendingNetPay, setAnimatedPendingNetPay] = useState(0);
-
-    /*
-     * --------------------------------------------------
-     * Load Schedules
-     * --------------------------------------------------
-     */
-
-    useEffect(() => {
-        const loadSchedules = async () => {
-            try {
-                const response = await fetch("/api/salary/work-schedules");
-
-                if (!response.ok) {
-                    throw new Error("근무 기록 조회 실패");
-                }
-
-                const data: WorkSchedule[] = await response.json();
-
-                setSchedules(data);
-            } catch (error) {
-                console.error(error);
-            } finally {
-                setIsSchedulesLoading(false);
-            }
-        };
-
-        loadSchedules();
-    }, []);
-
-    /*
-     * --------------------------------------------------
-     * Load Salary Settings
-     * --------------------------------------------------
-     */
-
-    useEffect(() => {
-        const loadSalarySettings = async () => {
-            try {
-                const response = await fetch("/api/salary/salary-settings");
-
-                if (!response.ok) {
-                    throw new Error("급여 설정 조회 실패");
-                }
-
-                const data: SalarySettings | null = await response.json();
-
-                setSalarySettings(data);
-            } catch (error) {
-                console.error("급여 설정 조회 실패:", error);
-            } finally {
-                setIsSalarySettingsLoading(false);
-            }
-        };
-
-        loadSalarySettings();
-    }, []);
 
     /*
      * --------------------------------------------------
@@ -315,423 +172,6 @@ export default function SalaryPage() {
         loadPlan();
     }, []);
 
-    // 지역 국가 가져오기
-
-    useEffect(() => {
-        const loadProfile = async () => {
-            try {
-                const response = await fetch("/api/user/profile");
-
-                if (!response.ok) {
-                    throw new Error("프로필 조회 실패");
-                }
-
-                const data = await response.json();
-
-                setCountryCode(data.countryCode ?? null);
-                setRegionCode(data.provinceCode ?? null);
-                setCurrency(data.currency ?? null);
-            } catch (error) {
-                console.error("프로필 조회 실패:", error);
-                setCountryCode(null);
-                setRegionCode(null);
-                setCurrency(null);
-            }
-        };
-
-        loadProfile();
-    }, []);
-
-    /*
-     * --------------------------------------------------
-     * Pay Date Helpers
-     * --------------------------------------------------
-     */
-
-    const getRegularPayDate = (periodStart: Date, anchorStart: Date, anchorPayDate: Date | null, periodLength: number) => {
-        if (!anchorPayDate) {
-            const payDate = new Date(periodStart);
-
-            payDate.setDate(payDate.getDate() + periodLength - 1);
-
-            return formatISO(payDate);
-        }
-
-        const daysDifference = Math.round((periodStart.getTime() - anchorStart.getTime()) / (1000 * 60 * 60 * 24));
-
-        const periodIndex = Math.round(daysDifference / periodLength);
-
-        const payDate = new Date(anchorPayDate);
-
-        payDate.setDate(payDate.getDate() + periodIndex * periodLength);
-
-        return formatISO(payDate);
-    };
-
-    const getMonthlyPayDate = (periodStart: Date, anchorPayDate: Date | null) => {
-        if (!anchorPayDate) {
-            return formatISO(new Date(periodStart.getFullYear(), periodStart.getMonth() + 1, 0));
-        }
-
-        const anchorMonth = new Date(anchorPayDate.getFullYear(), anchorPayDate.getMonth(), 1);
-
-        const periodMonth = new Date(periodStart.getFullYear(), periodStart.getMonth(), 1);
-
-        const monthDifference =
-            (periodMonth.getFullYear() - anchorMonth.getFullYear()) * 12 + (periodMonth.getMonth() - anchorMonth.getMonth());
-
-        const payDate = new Date(anchorPayDate);
-
-        payDate.setMonth(payDate.getMonth() + monthDifference);
-
-        return formatISO(payDate);
-    };
-
-    const getSemiMonthlyPayDate = (periodStart: Date, anchorPayDate: Date | null) => {
-        if (!anchorPayDate) {
-            const payDate = new Date(periodStart);
-
-            payDate.setDate(payDate.getDate() + 14);
-
-            return formatISO(payDate);
-        }
-
-        const anchorMonth = new Date(anchorPayDate.getFullYear(), anchorPayDate.getMonth(), 1);
-
-        const periodMonth = new Date(periodStart.getFullYear(), periodStart.getMonth(), 1);
-
-        const monthDifference =
-            (periodMonth.getFullYear() - anchorMonth.getFullYear()) * 12 + (periodMonth.getMonth() - anchorMonth.getMonth());
-
-        const payDate = new Date(anchorPayDate);
-
-        payDate.setMonth(payDate.getMonth() + monthDifference);
-
-        return formatISO(payDate);
-    };
-
-    /*
-     * --------------------------------------------------
-     * Pay Period Calculation
-     * --------------------------------------------------
-     */
-
-    const getPayPeriods = (): PayPeriods => {
-        const today = new Date();
-
-        const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-
-        if (!salarySettings) {
-            return {
-                previous: null,
-                current: null,
-                next: null,
-            };
-        }
-
-        const effectiveSalarySettings = salarySettings;
-
-        const configuredAnchorStart = effectiveSalarySettings.payPeriodStartDate
-            ? new Date(`${effectiveSalarySettings.payPeriodStartDate}T00:00:00`)
-            : null;
-
-        /*
-         * 현재 설정값이 4일로 저장되어 있는 경우
-         * 급여기간 기준을 5일부터 시작하도록 보정한다.
-         */
-        const anchorStartDate = configuredAnchorStart ?? new Date(todayOnly.getFullYear(), todayOnly.getMonth(), 5);
-
-        if (
-            effectiveSalarySettings.payFrequency === "biweekly" &&
-            effectiveSalarySettings.payPeriodStartDate &&
-            anchorStartDate.getDate() === 4
-        ) {
-            anchorStartDate.setDate(anchorStartDate.getDate() + 1);
-        }
-
-        const anchorPayDate = effectiveSalarySettings.payDate ? new Date(`${effectiveSalarySettings.payDate}T00:00:00`) : null;
-
-        /*
-         * --------------------------------------------------
-         * Semi-monthly
-         * --------------------------------------------------
-         */
-
-        if (effectiveSalarySettings.payFrequency === "semi-monthly") {
-            const makeSemiMonthlyPeriod = (date: Date): PayPeriod => {
-                const year = date.getFullYear();
-                const month = date.getMonth();
-
-                let startDay: number;
-                let endDay: number;
-
-                if (effectiveSalarySettings.semiMonthlyType === "fifteenth-end") {
-                    if (date.getDate() <= 15) {
-                        startDay = 15;
-
-                        const previousMonthEnd = new Date(year, month, 0).getDate();
-
-                        endDay = previousMonthEnd;
-                    } else {
-                        startDay = 16;
-
-                        endDay = new Date(year, month + 1, 0).getDate();
-                    }
-                } else {
-                    if (date.getDate() <= 15) {
-                        startDay = 1;
-                        endDay = 15;
-                    } else {
-                        startDay = 16;
-                        endDay = new Date(year, month + 1, 0).getDate();
-                    }
-                }
-
-                const start = new Date(year, month, startDay);
-
-                const end = new Date(year, month, endDay);
-
-                return {
-                    startDate: formatISO(start),
-                    endDate: formatISO(end),
-                    payDate: getSemiMonthlyPayDate(start, anchorPayDate),
-                };
-            };
-
-            const current = makeSemiMonthlyPeriod(todayOnly);
-
-            const previousDate = new Date(todayOnly);
-
-            if (todayOnly.getDate() <= 15) {
-                previousDate.setMonth(previousDate.getMonth() - 1);
-                previousDate.setDate(16);
-            } else {
-                previousDate.setDate(1);
-            }
-
-            const nextDate = new Date(todayOnly);
-
-            if (todayOnly.getDate() <= 15) {
-                nextDate.setDate(16);
-            } else {
-                nextDate.setMonth(nextDate.getMonth() + 1);
-                nextDate.setDate(1);
-            }
-
-            return {
-                previous: makeSemiMonthlyPeriod(previousDate),
-                current,
-                next: makeSemiMonthlyPeriod(nextDate),
-            };
-        }
-
-        /*
-         * --------------------------------------------------
-         * Monthly
-         * --------------------------------------------------
-         */
-
-        if (effectiveSalarySettings.payFrequency === "monthly") {
-            const currentStart = new Date(todayOnly.getFullYear(), todayOnly.getMonth(), 1);
-
-            const currentEnd = new Date(todayOnly.getFullYear(), todayOnly.getMonth() + 1, 0);
-
-            const previousStart = new Date(todayOnly.getFullYear(), todayOnly.getMonth() - 1, 1);
-
-            const previousEnd = new Date(todayOnly.getFullYear(), todayOnly.getMonth(), 0);
-
-            const nextStart = new Date(todayOnly.getFullYear(), todayOnly.getMonth() + 1, 1);
-
-            const nextEnd = new Date(todayOnly.getFullYear(), todayOnly.getMonth() + 2, 0);
-
-            return {
-                previous: {
-                    startDate: formatISO(previousStart),
-                    endDate: formatISO(previousEnd),
-                    payDate: getMonthlyPayDate(previousStart, anchorPayDate),
-                },
-
-                current: {
-                    startDate: formatISO(currentStart),
-                    endDate: formatISO(currentEnd),
-                    payDate: getMonthlyPayDate(currentStart, anchorPayDate),
-                },
-
-                next: {
-                    startDate: formatISO(nextStart),
-                    endDate: formatISO(nextEnd),
-                    payDate: getMonthlyPayDate(nextStart, anchorPayDate),
-                },
-            };
-        }
-
-        /*
-         * --------------------------------------------------
-         * Weekly / Biweekly / Custom
-         * --------------------------------------------------
-         */
-
-        const getPeriodLength = () => {
-            switch (effectiveSalarySettings.payFrequency) {
-                case "weekly":
-                    return 7;
-
-                case "biweekly":
-                    return 14;
-
-                case "custom":
-                    return effectiveSalarySettings.customPayDays ? Number(effectiveSalarySettings.customPayDays) : 14;
-
-                default:
-                    return 14;
-            }
-        };
-
-        const periodLength = getPeriodLength();
-
-        let currentStart = new Date(anchorStartDate);
-
-        while (true) {
-            const currentEnd = new Date(currentStart);
-
-            currentEnd.setDate(currentEnd.getDate() + periodLength - 1);
-
-            if (todayOnly >= currentStart && todayOnly <= currentEnd) {
-                break;
-            }
-
-            if (todayOnly > currentEnd) {
-                currentStart = new Date(currentStart);
-
-                currentStart.setDate(currentStart.getDate() + periodLength);
-            } else {
-                currentStart = new Date(currentStart);
-
-                currentStart.setDate(currentStart.getDate() - periodLength);
-            }
-        }
-
-        const currentEnd = new Date(currentStart);
-
-        currentEnd.setDate(currentEnd.getDate() + periodLength - 1);
-
-        const previousStart = new Date(currentStart);
-
-        previousStart.setDate(previousStart.getDate() - periodLength);
-
-        const previousEnd = new Date(currentStart);
-
-        previousEnd.setDate(previousEnd.getDate() - 1);
-
-        const nextStart = new Date(currentEnd);
-
-        nextStart.setDate(nextStart.getDate() + 1);
-
-        const nextEnd = new Date(nextStart);
-
-        nextEnd.setDate(nextEnd.getDate() + periodLength - 1);
-
-        return {
-            previous: {
-                startDate: formatISO(previousStart),
-                endDate: formatISO(previousEnd),
-                payDate: getRegularPayDate(previousStart, anchorStartDate, anchorPayDate, periodLength),
-            },
-
-            current: {
-                startDate: formatISO(currentStart),
-                endDate: formatISO(currentEnd),
-                payDate: getRegularPayDate(currentStart, anchorStartDate, anchorPayDate, periodLength),
-            },
-
-            next: {
-                startDate: formatISO(nextStart),
-                endDate: formatISO(nextEnd),
-                payDate: getRegularPayDate(nextStart, anchorStartDate, anchorPayDate, periodLength),
-            },
-        };
-    };
-
-    const { previous: pendingPayPeriod, current: currentPayPeriod, next: nextPayPeriod } = getPayPeriods();
-
-    /*
-     * --------------------------------------------------
-     * Load Current Period Tips
-     * --------------------------------------------------
-     */
-
-    useEffect(() => {
-        if (!currentPayPeriod) {
-            return;
-        }
-
-        const loadTips = async () => {
-            try {
-                const response = await fetch(
-                    `/api/pay-period-tips?startDate=${encodeURIComponent(
-                        currentPayPeriod.startDate,
-                    )}&endDate=${encodeURIComponent(currentPayPeriod.endDate)}`,
-                );
-
-                if (!response.ok) {
-                    throw new Error("팁 조회 실패");
-                }
-
-                const data: PayPeriodTips | null = await response.json();
-
-                setSavedTips(data);
-
-                setCashTips(data && data.cashTips > 0 ? String(data.cashTips) : "");
-
-                setPaychequeTips(data && data.paychequeTips > 0 ? String(data.paychequeTips) : "");
-            } catch (error) {
-                console.error(error);
-
-                setSavedTips(null);
-                setCashTips("");
-                setPaychequeTips("");
-            }
-        };
-
-        loadTips();
-    }, [currentPayPeriod?.startDate, currentPayPeriod?.endDate]);
-
-    /*
-     * --------------------------------------------------
-     * Load Pending Period Tips
-     * --------------------------------------------------
-     */
-
-    useEffect(() => {
-        if (!pendingPayPeriod) {
-            setPendingSavedTips(null);
-            return;
-        }
-
-        const loadPendingTips = async () => {
-            try {
-                const response = await fetch(
-                    `/api/pay-period-tips?startDate=${encodeURIComponent(
-                        pendingPayPeriod.startDate,
-                    )}&endDate=${encodeURIComponent(pendingPayPeriod.endDate)}`,
-                );
-
-                if (!response.ok) {
-                    throw new Error("이전 급여 기간 팁 조회 실패");
-                }
-
-                const data: PayPeriodTips | null = await response.json();
-
-                setPendingSavedTips(data);
-            } catch (error) {
-                console.error(error);
-                setPendingSavedTips(null);
-            }
-        };
-
-        loadPendingTips();
-    }, [pendingPayPeriod?.startDate, pendingPayPeriod?.endDate]);
-
     /*
      * --------------------------------------------------
      * Load Actual Pay History
@@ -750,16 +190,10 @@ export default function SalaryPage() {
                 const data: PayHistory[] = await response.json();
 
                 setPayHistory(data);
-
-                const actualPayPeriods = data
-                    .filter((item) => item.actualNetPay !== null)
-                    .sort((a, b) => a.endDate.localeCompare(b.endDate));
-
-                const latestActual = actualPayPeriods.at(-1);
-
-                setLatestActualPay(latestActual ? Number(latestActual.actualNetPay) : null);
             } catch (error) {
                 console.error("급여 기록 조회 실패:", error);
+            } finally {
+                setIsPayHistoryLoaded(true);
             }
         };
 
@@ -768,237 +202,60 @@ export default function SalaryPage() {
 
     /*
      * --------------------------------------------------
-     * Current Period Schedules
+     * Pay Periods
+     *
+     * 현재 급여 기간 / 곧 받을 급여 / 아직 기록하지 않은 지난 급여는
+     * 급여 기록 화면과 같은 규칙(lib/payPeriod, lib/salary/status)으로 정한다.
      * --------------------------------------------------
      */
 
-    const currentPeriodSchedules = currentPayPeriod
-        ? schedules.filter((schedule) => {
-              const scheduleDate = schedule.date.slice(0, 10);
+    const today = formatDate(new Date());
 
-              return scheduleDate >= currentPayPeriod.startDate && scheduleDate <= currentPayPeriod.endDate;
-          })
-        : [];
-
-    /*
-     * --------------------------------------------------
-     * Current Period Estimate
-     * --------------------------------------------------
-     */
-
-    const currentPeriodPaychequeTips = savedTips?.paychequeTips ?? 0;
-    const currentPeriodCashTips = savedTips?.cashTips ?? 0;
-
-    const hasPaychequeTips = Boolean(
-        salarySettings?.hasTips && (salarySettings.tipType === "paycheque" || salarySettings.tipType === "both"),
+    const currentPayPeriod = useMemo(
+        () => (salarySettings ? (getSurroundingPayPeriods(salarySettings, today)?.current ?? null) : null),
+        [salarySettings, today],
     );
 
-    const hasCashTips = Boolean(
-        salarySettings?.hasTips && (salarySettings.tipType === "cash" || salarySettings.tipType === "both"),
+    const payPeriodStatus = useMemo(
+        () =>
+            isPayHistoryLoaded
+                ? getPayPeriodStatus({ settings: salarySettings, schedules, recordedPeriods: payHistory, today })
+                : { upcoming: null, overdue: null },
+        [isPayHistoryLoaded, salarySettings, schedules, payHistory, today],
     );
 
-    const currentPeriodEstimate: PeriodEstimate | null =
-        salarySettings && countryCode && currentPayPeriod
-            ? (() => {
-                  const result = calculateExpectedSalary({
-                      settings: {
-                          country: countryCode,
-                          regionCode: regionCode ?? undefined,
-                          payType: salarySettings.payType,
-                          payFrequency: salarySettings.payFrequency,
-                          hourlyWage: salarySettings.hourlyWage,
-                          monthlySalary: salarySettings.monthlySalary,
-                          hasTips: salarySettings.hasTips,
-                          tipType: salarySettings.tipType,
-                      },
-
-                      schedules: currentPeriodSchedules,
-
-                      cashTips: hasCashTips ? currentPeriodCashTips : 0,
-
-                      paychequeTips: hasPaychequeTips ? currentPeriodPaychequeTips : 0,
-
-                      payPeriod: {
-                          startDate: currentPayPeriod.startDate,
-                          endDate: currentPayPeriod.endDate,
-                          payDate: currentPayPeriod.payDate,
-                      },
-                  });
-
-                  return {
-                      hours: result.hours,
-                      basePay: result.basePay,
-                      paychequeTips: result.paychequeTips,
-                      cashTips: result.cashTips,
-                      grossPay: result.grossPay,
-                      deductions: result.totalDeductions,
-                      netPay: result.estimatedNetPay,
-                      totalIncome: result.finalEstimatedIncome,
-                  };
-              })()
-            : null;
-
-    useEffect(() => {
-        if (!currentPeriodEstimate) {
-            setAnimatedNetPay(0);
-            return;
-        }
-
-        const target = currentPeriodEstimate.netPay;
-
-        let startTime: number | null = null;
-        let animationFrame: number;
-
-        const duration = 1000;
-
-        const animate = (timestamp: number) => {
-            if (startTime === null) {
-                startTime = timestamp;
-            }
-
-            const elapsed = timestamp - startTime;
-            const progress = Math.min(elapsed / duration, 1);
-
-            const eased = 1 - Math.pow(1 - progress, 3);
-
-            setAnimatedNetPay(target * eased);
-
-            if (progress < 1) {
-                animationFrame = requestAnimationFrame(animate);
-            } else {
-                setAnimatedNetPay(target);
-            }
-        };
-
-        animationFrame = requestAnimationFrame(animate);
-
-        return () => {
-            cancelAnimationFrame(animationFrame);
-        };
-    }, [currentPeriodEstimate]);
+    const pendingPayPeriod = payPeriodStatus.upcoming;
+    const overduePayPeriod = payPeriodStatus.overdue;
 
     /*
      * --------------------------------------------------
-     * Pending Period Estimate
+     * Estimates (현재 기간 / 곧 받을 급여)
      * --------------------------------------------------
      */
 
-    const pendingPeriodSchedules = pendingPayPeriod
-        ? schedules.filter((schedule) => {
-              const scheduleDate = schedule.date.slice(0, 10);
+    const currentResult = usePeriodEstimate(salaryData, currentPayPeriod);
+    const pendingResult = usePeriodEstimate(salaryData, pendingPayPeriod);
 
-              return scheduleDate >= pendingPayPeriod.startDate && scheduleDate <= pendingPayPeriod.endDate;
-          })
-        : [];
+    const currentPeriodSchedules = useMemo(
+        () => (currentPayPeriod ? getSchedulesInPeriod(schedules, currentPayPeriod) : []),
+        [schedules, currentPayPeriod],
+    );
 
-    const pendingPeriodEstimate: PeriodEstimate | null =
-        salarySettings && countryCode && pendingPayPeriod
-            ? (() => {
-                  const paychequeTips = hasPaychequeTips ? (pendingSavedTips?.paychequeTips ?? 0) : 0;
+    const currentPeriodEstimate = useMemo(
+        () => (currentResult.outcome?.status === "ok" ? summarizeEstimate(currentResult.outcome.estimate) : null),
+        [currentResult.outcome],
+    );
 
-                  const cashTips = hasCashTips ? (pendingSavedTips?.cashTips ?? 0) : 0;
+    const pendingPeriodEstimate = useMemo(
+        () => (pendingResult.outcome?.status === "ok" ? summarizeEstimate(pendingResult.outcome.estimate) : null),
+        [pendingResult.outcome],
+    );
 
-                  const result = calculateExpectedSalary({
-                      settings: {
-                          country: countryCode,
-                          regionCode: regionCode ?? undefined,
-                          payType: salarySettings.payType,
-                          payFrequency: salarySettings.payFrequency,
-                          hourlyWage: salarySettings.hourlyWage,
-                          monthlySalary: salarySettings.monthlySalary,
-                          hasTips: salarySettings.hasTips,
-                          tipType: salarySettings.tipType,
-                      },
+    const currentEstimateProblem = getEstimateProblemMessage(currentResult.outcome);
 
-                      schedules: pendingPeriodSchedules,
+    const shouldShowPendingPay = Boolean(pendingPayPeriod && pendingPeriodEstimate);
 
-                      cashTips,
-                      paychequeTips,
-
-                      payPeriod: {
-                          startDate: pendingPayPeriod.startDate,
-                          endDate: pendingPayPeriod.endDate,
-                          payDate: pendingPayPeriod.payDate,
-                      },
-                  });
-
-                  return {
-                      hours: result.hours,
-                      basePay: result.basePay,
-                      paychequeTips: result.paychequeTips,
-                      cashTips: result.cashTips,
-                      grossPay: result.grossPay,
-                      deductions: result.totalDeductions,
-                      netPay: result.estimatedNetPay,
-                      totalIncome: result.finalEstimatedIncome,
-                  };
-              })()
-            : null;
-
-    /*
-     * --------------------------------------------------
-     * Pending Status
-     * --------------------------------------------------
-     */
-
-    const today = new Date();
-
-    const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-
-    const pendingEndDate = pendingPayPeriod ? new Date(`${pendingPayPeriod.endDate}T00:00:00`) : null;
-
-    const pendingPayDate = pendingPayPeriod ? new Date(`${pendingPayPeriod.payDate}T00:00:00`) : null;
-
-    const isPendingPeriodEnded = pendingEndDate !== null && pendingEndDate < todayOnly;
-
-    const isPendingPayDatePassed = pendingPayDate !== null && pendingPayDate < todayOnly;
-
-    const hasPendingPeriodSchedules = pendingPeriodSchedules.length > 0;
-
-    const shouldShowPendingPay =
-        Boolean(pendingPayPeriod) && hasPendingPeriodSchedules && isPendingPeriodEnded && !isPendingPayDatePassed;
-
-    const shouldGoToPayHistory =
-        Boolean(pendingPayPeriod) && hasPendingPeriodSchedules && isPendingPeriodEnded && isPendingPayDatePassed;
-
-    useEffect(() => {
-        if (!shouldShowPendingPay || !pendingPeriodEstimate) {
-            setAnimatedPendingNetPay(0);
-            return;
-        }
-
-        const target = pendingPeriodEstimate.netPay;
-
-        let startTime: number | null = null;
-        let animationFrame: number;
-
-        const duration = 1000;
-
-        const animate = (timestamp: number) => {
-            if (startTime === null) {
-                startTime = timestamp;
-            }
-
-            const elapsed = timestamp - startTime;
-            const progress = Math.min(elapsed / duration, 1);
-
-            const eased = 1 - Math.pow(1 - progress, 3);
-
-            setAnimatedPendingNetPay(target * eased);
-
-            if (progress < 1) {
-                animationFrame = requestAnimationFrame(animate);
-            } else {
-                setAnimatedPendingNetPay(target);
-            }
-        };
-
-        animationFrame = requestAnimationFrame(animate);
-
-        return () => {
-            cancelAnimationFrame(animationFrame);
-        };
-    }, [pendingPeriodEstimate, shouldShowPendingPay]);
+    const animatedPendingNetPay = useCountUp(pendingPeriodEstimate?.netPay ?? 0, shouldShowPendingPay);
 
     /*
      * --------------------------------------------------
@@ -1007,6 +264,8 @@ export default function SalaryPage() {
      */
 
     const actualPayPeriods = payHistory
+        // 국가를 바꾸기 전 다른 통화 기록은 통계에서 제외
+        .filter((history) => !history.currencyCode || !currency || history.currencyCode === currency)
         .filter((history) => history.actualNetPay !== null)
         .sort((a, b) => a.endDate.localeCompare(b.endDate));
 
@@ -1072,7 +331,7 @@ export default function SalaryPage() {
      * --------------------------------------------------
      */
 
-    if (isSchedulesLoading || isSalarySettingsLoading) {
+    if (isLoading) {
         return (
             <div className="flex h-[calc(100vh-152px)] items-center justify-center">
                 <p className="text-sm text-gray-400">불러오는 중...</p>
@@ -1140,61 +399,72 @@ export default function SalaryPage() {
                     Pending Pay Status
                 -------------------------------------------------- */}
 
-                    {pendingPayPeriod && (
-                        <>
-                            {shouldGoToPayHistory && (
-                                <Link
-                                    href="/salary/pay-history"
-                                    className="block w-full rounded-3xl bg-gray-900 p-5 text-left shadow-sm transition hover:shadow-md"
-                                >
-                                    <p className="text-xs text-gray-400">급여 기록</p>
+                    {overduePayPeriod && (
+                        <Link
+                            href={`/salary/pay-history?startDate=${overduePayPeriod.startDate}&endDate=${overduePayPeriod.endDate}&payDate=${overduePayPeriod.payDate}`}
+                            className="block w-full rounded-3xl bg-gray-900 p-5 text-left shadow-sm transition hover:shadow-md"
+                        >
+                            <p className="text-xs text-gray-400">급여 기록</p>
 
-                                    <p className="mt-1 text-lg font-bold text-white">지급일이 지났어요</p>
+                            <p className="mt-1 text-lg font-bold text-white">지급일이 지났어요</p>
 
-                                    <p className="mt-1 text-sm text-gray-500">아직 기록되지 않은 급여가 있어요.</p>
+                            <p className="mt-1 text-sm text-gray-500">아직 기록되지 않은 급여가 있어요.</p>
 
-                                    <p className="mt-4 text-xs text-gray-400">
-                                        {formatDisplayDate(pendingPayPeriod.startDate)}
-                                        {" ~ "}
-                                        {formatDisplayDate(pendingPayPeriod.endDate)}
+                            <p className="mt-4 text-xs text-gray-400">
+                                {formatDisplayDate(overduePayPeriod.startDate)}
+                                {" ~ "}
+                                {formatDisplayDate(overduePayPeriod.endDate)}
+                            </p>
+
+                            <p className="mt-3 text-xs font-medium text-gray-500">급여 기록에서 확인하기 →</p>
+                        </Link>
+                    )}
+
+                    {shouldShowPendingPay && pendingPayPeriod && pendingPeriodEstimate && pendingPeriodEstimate.netPay > 0 && (
+                        <button
+                            type="button"
+                            onClick={() => setIsPendingExpectedOpen(true)}
+                            className="mt-4 block w-full rounded-3xl border border-blue-100 bg-blue-50 p-5 text-left shadow-sm transition hover:bg-blue-100/70"
+                        >
+                            <div className="flex items-start justify-between gap-4">
+                                <div>
+                                    <p className="text-xs text-blue-500">급여 예정</p>
+
+                                    <p className="mt-2 text-lg font-semibold text-gray-900">
+                                        <span className="text-blue-600">{getDdayLabel(pendingPayPeriod.payDate)}</span>{" "}
+                                        {formatMoney(animatedPendingNetPay, currency)}를 받아요{" "}
                                     </p>
 
-                                    <p className="mt-3 text-xs font-medium text-gray-500">급여 기록에서 확인하기 →</p>
-                                </Link>
-                            )}
+                                    <p className="mt-1 text-sm text-gray-500">
+                                        지급일이 다가오고 있어요. 지출을 계획해 볼까요?
+                                    </p>
+                                </div>
 
-                            {shouldShowPendingPay &&
-                                pendingPayPeriod &&
-                                pendingPeriodEstimate &&
-                                pendingPeriodEstimate.netPay > 0 && (
-                                    <button
-                                        type="button"
-                                        onClick={() => setIsPendingExpectedOpen(true)}
-                                        className="block w-full rounded-3xl border border-blue-100 bg-blue-50 p-5 text-left shadow-sm transition hover:bg-blue-100/70"
-                                    >
-                                        <div className="flex items-start justify-between gap-4">
-                                            <div>
-                                                <p className="text-xs text-blue-500">급여 예정</p>
+                                <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-blue-600 shadow-sm">
+                                    예상
+                                </span>
+                            </div>
+                        </button>
+                    )}
 
-                                                <p className="mt-2 text-lg font-semibold text-gray-900">
-                                                    <span className="text-blue-600">
-                                                        {getDdayLabel(pendingPayPeriod.payDate)}
-                                                    </span>{" "}
-                                                    {formatMoney(animatedPendingNetPay, currency)}를 받아요{" "}
-                                                </p>
+                    {salarySettings && !currentPayPeriod && (
+                        <section className="mt-6 rounded-3xl bg-white p-5 shadow-sm">
+                            <p className="text-xs font-medium text-blue-500">급여 기간</p>
 
-                                                <p className="mt-1 text-sm text-gray-500">
-                                                    지급일이 다가오고 있어요. 지출을 계획해 볼까요?
-                                                </p>
-                                            </div>
+                            <p className="mt-2 text-lg font-bold text-gray-900">급여 기간을 알 수 없어요</p>
 
-                                            <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-blue-600 shadow-sm">
-                                                예상
-                                            </span>
-                                        </div>
-                                    </button>
-                                )}
-                        </>
+                            <p className="mt-1 text-sm text-gray-500">
+                                급여 설정에서 급여 기간 시작일을 입력하면 예상 급여를 계산할 수 있어요.
+                            </p>
+
+                            <button
+                                type="button"
+                                onClick={() => setIsSalarySettingsOpen(true)}
+                                className="mt-4 w-full rounded-2xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-gray-800"
+                            >
+                                급여 설정하기
+                            </button>
+                        </section>
                     )}
 
                     {currentPayPeriod && (
@@ -1213,6 +483,8 @@ export default function SalaryPage() {
 
                                     <p className="mt-1 text-sm text-gray-500">근무 기록이 있어야 예상 급여를 계산할 수 있어요.</p>
                                 </div>
+                            ) : currentEstimateProblem ? (
+                                <p className="mt-5 text-sm text-gray-500">{currentEstimateProblem}</p>
                             ) : currentPeriodEstimate ? (
                                 <>
                                     <p className="mt-5 text-xs text-gray-400">예상 급여</p>
@@ -1456,7 +728,9 @@ export default function SalaryPage() {
                                             </span>
                                         </div>
 
-                                        <p className="mt-2 text-3xl font-bold text-gray-900">$2,450</p>
+                                        <p className="mt-2 text-3xl font-bold text-gray-900">
+                                            {formatMoney(currency === "KRW" ? 2450000 : 2450, currency)}
+                                        </p>
 
                                         <div className="mt-8">
                                             <div className="relative h-48 w-full">
@@ -1619,6 +893,30 @@ export default function SalaryPage() {
                                                 </div>
                                             )}
 
+                                            {pendingPeriodEstimate.publicHolidayPay + pendingPeriodEstimate.premiumPay > 0 && (
+                                                <div className="flex justify-between">
+                                                    <span className="text-gray-500">공휴일 수당</span>
+
+                                                    <span className="font-medium text-gray-900">
+                                                        {formatMoney(
+                                                            pendingPeriodEstimate.publicHolidayPay +
+                                                                pendingPeriodEstimate.premiumPay,
+                                                            currency,
+                                                        )}
+                                                    </span>
+                                                </div>
+                                            )}
+
+                                            {pendingPeriodEstimate.vacationPay > 0 && (
+                                                <div className="flex justify-between">
+                                                    <span className="text-gray-500">휴가 수당</span>
+
+                                                    <span className="font-medium text-gray-900">
+                                                        {formatMoney(pendingPeriodEstimate.vacationPay, currency)}
+                                                    </span>
+                                                </div>
+                                            )}
+
                                             <div className="my-1 border-t border-gray-200" />
 
                                             <div className="flex justify-between">
@@ -1668,6 +966,16 @@ export default function SalaryPage() {
                                                 {formatMoney(pendingPeriodEstimate.totalIncome, currency)}
                                             </span>
                                         </div>
+                                    </div>
+                                )}
+
+                                {pendingPeriodEstimate.warnings.length > 0 && (
+                                    <div className="mt-5 rounded-2xl bg-amber-50 px-4 py-3">
+                                        {pendingPeriodEstimate.warnings.map((warning) => (
+                                            <p key={warning} className="text-xs leading-5 text-amber-700">
+                                                {warning}
+                                            </p>
+                                        ))}
                                     </div>
                                 )}
 
@@ -1889,22 +1197,7 @@ export default function SalaryPage() {
             <SalarySettingsSheet
                 isOpen={isSalarySettingsOpen}
                 onClose={() => setIsSalarySettingsOpen(false)}
-                onSaved={async () => {
-                    try {
-                        const response = await fetch("/api/salary/salary-settings");
-
-                        if (!response.ok) {
-                            return;
-                        }
-
-                        const refreshedData = await response.json();
-
-                        // 여기서 이 페이지의 급여 설정 state를 갱신
-                        setSalarySettings(refreshedData);
-                    } catch (error) {
-                        console.error(error);
-                    }
-                }}
+                onSaved={reloadSettings}
             />
         </div>
     );

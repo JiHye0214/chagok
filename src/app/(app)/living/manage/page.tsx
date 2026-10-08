@@ -1516,10 +1516,10 @@ export default function LivingManagePage() {
 
                                     <input
                                         type="number"
-                                        step="0.01"
+                                        step={currency === "KRW" ? "1" : "0.01"}
                                         min="0"
                                         inputMode="decimal"
-                                        placeholder="0.00"
+                                        placeholder={currency === "KRW" ? "0" : "0.00"}
                                         value={form.amount}
                                         onChange={(event) =>
                                             setForm((prev) => ({
@@ -1708,8 +1708,8 @@ export default function LivingManagePage() {
                                     <input
                                         type="number"
                                         inputMode="decimal"
-                                        placeholder="0.00"
-                                        step="0.01"
+                                        placeholder={currency === "KRW" ? "0" : "0.00"}
+                                        step={currency === "KRW" ? "1" : "0.01"}
                                         min="0"
                                         value={fixedForm.amount}
                                         onChange={(event) =>

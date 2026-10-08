@@ -173,7 +173,7 @@ export default function TravelPage() {
         currency: string;
     }>({
         averagePerNight: 0,
-        currency: "CAD",
+        currency: "",
     });
 
     const [isExpenseInView, setIsExpenseInView] = useState(false);
@@ -379,7 +379,7 @@ export default function TravelPage() {
 
                 setExpenseAnalysis({
                     averagePerNight: Number(data.summary?.averagePerNight ?? 0),
-                    currency: data.currency || "CAD",
+                    currency: data.currency || "",
                 });
             } catch (error) {
                 console.error("국가별 소비 통계 조회 실패:", error);
@@ -390,76 +390,6 @@ export default function TravelPage() {
 
         fetchCategoryStats();
     }, [trips]);
-
-    // --------------------------------------------------
-    // 국가 정보
-    // --------------------------------------------------
-
-    const getCountryInfo = async (code: string) => {
-        try {
-            const response = await fetch(`https://countries.dev/alpha/${encodeURIComponent(code)}?fields=name,flag`);
-
-            if (!response.ok) {
-                throw new Error("국가 정보를 가져오지 못했습니다.");
-            }
-
-            const data = await response.json();
-
-            return {
-                name: data.name || "",
-                flag: data.flag || "",
-            };
-        } catch (error) {
-            console.error("국가 정보 오류:", error);
-
-            return {
-                name: "",
-                flag: "",
-            };
-        }
-    };
-
-    // --------------------------------------------------
-    // 도시 선택
-    // --------------------------------------------------
-
-    const handleCitySelect = async (result: CitySearchResult) => {
-        isSelectingCityRef.current = true;
-
-        setCity(result.name);
-        setCountryCode(result.countryCode);
-
-        setLatitude(result.latitude);
-        setLongitude(result.longitude);
-
-        setShowCityResults(false);
-        setCitySearchResults([]);
-
-        const countryInfo = await getCountryInfo(result.countryCode);
-
-        setCountry(countryInfo.name);
-    };
-
-    // --------------------------------------------------
-    // 폼 초기화
-    // --------------------------------------------------
-
-    const resetTripForm = () => {
-        setTitle("");
-        setCity("");
-        setCountry("");
-        setCountryCode("");
-        setStartDate("");
-        setEndDate("");
-        setPeople("1");
-        setBudget("");
-        setRating(0);
-        setLatitude(null);
-        setLongitude(null);
-
-        setCitySearchResults([]);
-        setShowCityResults(false);
-    };
 
     // --------------------------------------------------
     // 여행 유형

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { formatCurrency, getCurrencySymbol } from "@/lib/salary/format";
 
 type LivingStartSheetProps = {
     isOpen: boolean;
@@ -14,6 +15,7 @@ export default function LivingStartSheet({ isOpen, onClose, onSaved }: LivingSta
 
     const [initialLivingMoney, setInitialLivingMoney] = useState("");
     const [initialSavingsMoney, setInitialSavingsMoney] = useState("");
+    const [currency, setCurrency] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
 
@@ -32,6 +34,19 @@ export default function LivingStartSheet({ isOpen, onClose, onSaved }: LivingSta
                     }
 
                     const data = await response.json();
+
+                    // 통화는 프로필 기준 (실패해도 입력은 가능)
+                    try {
+                        const profileResponse = await fetch("/api/user/profile");
+
+                        if (profileResponse.ok) {
+                            const profile = await profileResponse.json();
+
+                            setCurrency(profile?.currency ?? null);
+                        }
+                    } catch (profileError) {
+                        console.error(profileError);
+                    }
 
                     if (data) {
                         setInitialLivingMoney(String(data.initialLivingMoney ?? ""));
@@ -156,7 +171,7 @@ export default function LivingStartSheet({ isOpen, onClose, onSaved }: LivingSta
                                     <label className="block text-xs font-medium text-gray-400">현재 가지고 있는 돈</label>
 
                                     <div className="mt-3 flex items-center gap-2">
-                                        <span className="text-xl font-semibold text-gray-400">$</span>
+                                        <span className="text-xl font-semibold text-gray-400">{getCurrencySymbol(currency)}</span>
 
                                         <input
                                             type="number"
@@ -173,7 +188,7 @@ export default function LivingStartSheet({ isOpen, onClose, onSaved }: LivingSta
                                     <label className="block text-xs font-medium text-gray-400">저축한 돈</label>
 
                                     <div className="mt-3 flex items-center gap-2">
-                                        <span className="text-xl font-semibold text-gray-400">$</span>
+                                        <span className="text-xl font-semibold text-gray-400">{getCurrencySymbol(currency)}</span>
 
                                         <input
                                             type="number"
@@ -192,11 +207,7 @@ export default function LivingStartSheet({ isOpen, onClose, onSaved }: LivingSta
                                 <div className="flex items-center justify-between">
                                     <span className="text-sm text-gray-500">총 자산</span>
                                     <span className="text-xl font-bold text-gray-950">
-                                        $
-                                        {new Intl.NumberFormat("en-CA", {
-                                            minimumFractionDigits: 2,
-                                            maximumFractionDigits: 2,
-                                        }).format(totalMoney)}
+                                        {formatCurrency(totalMoney, currency)}
                                     </span>
                                 </div>
                             </div>

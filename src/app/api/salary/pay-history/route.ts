@@ -1,8 +1,9 @@
-// (기존 salary/pay-history/route.ts 자리에 그대로 교체)
+// (기존 salary/pay-history/route.ts 자리에 그대로 교체)  URL: /api/salary/pay-history
 import { getCurrentUser } from "@/lib/auth/user";
 import { sql } from "@/lib/db";
 import { toPayHistoryDto } from "@/lib/api/mappers";
 import { parsePayHistoryInput } from "@/lib/api/payHistoryInput";
+import { getUserProfile } from "@/lib/api/profile";
 import { FREE_LIMITS, getPlanCode } from "@/lib/api/plan";
 import {
     badRequest,
@@ -20,6 +21,17 @@ import { parseId } from "@/lib/api/validate";
 /* ============================================================
    GET: 실제 저장된 급여 기록 조회
    ============================================================ */
+
+// 통화: 화면이 보낸 값 → 없으면 프로필의 현재 통화. (이미 저장된 기록의 통화는 바꾸지 않는다)
+const resolveCurrency = async (userId: string, requested: string | null) => {
+    if (requested) {
+        return requested;
+    }
+
+    const currency = (await getUserProfile(userId))?.currency ?? null;
+
+    return currency && /^[A-Z]{3}$/.test(currency) ? currency : null;
+};
 
 export async function GET() {
     try {
@@ -104,6 +116,8 @@ export async function POST(request: Request) {
             }
         }
 
+        const currencyCode = await resolveCurrency(user.id, input.currencyCode);
+
         // 새 필드는 보내지 않으면(null) 기존 값을 유지한다: COALESCE(새 값, 기존 값)
         const earningLinesJson = input.earningLines ? JSON.stringify(input.earningLines) : null;
         const deductionLinesJson = input.deductionLines ? JSON.stringify(input.deductionLines) : null;
@@ -135,14 +149,14 @@ export async function POST(request: Request) {
                 ${input.payPeriodEnd},
                 ${input.payDate},
                 ${input.hours},
-                ${input.cashTips},
-                ${input.paychequeTips},
+                ${input.cashTips ?? 0},
+                ${input.paychequeTips ?? 0},
                 ${input.pay},
                 ${input.tips},
                 ${input.deductions},
                 ${JSON.stringify(input.adjustments)},
                 ${input.netPay},
-                ${input.currencyCode},
+                ${currencyCode},
                 COALESCE(${earningLinesJson}::jsonb, '[]'::jsonb),
                 COALESCE(${deductionLinesJson}::jsonb, '[]'::jsonb),
                 ${estimateSnapshotJson}::jsonb,
@@ -152,14 +166,14 @@ export async function POST(request: Request) {
             DO UPDATE SET
                 pay_date = EXCLUDED.pay_date,
                 actual_hours = EXCLUDED.actual_hours,
-                actual_cash_tips = EXCLUDED.actual_cash_tips,
-                actual_paycheque_tips = EXCLUDED.actual_paycheque_tips,
+                actual_cash_tips = COALESCE(${input.cashTips}::numeric, pay_period_actuals.actual_cash_tips),
+                actual_paycheque_tips = COALESCE(${input.paychequeTips}::numeric, pay_period_actuals.actual_paycheque_tips),
                 actual_pay = EXCLUDED.actual_pay,
                 actual_tips = EXCLUDED.actual_tips,
                 actual_deductions = EXCLUDED.actual_deductions,
                 adjustments = EXCLUDED.adjustments,
                 actual_net_pay = EXCLUDED.actual_net_pay,
-                currency_code = COALESCE(EXCLUDED.currency_code, pay_period_actuals.currency_code),
+                currency_code = COALESCE(pay_period_actuals.currency_code, EXCLUDED.currency_code),
                 earning_lines = COALESCE(${earningLinesJson}::jsonb, pay_period_actuals.earning_lines),
                 deduction_lines = COALESCE(${deductionLinesJson}::jsonb, pay_period_actuals.deduction_lines),
                 estimate_snapshot = COALESCE(${estimateSnapshotJson}::jsonb, pay_period_actuals.estimate_snapshot),
@@ -211,6 +225,7 @@ export async function PUT(request: Request) {
 
         const id = parseId(body.id, "급여 기록 ID");
         const input = parsePayHistoryInput(body);
+        const currencyCode = await resolveCurrency(user.id, input.currencyCode);
 
         const earningLinesJson = input.earningLines ? JSON.stringify(input.earningLines) : null;
         const deductionLinesJson = input.deductionLines ? JSON.stringify(input.deductionLines) : null;
@@ -223,14 +238,14 @@ export async function PUT(request: Request) {
                 pay_period_end_date = ${input.payPeriodEnd},
                 pay_date = ${input.payDate},
                 actual_hours = ${input.hours},
-                actual_cash_tips = ${input.cashTips},
-                actual_paycheque_tips = ${input.paychequeTips},
+                actual_cash_tips = COALESCE(${input.cashTips}::numeric, actual_cash_tips),
+                actual_paycheque_tips = COALESCE(${input.paychequeTips}::numeric, actual_paycheque_tips),
                 actual_pay = ${input.pay},
                 actual_tips = ${input.tips},
                 actual_deductions = ${input.deductions},
                 adjustments = ${JSON.stringify(input.adjustments)},
                 actual_net_pay = ${input.netPay},
-                currency_code = COALESCE(${input.currencyCode}::text, currency_code),
+                currency_code = COALESCE(currency_code, ${currencyCode}::text),
                 earning_lines = COALESCE(${earningLinesJson}::jsonb, earning_lines),
                 deduction_lines = COALESCE(${deductionLinesJson}::jsonb, deduction_lines),
                 estimate_snapshot = COALESCE(${estimateSnapshotJson}::jsonb, estimate_snapshot),

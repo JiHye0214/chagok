@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, Lock, Plane, Star } from "lucide-react";
 import { formatDate } from "@/lib/payPeriod";
 import BackButtonHeader from "@/components/BackButtonHeader";
+import { getCurrencySymbol } from "@/lib/salary/format";
 
 type TripCity = {
     id?: number;
@@ -1088,7 +1089,7 @@ export default function TravelListPage() {
                                                             </p>
 
                                                             <p className="text-xs text-gray-400">
-                                                                ${Number(trip.totalExpense ?? 0).toLocaleString()}
+                                                                {getCurrencySymbol(trip.currency ?? null)}{Number(trip.totalExpense ?? 0).toLocaleString()}
                                                             </p>
                                                         </div>
                                                     </div>

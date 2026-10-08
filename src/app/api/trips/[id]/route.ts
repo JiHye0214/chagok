@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
+import { getCurrentUser } from "@/lib/auth/user";
 
 type RouteContext = {
     params: Promise<{
@@ -21,6 +22,12 @@ type Destination = {
 
 export async function PUT(request: Request, context: RouteContext) {
     try {
+        const user = await getCurrentUser();
+
+        if (!user) {
+            return NextResponse.json({ error: "로그인이 필요해요." }, { status: 401 });
+        }
+
         const { id } = await context.params;
         const tripId = Number(id);
 
@@ -144,6 +151,7 @@ export async function PUT(request: Request, context: RouteContext) {
                 trip_type AS "tripType"
             FROM trips
             WHERE id = ${tripId}
+              AND user_id = ${user.id}
         `;
 
         if (!existingTrip) {
@@ -178,6 +186,7 @@ export async function PUT(request: Request, context: RouteContext) {
                 people = ${parsedPeople},
                 rating = ${Number(rating) || 0}
             WHERE id = ${tripId}
+              AND user_id = ${user.id}
             RETURNING
                 id,
                 trip_type AS "tripType",
@@ -299,6 +308,12 @@ export async function PUT(request: Request, context: RouteContext) {
 
 export async function DELETE(request: Request, context: RouteContext) {
     try {
+        const user = await getCurrentUser();
+
+        if (!user) {
+            return NextResponse.json({ error: "로그인이 필요해요." }, { status: 401 });
+        }
+
         const { id } = await context.params;
         const tripId = Number(id);
 
@@ -314,6 +329,7 @@ export async function DELETE(request: Request, context: RouteContext) {
             SELECT id
             FROM trips
             WHERE id = ${tripId}
+              AND user_id = ${user.id}
         `;
 
         if (!existingTrip) {
@@ -358,6 +374,7 @@ export async function DELETE(request: Request, context: RouteContext) {
         await sql`
             DELETE FROM trips
             WHERE id = ${tripId}
+              AND user_id = ${user.id}
         `;
 
         return NextResponse.json({

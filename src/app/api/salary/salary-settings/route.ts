@@ -1,4 +1,4 @@
-// (기존 salary-settings/route.ts 자리에 그대로 교체)
+// (기존 salary/salary-settings/route.ts 자리에 그대로 교체)  URL: /api/salary/salary-settings
 import { getCurrentUser } from "@/lib/auth/user";
 import { sql } from "@/lib/db";
 import { EMPLOYMENT_TYPES, PAY_FREQUENCIES, PAY_TYPES, SEMI_MONTHLY_TYPES, TIP_TYPES } from "@/lib/api/constants";
@@ -13,6 +13,7 @@ import {
     parseOptionalDate,
     parseOptionalEnum,
 } from "@/lib/api/validate";
+import { getUserProfile } from "@/lib/api/profile";
 import { getPayPeriodEndDate } from "@/lib/payPeriod";
 import { isPayrollCountry } from "@/lib/payroll";
 import type { PayrollCountry } from "@/lib/payroll";
@@ -29,39 +30,12 @@ const getDateDifference = (fromDate: string, toDate: string) => {
     return Math.round((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24));
 };
 
-// 값이 없으면 null = "변경 없음" (예전 화면이 country를 안 보내도 기존 값이 유지됨)
-const parseOptionalCountry = (value: unknown): PayrollCountry | null => {
-    if (value === undefined || value === null || value === "") {
-        return null;
-    }
+// 나라별 옵션 검증에 쓰는 국가는 프로필 기준 (지원하지 않는 나라면 null)
+const getProfileCountry = async (userId: string): Promise<PayrollCountry | null> => {
+    const profile = await getUserProfile(userId);
+    const code = profile?.countryCode?.toUpperCase();
 
-    const country = typeof value === "string" ? value.toUpperCase() : "";
-
-    if (!isPayrollCountry(country)) {
-        throw new ValidationError("지원하지 않는 국가입니다.");
-    }
-
-    return country;
-};
-
-const parseOptionalRegion = (value: unknown): string | null => {
-    if (value === undefined || value === null || value === "") {
-        return null;
-    }
-
-    const region = typeof value === "string" ? value.toUpperCase() : "";
-
-    if (!/^[A-Z0-9]{1,3}$/.test(region)) {
-        throw new ValidationError("지역 코드가 올바르지 않습니다.");
-    }
-
-    return region;
-};
-
-const getStoredCountry = async (userId: string): Promise<PayrollCountry> => {
-    const [row] = await sql`SELECT country FROM salary_settings WHERE user_id = ${userId} LIMIT 1`;
-
-    return isPayrollCountry(row?.country) ? row.country : "CA";
+    return isPayrollCountry(code) ? code : null;
 };
 
 export async function GET() {
@@ -74,8 +48,6 @@ export async function GET() {
 
         const result = await sql`
             SELECT
-                country,
-                province,
                 employment_type,
                 country_options,
                 pay_type,
@@ -114,8 +86,6 @@ export async function PUT(request: Request) {
             return badRequest("요청 본문이 올바르지 않습니다.");
         }
 
-        const country = parseOptionalCountry(body.country);
-        const regionCode = parseOptionalRegion(body.regionCode);
         const employmentType = parseOptionalEnum(body.employmentType, "소득 유형", EMPLOYMENT_TYPES);
 
         const payType = parseEnum(body.payType, "급여 유형", PAY_TYPES);
@@ -141,7 +111,12 @@ export async function PUT(request: Request) {
         let countryOptionsJson: string | null = null;
 
         if (body.countryOptions !== undefined && body.countryOptions !== null) {
-            const optionsCountry = country ?? (await getStoredCountry(user.id));
+            const optionsCountry = await getProfileCountry(user.id);
+
+            if (!optionsCountry) {
+                throw new ValidationError("프로필의 국가 설정을 먼저 확인해주세요.");
+            }
+
             const parsed = parseCountryOptions(optionsCountry, body.countryOptions);
 
             if (!parsed.ok) {
@@ -170,8 +145,6 @@ export async function PUT(request: Request) {
         const result = await sql`
             INSERT INTO salary_settings (
                 user_id,
-                country,
-                province,
                 employment_type,
                 country_options,
                 pay_type,
@@ -188,8 +161,6 @@ export async function PUT(request: Request) {
             )
             VALUES (
                 ${user.id},
-                COALESCE(${country}::text, 'CA'),
-                ${regionCode},
                 ${employmentType},
                 COALESCE(${countryOptionsJson}::jsonb, '{}'::jsonb),
                 ${payType},
@@ -205,8 +176,6 @@ export async function PUT(request: Request) {
                 ${customPayDays}
             )
             ON CONFLICT (user_id) DO UPDATE SET
-                country = COALESCE(${country}::text, salary_settings.country),
-                province = EXCLUDED.province,
                 employment_type = COALESCE(${employmentType}::text, salary_settings.employment_type),
                 country_options = COALESCE(${countryOptionsJson}::jsonb, salary_settings.country_options),
                 pay_type = EXCLUDED.pay_type,
@@ -222,8 +191,6 @@ export async function PUT(request: Request) {
                 custom_pay_days = EXCLUDED.custom_pay_days,
                 updated_at = NOW()
             RETURNING
-                country,
-                province,
                 employment_type,
                 country_options,
                 pay_type,
