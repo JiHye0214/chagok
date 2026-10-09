@@ -6,6 +6,7 @@ import { formatDate } from "@/lib/payPeriod";
 import { useUpgrade } from "@/components/UpgradeProvider";
 import TravelGlobe from "./TravelGlobe";
 import { Lock, NotebookTabs } from "lucide-react";
+import { parseDateOnly } from "@/lib/dateOnly";
 
 type TripCity = {
     id?: number;
@@ -401,7 +402,7 @@ export default function TravelPage() {
     const upcomingTrips = trips
         .filter((trip) => trip.tripType === "upcoming")
         .sort((a, b) => {
-            return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
+            return parseDateOnly(a.startDate).getTime() - parseDateOnly(b.startDate).getTime();
         });
 
     const completedTrips = trips.filter((trip) => trip.tripType === "completed");
@@ -479,7 +480,7 @@ export default function TravelPage() {
 
     const recentCompletedTrips = [...completedTrips]
         .sort((a, b) => {
-            return new Date(b.endDate).getTime() - new Date(a.endDate).getTime();
+            return parseDateOnly(b.endDate).getTime() - parseDateOnly(a.endDate).getTime();
         })
         .slice(0, 3);
 
@@ -571,7 +572,7 @@ export default function TravelPage() {
             {upcomingTrips.length > 0 &&
                 (() => {
                     const upcomingTrip = [...upcomingTrips].sort(
-                        (a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime(),
+                        (a, b) => parseDateOnly(a.startDate).getTime() - parseDateOnly(b.startDate).getTime(),
                     )[0];
 
                     return (
@@ -586,7 +587,7 @@ export default function TravelPage() {
                                                 <span className="h-1 w-1 rounded-full bg-gray-300" />
 
                                                 <p className="text-xs text-gray-400">
-                                                    {formatDate(new Date(upcomingTrip.startDate))}
+                                                    {formatDate(parseDateOnly(upcomingTrip.startDate))}
                                                 </p>
                                             </div>
 
@@ -608,7 +609,7 @@ export default function TravelPage() {
                                                 {Math.max(
                                                     0,
                                                     Math.ceil(
-                                                        (new Date(upcomingTrip.startDate).getTime() - Date.now()) /
+                                                        (parseDateOnly(upcomingTrip.startDate).getTime() - Date.now()) /
                                                             (1000 * 60 * 60 * 24),
                                                     ),
                                                 )}
@@ -620,8 +621,8 @@ export default function TravelPage() {
 
                                     <div className="flex items-center justify-between border-t border-gray-100 bg-gray-50/70 px-5 py-3">
                                         <p className="text-xs text-gray-500">
-                                            {formatDate(new Date(upcomingTrip.startDate))} —{" "}
-                                            {formatDate(new Date(upcomingTrip.endDate))}
+                                            {formatDate(parseDateOnly(upcomingTrip.startDate))} —{" "}
+                                            {formatDate(parseDateOnly(upcomingTrip.endDate))}
                                         </p>
 
                                         <span className="text-xs font-medium text-gray-400 transition group-hover:text-gray-700">
@@ -828,6 +829,14 @@ export default function TravelPage() {
                             <p className="mt-4 text-sm font-semibold text-gray-900">Travel Spending Analysis</p>
 
                             <p className="mt-1 text-xs text-gray-500">Pro에서 여행 지출 통계를 확인할 수 있어요.</p>
+
+                            <button
+                                type="button"
+                                onClick={() => openUpgrade("trip-stats")}
+                                className="mt-4 rounded-full bg-gray-900 px-4 py-2 text-xs font-medium text-white"
+                            >
+                                Pro 알아보기
+                            </button>
                         </div>
                     </div>
                 )}

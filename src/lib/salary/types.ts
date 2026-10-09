@@ -3,6 +3,7 @@
 import type { ExpectedSalaryResult, ExpectedSalarySettings } from "@/lib/payroll/calculateExpectedSalary";
 import type { CountryOptions } from "@/lib/payroll/countryOptions";
 import type { SemiMonthlyType } from "@/lib/payPeriod";
+import type { HourlyWageEntry } from "@/lib/salary/wage";
 import type { PayFrequency } from "@/lib/payPeriod";
 
 // /api/user/profile 응답 중 급여 계산에 쓰는 부분. 국가·지역·통화는 항상 프로필이 기준이다.
@@ -18,7 +19,10 @@ export type SalarySettingsData = {
     payFrequency: PayFrequency;
     hasTips: boolean;
     tipType?: ExpectedSalarySettings["tipType"] | null;
+    // 오늘 적용되는 시급
     hourlyWage?: number;
+    // 시급이 바뀐 날짜별 이력 (오래된 것 먼저). 근무일마다 그날 시급으로 계산하는 데 쓴다.
+    hourlyWageHistory?: HourlyWageEntry[];
     monthlySalary?: number;
     payPeriodStartDate?: string | null;
     payDate?: string | null;

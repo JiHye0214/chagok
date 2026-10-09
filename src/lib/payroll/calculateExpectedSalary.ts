@@ -6,6 +6,8 @@ import { getDefaultHolidayPayMode } from "@/lib/labor/rules";
 import type { Holiday, HolidayPayMode } from "@/lib/holiday";
 import { getPayPeriodDays, getPeriodsPerYear } from "@/lib/payPeriod";
 import type { PayPeriod, PayFrequency, SemiMonthlyType } from "@/lib/payPeriod";
+import { calculateHourlyBasePay, getHourlyWageOn } from "@/lib/salary/wage";
+import type { HourlyWageEntry } from "@/lib/salary/wage";
 
 export type ExpectedSalarySettings = {
     country: PayrollCountry;
@@ -19,6 +21,8 @@ export type ExpectedSalarySettings = {
     semiMonthlyType?: SemiMonthlyType;
 
     hourlyWage?: number;
+    // 시급 변경 이력. 있으면 근무일마다 그날의 시급으로 계산하고, 없으면 hourlyWage 하나로 계산
+    hourlyWageHistory?: HourlyWageEntry[];
     monthlySalary?: number;
 
     // CA: 매 급여에 얹어 받는 베케이션 페이 비율 (0.04 = 4%). 없거나 0이면 없음.
@@ -103,10 +107,14 @@ const calculateHours = (startTime: string, endTime: string, breakMinutes: number
     return totalMinutes / 60;
 };
 
-const calculateBasePay = (settings: ExpectedSalarySettings, periodHours: number, payPeriod: PayPeriod) => {
+const calculateBasePay = (
+    settings: ExpectedSalarySettings,
+    workDays: { date: string; hours: number }[],
+    payPeriod: PayPeriod,
+) => {
     switch (settings.payType) {
         case "hourly":
-            return periodHours * toSafeNumber(settings.hourlyWage);
+            return calculateHourlyBasePay(workDays, settings.hourlyWageHistory, toSafeNumber(settings.hourlyWage));
 
         case "salary": {
             // monthlySalary를 이번 급여 주기 몫으로 환산 (biweekly면 월급*12/26)
@@ -158,7 +166,12 @@ export const calculateExpectedSalary = ({
     const periodHours = scheduleHours.reduce((total, hours) => total + hours, 0);
 
     // 기본급
-    const basePay = round2(calculateBasePay(settings, periodHours, payPeriod));
+    const workDays = schedules.map((schedule, index) => ({
+        date: schedule.date.slice(0, 10),
+        hours: scheduleHours[index],
+    }));
+
+    const basePay = round2(calculateBasePay(settings, workDays, payPeriod));
 
     // 베케이션 페이 비율 (CA만)
     const vacationPayRate = isCanada ? Math.max(0, toSafeNumber(settings.vacationPayRate)) : 0;
@@ -198,6 +211,7 @@ export const calculateExpectedSalary = ({
             country: settings.country,
             province: settings.regionCode ?? "",
             hourlyWage: toSafeNumber(settings.hourlyWage),
+            hourlyWageOn: (date) => getHourlyWageOn(date, settings.hourlyWageHistory, toSafeNumber(settings.hourlyWage)),
             startDate: payPeriod.startDate,
             endDate: payPeriod.endDate,
             hoursByDate,

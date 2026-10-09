@@ -13,6 +13,8 @@ type UpgradeContextValue = {
     openUpgrade: (reason?: UpgradeReason) => void;
     // 결제 후 등으로 요금제가 바뀌었을 때 다시 불러온다.
     refreshPlan: () => Promise<void>;
+    // 요금제 조회가 끝났는지. false 인 동안은 free 로 보이므로, 무료 전용 표시는 true 일 때만 그린다.
+    isPlanLoaded: boolean;
 };
 
 const UpgradeContext = createContext<UpgradeContextValue | null>(null);
@@ -29,6 +31,7 @@ export function useUpgrade() {
 
 export default function UpgradeProvider({ children }: { children: ReactNode }) {
     const [planCode, setPlanCode] = useState<PlanCode>("free");
+    const [isPlanLoaded, setIsPlanLoaded] = useState(false);
     const [currency, setCurrency] = useState<string | null>(null);
     const [isOpen, setIsOpen] = useState(false);
     const [reason, setReason] = useState<UpgradeReason>("general");
@@ -41,6 +44,7 @@ export default function UpgradeProvider({ children }: { children: ReactNode }) {
                 const me = await meResponse.json();
 
                 setPlanCode(me.planCode === "pro" ? "pro" : "free");
+                setIsPlanLoaded(true);
             }
 
             if (profileResponse.ok) {
@@ -63,8 +67,8 @@ export default function UpgradeProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const value = useMemo<UpgradeContextValue>(
-        () => ({ planCode, isPro: planCode === "pro", currency, openUpgrade, refreshPlan }),
-        [planCode, currency, openUpgrade, refreshPlan],
+        () => ({ planCode, isPro: planCode === "pro", currency, openUpgrade, refreshPlan, isPlanLoaded }),
+        [planCode, currency, openUpgrade, refreshPlan, isPlanLoaded],
     );
 
     return (

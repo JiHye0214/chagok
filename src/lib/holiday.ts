@@ -145,6 +145,7 @@ export function calculatePeriodHolidayPay({
     country = "CA",
     province,
     hourlyWage,
+    hourlyWageOn,
     startDate,
     endDate,
     hoursByDate,
@@ -157,6 +158,8 @@ export function calculatePeriodHolidayPay({
     country?: string;
     province: string;
     hourlyWage: number;
+    // 공휴일마다 그날의 시급을 돌려주는 함수. 없으면 hourlyWage 하나를 쓴다. (시급이 중간에 바뀐 경우)
+    hourlyWageOn?: (date: string) => number;
     startDate: string;
     endDate: string;
     hoursByDate: Record<string, number>;
@@ -177,7 +180,7 @@ export function calculatePeriodHolidayPay({
     for (const holiday of getHolidaysInPayPeriod(startDate, endDate, holidays)) {
         const result = calculateHolidayPay({
             date: holiday.date,
-            hourlyWage,
+            hourlyWage: hourlyWageOn ? hourlyWageOn(holiday.date) : hourlyWage,
             hours: hoursByDate[holiday.date] ?? 0,
             country,
             province,

@@ -5,6 +5,7 @@ import { formatDate, getSurroundingPayPeriods } from "@/lib/payPeriod";
 import { getNotificationTime, subscribeToPush } from "@/lib/notification";
 import { isHoliday } from "@/lib/holiday";
 import BackButtonHeader from "@/components/BackButtonHeader";
+import { useUpgrade } from "@/components/UpgradeProvider";
 import { Lock } from "lucide-react";
 import { useCountUp, usePeriodEstimate, useSalaryData } from "@/lib/salary/hooks";
 import { buildPeriodEstimate, summarizeEstimate } from "@/lib/salary/estimate";
@@ -12,6 +13,12 @@ import { fetchHolidays } from "@/lib/salary/loaders";
 import { estimateDayPay, hasHolidayPremium } from "@/lib/salary/dayPay";
 import { formatCurrency, getCurrencySymbol } from "@/lib/salary/format";
 import type { HolidayData, PeriodTipsData, WorkScheduleData } from "@/lib/salary/types";
+import { parseDateOnly } from "@/lib/dateOnly";
+import BottomSheet from "@/components/BottomSheet";
+import { useDialog } from "@/components/DialogProvider";
+import UsageMeter from "@/components/UsageMeter";
+import { FREE_PLAN_LIMITS } from "@/lib/plans";
+import { getHourlyWageOn } from "@/lib/salary/wage";
 
 type WorkSchedule = WorkScheduleData;
 
@@ -44,6 +51,8 @@ const formatDisplayDate = (value: string) => {
 };
 
 export default function SchedulePage() {
+    const { alert: showAlert } = useDialog();
+    const { openUpgrade } = useUpgrade();
     const [planCode, setPlanCode] = useState<"free" | "pro">("free");
 
     /*
@@ -153,6 +162,10 @@ export default function SchedulePage() {
      */
 
     const hourlyWage = salarySettings?.payType === "hourly" ? Number(salarySettings.hourlyWage ?? 0) : 0;
+
+    // 날짜별 시급: 시급이 중간에 바뀌었으면 그 날짜 기준의 시급을 쓴다
+    const getWageOn = (date: string) =>
+        salarySettings?.payType === "hourly" ? getHourlyWageOn(date, salarySettings.hourlyWageHistory, hourlyWage) : 0;
 
     /*
      * --------------------------------------------------
@@ -362,7 +375,7 @@ export default function SchedulePage() {
 
     const openAddModal = (date: string) => {
         if (planCode === "free" && schedules.length >= 100) {
-            alert("무료 이용자는 근무 기록을 최대 100개까지 저장할 수 있어요.");
+            openUpgrade("schedule-limit");
 
             return;
         }
@@ -495,7 +508,7 @@ export default function SchedulePage() {
         } catch (error) {
             console.error(error);
 
-            alert("근무 저장에 실패했어요.");
+            showAlert("근무 저장에 실패했어요.");
         }
     };
 
@@ -588,7 +601,7 @@ export default function SchedulePage() {
         } catch (error) {
             console.error(error);
 
-            alert("근무 삭제에 실패했어요.");
+            showAlert("근무 삭제에 실패했어요.");
         }
     };
 
@@ -636,11 +649,11 @@ export default function SchedulePage() {
 
             setPaychequeTips(saved.paychequeTips > 0 ? String(saved.paychequeTips) : "");
 
-            // alert("팁이 저장됐어요!");
+            // showAlert("팁이 저장됐어요!");
         } catch (error) {
             console.error(error);
 
-            alert("팁 저장에 실패했어요.");
+            showAlert("팁 저장에 실패했어요.");
         }
     };
 
@@ -684,9 +697,18 @@ export default function SchedulePage() {
             <header className="flex items-center justify-between">
                 <BackButtonHeader href="/salary" title="근무 관리" description="근무 일정을 등록하고 예상 급여를 확인해보세요." />
             </header>
+
+            <UsageMeter
+                label="근무 기록"
+                used={schedules.length}
+                limit={FREE_PLAN_LIMITS.workSchedules}
+                reason="schedule-limit"
+                className="mt-6"
+            />
+
             {/* Pay Period Notice */}
             {currentPayPeriod && (
-                <section className="mt-10 rounded-3xl bg-white p-5 shadow-sm">
+                <section className="mt-5 rounded-3xl bg-white p-5 shadow-sm">
                     <div className="flex items-center justify-between">
                         <div>
                             <p className="text-xs text-gray-400">현재 급여 기간</p>
@@ -717,6 +739,14 @@ export default function SchedulePage() {
 
                         <p className="mt-1 text-xs text-gray-500">기존 기록을 삭제하면 새로운 근무를 등록할 수 있어요.</p>
                     </div>
+
+                    <button
+                        type="button"
+                        onClick={() => openUpgrade("schedule-limit")}
+                        className="ml-auto shrink-0 rounded-full bg-gray-900 px-3 py-2 text-xs font-medium text-white"
+                    >
+                        Pro 알아보기
+                    </button>
                 </div>
             )}
 
@@ -781,7 +811,7 @@ export default function SchedulePage() {
                             );
 
                             return (
-                                total + estimateDayPay({ hours, hourlyWage, isHoliday: Boolean(holiday), ...premiumContext })
+                                total + estimateDayPay({ hours, hourlyWage: getWageOn(date), isHoliday: Boolean(holiday), ...premiumContext })
                             );
                         }, 0);
 
@@ -929,7 +959,7 @@ export default function SchedulePage() {
                                                 : "text-gray-400"
                                         }`}
                                     >
-                                        {selectedDate && formatDate(new Date(selectedDate))}
+                                        {selectedDate && formatDate(parseDateOnly(selectedDate))}
                                     </p>
 
                                     {selectedDate && isHoliday(selectedDate.slice(0, 10), holidays) && (
@@ -1068,7 +1098,7 @@ export default function SchedulePage() {
                                                         endTime,
                                                         hasBreak ? Number(breakMinutes) || 0 : 0,
                                                     ),
-                                                    hourlyWage,
+                                                    hourlyWage: getWageOn(selectedDate ?? ""),
                                                     isHoliday: Boolean(
                                                         selectedDate && isHoliday(selectedDate.slice(0, 10), holidays),
                                                     ),
@@ -1099,7 +1129,7 @@ export default function SchedulePage() {
                                                 } catch (error) {
                                                     console.error(error);
 
-                                                    alert(error instanceof Error ? error.message : "알림 설정에 실패했어요.");
+                                                    showAlert(error instanceof Error ? error.message : "알림 설정에 실패했어요.");
 
                                                     return;
                                                 }
@@ -1163,35 +1193,37 @@ export default function SchedulePage() {
             )}
 
             {/* Handle Break Modal */}
-            {isDefaultBreakConfirmOpen && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-5">
-                    <div className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-xl">
-                        <p className="text-lg font-bold">휴게시간 설정이 변경됐어요.</p>
+            <BottomSheet isOpen={Boolean(isDefaultBreakConfirmOpen)} onClose={() => setIsDefaultBreakConfirmOpen(false)}>
+                {isDefaultBreakConfirmOpen && (
+                    <>
+                            <p className="text-lg font-bold">휴게시간 설정이 변경됐어요.</p>
 
-                        <p className="mt-2 text-sm leading-6 text-gray-500">
-                            이번 근무에만 적용할까요, 아니면 앞으로 기본값으로 사용할까요?
-                        </p>
+                            <p className="mt-2 text-sm leading-6 text-gray-500">
+                                이번 근무에만 적용할까요, 아니면 앞으로 기본값으로 사용할까요?
+                            </p>
 
-                        <div className="mt-6 grid grid-cols-2 gap-3">
-                            <button
-                                type="button"
-                                onClick={useBreakOnce}
-                                className="rounded-2xl bg-gray-100 py-4 text-sm font-semibold"
-                            >
-                                이번 근무만
-                            </button>
+                            <div className="mt-6 grid grid-cols-2 gap-3">
+                                <button
+                                    type="button"
+                                    onClick={useBreakOnce}
+                                    className="rounded-2xl bg-gray-100 py-4 text-sm font-semibold"
+                                >
+                                    이번 근무만
+                                </button>
 
-                            <button
-                                type="button"
-                                onClick={saveAsDefaultBreak}
-                                className="rounded-2xl bg-black py-4 text-sm font-semibold text-white"
-                            >
-                                기본값으로 변경
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+                                <button
+                                    type="button"
+                                    onClick={saveAsDefaultBreak}
+                                    className="rounded-2xl bg-black py-4 text-sm font-semibold text-white"
+                                >
+                                    기본값으로 변경
+                                </button>
+                            </div>
+                
+                
+                    </>
+                )}
+            </BottomSheet>
             {/* --------------------------------------------------
             Current Period Tips
         -------------------------------------------------- */}
@@ -1504,6 +1536,14 @@ export default function SchedulePage() {
                                 <p className="mt-3 text-sm font-semibold text-white">급여 계산 상세</p>
 
                                 <p className="mt-1 text-xs text-gray-400">Pro에서 세부 계산 내역을 확인할 수 있어요.</p>
+
+                                <button
+                                    type="button"
+                                    onClick={() => openUpgrade("general")}
+                                    className="mt-4 rounded-full bg-white px-4 py-2 text-xs font-medium text-gray-900"
+                                >
+                                    Pro 알아보기
+                                </button>
                             </div>
                         </div>
                     )}

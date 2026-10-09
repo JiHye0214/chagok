@@ -23,6 +23,11 @@ import {
 import { formatDate } from "@/lib/payPeriod";
 import { getCurrencySymbol } from "@/lib/salary/format";
 import { useUpgrade } from "@/components/UpgradeProvider";
+import { parseDateOnly } from "@/lib/dateOnly";
+import BottomSheet from "@/components/BottomSheet";
+import { useDialog } from "@/components/DialogProvider";
+import UsageMeter from "@/components/UsageMeter";
+import { FREE_PLAN_LIMITS } from "@/lib/plans";
 
 type TripCity = {
     id?: number;
@@ -80,8 +85,8 @@ type ExpenseCategory = {
 };
 
 const getNights = (startDate: string, endDate: string) => {
-    const start = new Date(startDate);
-    const end = new Date(endDate);
+    const start = parseDateOnly(startDate);
+    const end = parseDateOnly(endDate);
 
     return Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
 };
@@ -182,6 +187,7 @@ const getDestinationLabel = (destinations: TripDestination[]) => {
 };
 
 export default function TravelDetailPage() {
+    const { confirm, alert: showAlert } = useDialog();
     const { openUpgrade } = useUpgrade();
 
     const [planCode, setPlanCode] = useState<"free" | "pro">("free");
@@ -582,12 +588,12 @@ export default function TravelDetailPage() {
         const longitude = editNewCityLongitude.trim() === "" ? null : Number(editNewCityLongitude);
 
         if (!cityName || !countryCode) {
-            alert("도시와 국가를 입력해주세요.");
+            showAlert("도시와 국가를 입력해주세요.");
             return;
         }
 
         if (latitude === null || longitude === null || Number.isNaN(latitude) || Number.isNaN(longitude)) {
-            alert("위치 정보를 입력해주세요.");
+            showAlert("위치 정보를 입력해주세요.");
             return;
         }
 
@@ -755,8 +761,8 @@ export default function TravelDetailPage() {
     const tripDates = (() => {
         const dates: Date[] = [];
 
-        const start = new Date(trip?.startDate ?? "");
-        const end = new Date(trip?.endDate ?? "");
+        const start = parseDateOnly(trip?.startDate);
+        const end = parseDateOnly(trip?.endDate);
 
         if (!trip || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
             return dates;
@@ -938,27 +944,27 @@ export default function TravelDetailPage() {
         const firstCity = firstDestination?.cities[0];
 
         if (!firstDestination || !firstCity) {
-            alert("여행지를 하나 이상 추가해주세요.");
+            showAlert("여행지를 하나 이상 추가해주세요.");
             return;
         }
 
         if (!editStartDate || !editEndDate) {
-            alert("여행 일정을 입력해주세요.");
+            showAlert("여행 일정을 입력해주세요.");
             return;
         }
 
-        if (new Date(editEndDate) < new Date(editStartDate)) {
-            alert("여행 종료일은 시작일보다 빠를 수 없어요.");
+        if (parseDateOnly(editEndDate) < parseDateOnly(editStartDate)) {
+            showAlert("여행 종료일은 시작일보다 빠를 수 없어요.");
             return;
         }
 
         if (!Number.isInteger(people) || people < 1) {
-            alert("인원은 1명 이상 입력해주세요.");
+            showAlert("인원은 1명 이상 입력해주세요.");
             return;
         }
 
         if (!firstCity.city.trim() || !firstDestination.country || !firstDestination.countryCode) {
-            alert("여행지와 국가 정보를 입력해주세요.");
+            showAlert("여행지와 국가 정보를 입력해주세요.");
             return;
         }
 
@@ -1015,7 +1021,7 @@ export default function TravelDetailPage() {
             setIsEditingTrip(false);
         } catch (error) {
             console.error("여행 수정 실패:", error);
-            alert("여행 정보를 수정하지 못했어요.");
+            showAlert("여행 정보를 수정하지 못했어요.");
         } finally {
             setIsSavingTrip(false);
         }
@@ -1024,7 +1030,7 @@ export default function TravelDetailPage() {
     const handleDeleteTrip = async () => {
         if (!trip?.id || isDeletingTrip) return;
 
-        const confirmed = window.confirm(
+        const confirmed = await confirm(
             `"${trip.title?.trim() || trip.city}" 여행을 삭제할까요?\n여행 정보와 입력한 경비가 모두 삭제됩니다.\n삭제한 내용은 복구할 수 없습니다.`,
         );
 
@@ -1044,7 +1050,7 @@ export default function TravelDetailPage() {
             window.location.href = "/travel/list";
         } catch (error) {
             console.error("여행 삭제 실패:", error);
-            alert("여행을 삭제하지 못했어요. 다시 시도해주세요.");
+            showAlert("여행을 삭제하지 못했어요. 다시 시도해주세요.");
             setIsDeletingTrip(false);
         }
     };
@@ -1127,7 +1133,7 @@ export default function TravelDetailPage() {
                 const data = await response.json().catch(() => null);
 
                 if (data?.code === "TRIP_EXPENSE_LIMIT_REACHED") {
-                    alert("무료 플랜에서는 여행 하나당 지출을 최대 30개까지 저장할 수 있어요.");
+                    showAlert("무료 플랜에서는 여행 하나당 지출을 최대 30개까지 저장할 수 있어요.");
 
                     return;
                 }
@@ -1150,7 +1156,7 @@ export default function TravelDetailPage() {
         (value) => value !== undefined && value !== "" && value !== "0" && value !== "0.00",
     ).length;
 
-    const isExpenseLimitReached = expenseCount >= 30;
+    const isExpenseLimitReached = !isPro && expenseCount >= FREE_PLAN_LIMITS.tripExpensesPerTrip;
 
     // ==============================
     // 카테고리 추가
@@ -1281,7 +1287,7 @@ export default function TravelDetailPage() {
 
         if (!category) return;
 
-        const confirmed = window.confirm(
+        const confirmed = await confirm(
             `"${category.name}" 카테고리를 삭제할까요?\n이 카테고리에 입력된 경비도 함께 삭제됩니다.`,
         );
 
@@ -1456,7 +1462,7 @@ export default function TravelDetailPage() {
                             {/* Date / Duration */}
                             <div className="mt-5">
                                 <p className="text-sm text-gray-500">
-                                    {formatDate(new Date(trip.startDate))} ~ {formatDate(new Date(trip.endDate))}
+                                    {formatDate(parseDateOnly(trip.startDate))} ~ {formatDate(parseDateOnly(trip.endDate))}
                                 </p>
 
                                 <p className="mt-1 text-sm text-gray-400">
@@ -1528,7 +1534,7 @@ export default function TravelDetailPage() {
                                     D-
                                     {Math.max(
                                         0,
-                                        Math.ceil((new Date(trip.startDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)),
+                                        Math.ceil((parseDateOnly(trip.startDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)),
                                     )}
                                 </span>
                             )}
@@ -2016,6 +2022,14 @@ export default function TravelDetailPage() {
                     </div>
                 </div>
 
+                <UsageMeter
+                    label="이 여행의 경비"
+                    used={expenseCount}
+                    limit={FREE_PLAN_LIMITS.tripExpensesPerTrip}
+                    reason="trip-expense-limit"
+                    className="mt-4"
+                />
+
                 {/* Expense Table */}
                 <div className="mt-4 rounded-3xl bg-white p-5 shadow-sm">
                     <div className="overflow-x-auto scrollbar-hide">
@@ -2268,127 +2282,120 @@ export default function TravelDetailPage() {
             </section>
 
             {/* Add City Modal - 여행 정보 수정 */}
-            {isAddEditCityModalOpen && (
-                <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/30 px-5">
-                    <div className="w-full max-w-md rounded-3xl bg-white p-5 shadow-xl">
-                        <div className="flex items-center justify-between">
-                            <h2 className="text-xl font-bold">도시 추가</h2>
+            <BottomSheet isOpen={Boolean(isAddEditCityModalOpen)} onClose={() => setIsAddEditCityModalOpen(false)}>
+                {isAddEditCityModalOpen && (
+                    <>
+                            <div className="flex items-center justify-between">
+                                <h2 className="text-xl font-bold">도시 추가</h2>
 
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setIsAddEditCityModalOpen(false);
-                                }}
-                                className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-500"
-                            >
-                                ×
-                            </button>
-                        </div>
-
-                        {/* 도시 */}
-                        <div className="mt-6">
-                            <p className="text-sm font-medium text-gray-700">도시</p>
-
-                            <input
-                                type="text"
-                                value={editNewCityName}
-                                onChange={(e) => {
-                                    setEditNewCityName(e.target.value);
-                                }}
-                                placeholder="도시명을 입력해주세요"
-                                className="mt-2 h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
-                            />
-                        </div>
-
-                        {/* 국가 */}
-                        <div className="mt-5">
-                            <p className="text-sm font-medium text-gray-700">국가</p>
-
-                            <select
-                                value={editNewCityCountryCode}
-                                onChange={(e) => {
-                                    setEditNewCityCountryCode(e.target.value);
-                                }}
-                                className="mt-2 h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
-                            >
-                                <option value="">국가를 선택해주세요</option>
-                                <option value="CA">🇨🇦 Canada</option>
-                                <option value="US">🇺🇸 United States</option>
-                                <option value="KR">🇰🇷 South Korea</option>
-                                <option value="JP">🇯🇵 Japan</option>
-                            </select>
-                        </div>
-
-                        {/* 위도 / 경도 */}
-                        <div className="mt-5">
-                            <p className="text-sm font-medium text-gray-700">위치 정보</p>
-
-                            <div className="mt-2 grid grid-cols-2 gap-3">
-                                <div>
-                                    <p className="mb-2 text-xs text-gray-400">위도</p>
-
-                                    <input
-                                        type="number"
-                                        step="any"
-                                        value={editNewCityLatitude}
-                                        onChange={(e) => {
-                                            setEditNewCityLatitude(e.target.value);
-                                        }}
-                                        placeholder="예: 50.1163"
-                                        className="h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
-                                    />
-                                </div>
-
-                                <div>
-                                    <p className="mb-2 text-xs text-gray-400">경도</p>
-
-                                    <input
-                                        type="number"
-                                        step="any"
-                                        value={editNewCityLongitude}
-                                        onChange={(e) => {
-                                            setEditNewCityLongitude(e.target.value);
-                                        }}
-                                        placeholder="예: -122.9574"
-                                        className="h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
-                                    />
-                                </div>
                             </div>
 
-                            <p className="mt-2 text-xs text-gray-400">지도에 표시할 위치를 입력해주세요.</p>
-                        </div>
+                            {/* 도시 */}
+                            <div className="mt-6">
+                                <p className="text-sm font-medium text-gray-700">도시</p>
 
-                        {/* 버튼 */}
-                        <div className="mt-6 flex gap-3">
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setIsAddEditCityModalOpen(false);
-                                }}
-                                className="flex-1 rounded-2xl border border-gray-200 py-4 text-sm font-medium text-gray-700"
-                            >
-                                취소
-                            </button>
+                                <input
+                                    type="text"
+                                    value={editNewCityName}
+                                    onChange={(e) => {
+                                        setEditNewCityName(e.target.value);
+                                    }}
+                                    placeholder="도시명을 입력해주세요"
+                                    className="mt-2 h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
+                                />
+                            </div>
 
-                            <button
-                                type="button"
-                                disabled={
-                                    !editNewCityName.trim() ||
-                                    !editNewCityCountryCode ||
-                                    editNewCityLatitude.trim() === "" ||
-                                    editNewCityLongitude.trim() === "" ||
-                                    Number.isNaN(Number(editNewCityLatitude)) ||
-                                    Number.isNaN(Number(editNewCityLongitude))
-                                }
-                                onClick={handleAddManualDestinationCity}
-                                className="flex-1 rounded-2xl bg-black py-4 text-sm font-medium text-white disabled:opacity-30"
-                            >
-                                추가하기
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+                            {/* 국가 */}
+                            <div className="mt-5">
+                                <p className="text-sm font-medium text-gray-700">국가</p>
+
+                                <select
+                                    value={editNewCityCountryCode}
+                                    onChange={(e) => {
+                                        setEditNewCityCountryCode(e.target.value);
+                                    }}
+                                    className="mt-2 h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
+                                >
+                                    <option value="">국가를 선택해주세요</option>
+                                    <option value="CA">🇨🇦 Canada</option>
+                                    <option value="US">🇺🇸 United States</option>
+                                    <option value="KR">🇰🇷 South Korea</option>
+                                    <option value="JP">🇯🇵 Japan</option>
+                                </select>
+                            </div>
+
+                            {/* 위도 / 경도 */}
+                            <div className="mt-5">
+                                <p className="text-sm font-medium text-gray-700">위치 정보</p>
+
+                                <div className="mt-2 grid grid-cols-2 gap-3">
+                                    <div>
+                                        <p className="mb-2 text-xs text-gray-400">위도</p>
+
+                                        <input
+                                            type="number"
+                                            step="any"
+                                            value={editNewCityLatitude}
+                                            onChange={(e) => {
+                                                setEditNewCityLatitude(e.target.value);
+                                            }}
+                                            placeholder="예: 50.1163"
+                                            className="h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <p className="mb-2 text-xs text-gray-400">경도</p>
+
+                                        <input
+                                            type="number"
+                                            step="any"
+                                            value={editNewCityLongitude}
+                                            onChange={(e) => {
+                                                setEditNewCityLongitude(e.target.value);
+                                            }}
+                                            placeholder="예: -122.9574"
+                                            className="h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
+                                        />
+                                    </div>
+                                </div>
+
+                                <p className="mt-2 text-xs text-gray-400">지도에 표시할 위치를 입력해주세요.</p>
+                            </div>
+
+                            {/* 버튼 */}
+                            <div className="mt-6 flex gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setIsAddEditCityModalOpen(false);
+                                    }}
+                                    className="flex-1 rounded-2xl border border-gray-200 py-4 text-sm font-medium text-gray-700"
+                                >
+                                    취소
+                                </button>
+
+                                <button
+                                    type="button"
+                                    disabled={
+                                        !editNewCityName.trim() ||
+                                        !editNewCityCountryCode ||
+                                        editNewCityLatitude.trim() === "" ||
+                                        editNewCityLongitude.trim() === "" ||
+                                        Number.isNaN(Number(editNewCityLatitude)) ||
+                                        Number.isNaN(Number(editNewCityLongitude))
+                                    }
+                                    onClick={handleAddManualDestinationCity}
+                                    className="flex-1 rounded-2xl bg-black py-4 text-sm font-medium text-white disabled:opacity-30"
+                                >
+                                    추가하기
+                                </button>
+                            </div>
+                
+                
+                    </>
+                )}
+            </BottomSheet>
 
             <style jsx>{`
                 @keyframes categorySlideUp {

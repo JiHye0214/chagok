@@ -1,11 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getPayPeriodEndDate } from "@/lib/payPeriod";
 import { getCurrencySymbol } from "@/lib/salary/format";
 import { getDefaultHolidayPayMode } from "@/lib/labor/rules";
 import { isPayrollCountry } from "@/lib/payroll";
 import type { HolidayPayMode } from "@/lib/holiday";
+import { todayDateString } from "@/lib/dateOnly";
+import { WAGE_BASELINE_DATE } from "@/lib/salary/wage";
+import type { HourlyWageEntry } from "@/lib/salary/wage";
+import { getMinimumWageOn } from "@/lib/minimumWage";
+import type { WagePreset } from "@/lib/minimumWage";
 
 type PayType = "hourly" | "salary" | "commission" | "other";
 
@@ -29,6 +34,10 @@ type SalarySettings = {
     hasTips: boolean;
     tipType?: TipType;
     hourlyWage?: number;
+    // 서버가 내려주는 시급 변경 이력
+    hourlyWageHistory?: HourlyWageEntry[];
+    // 시급을 바꿨을 때만 보낸다: "all"(처음부터) 또는 적용 시작 날짜(YYYY-MM-DD)
+    hourlyWageApplyFrom?: string;
     monthlySalary?: number;
     payPeriodStartDate?: string;
     payDate?: string;
@@ -51,9 +60,11 @@ type SalarySettingsSheetProps = {
     isOpen: boolean;
     onClose: () => void;
     onSaved?: () => void | Promise<void>;
+    // 최저시급 안내에서 넘어온 경우: 시급과 적용일을 미리 채워서 연다
+    wagePreset?: WagePreset | null;
 };
 
-export default function SalarySettingsSheet({ isOpen, onClose, onSaved }: SalarySettingsSheetProps) {
+export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePreset }: SalarySettingsSheetProps) {
     const [payType, setPayType] = useState<PayType>("hourly");
     const [payFrequency, setPayFrequency] = useState<PayFrequency>("biweekly");
 
@@ -61,6 +72,16 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved }: Salary
     const [tipType, setTipType] = useState<TipType>("paycheque");
 
     const [hourlyWage, setHourlyWage] = useState("");
+
+    // 시트가 열리는 순간의 preset 을 읽기 위해 ref 로 들고 있는다 (preset 이 바뀐다고 설정을 다시 불러오진 않음)
+    const wagePresetRef = useRef<WagePreset | null>(null);
+    wagePresetRef.current = wagePreset ?? null;
+
+    // 시급을 바꿀 때 "언제부터" 적용할지 묻기 위한 값들
+    const [savedHourlyWage, setSavedHourlyWage] = useState<number | null>(null);
+    const [wageHistory, setWageHistory] = useState<HourlyWageEntry[]>([]);
+    const [wageApplyMode, setWageApplyMode] = useState<"from-date" | "all">("from-date");
+    const [wageApplyDate, setWageApplyDate] = useState(() => todayDateString());
     const [monthlySalary, setMonthlySalary] = useState("");
 
     const [payPeriodStartDate, setPayPeriodStartDate] = useState("");
@@ -187,6 +208,19 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved }: Salary
 
                     setHourlyWage(settings.hourlyWage !== undefined ? String(settings.hourlyWage) : "");
 
+                    setSavedHourlyWage(settings.hourlyWage !== undefined ? settings.hourlyWage : null);
+
+                    setWageHistory(settings.hourlyWageHistory ?? []);
+
+                    setWageApplyMode("from-date");
+
+                    setWageApplyDate(todayDateString());
+
+                    if (wagePresetRef.current && (settings.payType ?? "hourly") === "hourly") {
+                        setHourlyWage(String(wagePresetRef.current.hourlyWage));
+                        setWageApplyDate(wagePresetRef.current.effectiveDate);
+                    }
+
                     setMonthlySalary(settings.monthlySalary !== undefined ? String(settings.monthlySalary) : "");
 
                     setPayPeriodStartDate(settings.payPeriodStartDate ?? "");
@@ -260,6 +294,13 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved }: Salary
 
     const showVacationPay = upperCountry === "CA" && payType === "hourly";
 
+    // 이미 저장된 시급이 있고, 지금 입력한 시급이 그것과 다를 때
+    const isWageChanged =
+        payType === "hourly" &&
+        savedHourlyWage !== null &&
+        Number(hourlyWage) > 0 &&
+        Number(hourlyWage) !== savedHourlyWage;
+
     /*
      * Salary Settings 저장
      */
@@ -281,6 +322,11 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved }: Salary
 
         if (payType === "salary" && !(Number(monthlySalary) > 0)) {
             setSaveError("월급을 입력해주세요.");
+            return;
+        }
+
+        if (isWageChanged && wageApplyMode === "from-date" && !wageApplyDate) {
+            setSaveError("시급을 적용할 날짜를 선택해주세요.");
             return;
         }
 
@@ -322,6 +368,9 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved }: Salary
             tipType: hasTips ? tipType : undefined,
 
             hourlyWage: payType === "hourly" ? Math.max(0, Number(hourlyWage) || 0) : undefined,
+
+            // 이미 시급이 있고 값이 바뀐 경우에만 "언제부터"를 같이 보낸다
+            hourlyWageApplyFrom: isWageChanged ? (wageApplyMode === "all" ? "all" : wageApplyDate) : undefined,
 
             monthlySalary: payType === "salary" ? Math.max(0, Number(monthlySalary) || 0) : undefined,
 
@@ -525,6 +574,94 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved }: Salary
                                     className="w-full bg-transparent px-2 py-4 outline-none"
                                 />
                             </div>
+
+                            {/* 이 지역의 최저시급 참고 표시 */}
+                            {(() => {
+                                const minimum = getMinimumWageOn(countryCode, regionCode, todayDateString());
+
+                                if (!minimum || (currency && minimum.currency !== currency)) {
+                                    return null;
+                                }
+
+                                return (
+                                    <p className="mt-2 text-xs text-gray-400">
+                                        최저시급 {getCurrencySymbol(currency)}
+                                        {minimum.hourlyWage} ({minimum.effectiveDate}부터)
+                                    </p>
+                                );
+                            })()}
+
+                            {/* 시급을 바꾸면 언제부터 적용할지 묻는다 */}
+                            {isWageChanged && (
+                                <div className="mt-4 rounded-2xl bg-gray-50 p-4">
+                                    <p className="text-sm font-semibold text-gray-900">언제부터 적용할까요?</p>
+
+                                    <p className="mt-1 text-xs leading-5 text-gray-500">
+                                        그 날짜 전에 한 근무는 예전 시급으로, 그 날짜부터는 새 시급으로 계산해요. 다음 달부터 오르기로 한 것처럼 앞으로의 날짜도 고를 수 있어요.
+                                    </p>
+
+                                    <div className="mt-3 grid grid-cols-2 gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setWageApplyMode("from-date")}
+                                            className={`rounded-xl py-3 text-sm font-medium transition-colors ${
+                                                wageApplyMode === "from-date"
+                                                    ? "bg-gray-900 text-white"
+                                                    : "bg-white text-gray-600"
+                                            }`}
+                                        >
+                                            날짜부터
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => setWageApplyMode("all")}
+                                            className={`rounded-xl py-3 text-sm font-medium transition-colors ${
+                                                wageApplyMode === "all" ? "bg-gray-900 text-white" : "bg-white text-gray-600"
+                                            }`}
+                                        >
+                                            처음부터 전부
+                                        </button>
+                                    </div>
+
+                                    {wageApplyMode === "from-date" ? (
+                                        <input
+                                            type="date"
+                                            value={wageApplyDate}
+                                            onChange={(e) => setWageApplyDate(e.target.value)}
+                                            className="mt-3 w-full rounded-xl bg-white px-4 py-3 text-sm outline-none"
+                                        />
+                                    ) : (
+                                        <p className="mt-3 text-xs leading-5 text-gray-500">
+                                            이전 기록까지 모두 새 시급으로 계산해요. 시급을 잘못 입력했을 때 쓰세요.
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* 시급 변경 이력 (2개 이상일 때만) */}
+                            {wageHistory.length > 1 && (
+                                <div className="mt-4">
+                                    <p className="text-xs font-medium text-gray-400">시급 변경 이력</p>
+
+                                    <ul className="mt-2 space-y-1">
+                                        {[...wageHistory].reverse().map((entry) => (
+                                            <li key={entry.effectiveDate} className="flex justify-between text-xs text-gray-500">
+                                                <span>
+                                                    {entry.effectiveDate === WAGE_BASELINE_DATE
+                                                        ? "처음"
+                                                        : `${entry.effectiveDate}부터`}
+                                                </span>
+
+                                                <span className="font-medium text-gray-700">
+                                                    {getCurrencySymbol(currency)}
+                                                    {entry.hourlyWage}
+                                                </span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
                         </section>
                     )}
 
@@ -592,7 +729,7 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved }: Salary
                                         type="button"
                                         key={value}
                                         onClick={() => setTipType(value as TipType)}
-                                        className={`w-full rounded-2xl p-3 text-left text-sm ${
+                                        className={`w-full rounded-2xl p-4 text-left text-sm ${
                                             tipType === value ? "bg-black text-white" : "bg-gray-100"
                                         }`}
                                     >

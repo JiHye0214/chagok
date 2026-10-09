@@ -66,6 +66,7 @@ export const buildPeriodEstimate = ({
             payFrequency: settings.payFrequency,
             semiMonthlyType: settings.semiMonthlyType ?? undefined,
             hourlyWage: settings.hourlyWage,
+            hourlyWageHistory: settings.hourlyWageHistory,
             monthlySalary: settings.monthlySalary,
             hasTips: settings.hasTips,
             tipType: settings.tipType ?? undefined,

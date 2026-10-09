@@ -1,10 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronRight, CircleDollarSign, Coins, Settings } from "lucide-react";
+import { ChevronRight, Settings } from "lucide-react";
 import LivingStartSheet from "@/components/LivingStartSheet";
 import { useRouter } from "next/navigation";
 import { formatCurrency } from "@/lib/salary/format";
+import BottomSheet from "@/components/BottomSheet";
+import { useDialog } from "@/components/DialogProvider";
+import SavingsPlant from "@/components/SavingsPlant";
 
 type CategorySpending = {
     name: string;
@@ -65,30 +68,8 @@ const formatDisplayDate = (date: string) => {
     return `${year}.${month}.${day}`;
 };
 
-function SavingsDollar({ progress }: { progress: number }) {
-    const clampedProgress = Math.min(Math.max(progress, 0), 100);
-
-    return (
-        <div className="relative h-28 w-28 shrink-0 overflow-hidden">
-            <span className="absolute inset-0 flex items-center justify-center text-[92px] font-semibold leading-none text-gray-200">
-                $
-            </span>
-
-            <div
-                className="absolute inset-x-0 bottom-0 overflow-hidden"
-                style={{
-                    height: `${clampedProgress}%`,
-                }}
-            >
-                <span className="absolute inset-x-0 bottom-[-1px] flex h-28 items-center justify-center text-[92px] font-semibold leading-none">
-                    $
-                </span>
-            </div>
-        </div>
-    );
-}
-
 export default function LivingPage() {
+    const { alert: showAlert } = useDialog();
     const [planCode, setPlanCode] = useState<"free" | "pro">("free");
 
     const router = useRouter();
@@ -209,17 +190,11 @@ export default function LivingPage() {
             setData(refreshedData);
         } catch (error) {
             console.error(error);
-            alert(error instanceof Error ? error.message : "생활비에 반영하지 못했어요.");
+            showAlert(error instanceof Error ? error.message : "생활비에 반영하지 못했어요.");
         } finally {
             setIsReflecting(null);
         }
     };
-
-    const maxSpending = useMemo(() => {
-        if (!data?.variableSpending?.length) return 1;
-
-        return Math.max(...data.variableSpending.map((item) => item.amount), 1);
-    }, [data]);
 
     const currentMonthLabel = useMemo(() => {
         const [year, monthNumber] = month.split("-");
@@ -286,64 +261,52 @@ export default function LivingPage() {
                     {data && (data.pendingIntegrations.travel.length > 0 || data.pendingIntegrations.payroll.length > 0) && (
                         <section className="space-y-3">
                             {data.pendingIntegrations.travel.map((travel) => (
-                                <div
-                                    key={`trip-${travel.sourceId}`}
-                                    className="mt-4 overflow-hidden rounded-3xl bg-white shadow-sm"
-                                >
-                                    <div className="flex items-center justify-between px-5 py-4">
+                                <div key={`trip-${travel.sourceId}`} className="rounded-3xl bg-white p-5 shadow-sm">
+                                    <p className="text-xs text-gray-400">여행 지출</p>
+
+                                    <div className="mt-1 flex items-start justify-between gap-4">
                                         <div className="min-w-0">
-                                            <div className="flex items-center gap-2">
-                                                <p className="text-xs font-medium text-blue-500">TRAVEL EXPENSE</p>
+                                            <p className="truncate text-lg font-bold text-gray-900">{travel.title}</p>
 
-                                                <span className="h-1 w-1 rounded-full bg-gray-300" />
-
-                                                <p className="text-xs text-gray-400">{formatDisplayDate(travel.startDate)}</p>
-                                            </div>
-
-                                            <p className="mt-2 truncate text-lg font-bold text-gray-950">{travel.title}</p>
-
-                                            {travel.status === "missing_expense" ? (
-                                                <p className="mt-0.5 text-sm text-gray-500">여행 지출을 기록해주세요</p>
-                                            ) : (
-                                                <p className="mt-0.5 text-sm text-gray-500">
-                                                    여행 지출{" "}
-                                                    <span className="font-medium text-gray-900">
-                                                        {formatMoney(travel.amount, data?.currency ?? null)}
-                                                    </span>
-                                                </p>
-                                            )}
+                                            <p className="mt-1 text-sm text-gray-500">
+                                                {formatDisplayDate(travel.startDate)} — {formatDisplayDate(travel.endDate)}
+                                            </p>
                                         </div>
-
-                                        <div className="ml-4 shrink-0 text-right">
-                                            {travel.status === "missing_expense" ? (
-                                                <span className="text-xs font-medium text-gray-400">기록 필요</span>
-                                            ) : (
-                                                <span className="text-lg font-bold tracking-tight text-gray-950">
-                                                    {formatMoney(travel.amount, data?.currency ?? null)}
-                                                </span>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    <div className="flex items-center justify-between border-t border-gray-100 bg-gray-50/70 px-5 py-3">
-                                        <p className="text-xs text-gray-500">
-                                            {formatDisplayDate(travel.startDate)} — {formatDisplayDate(travel.endDate)}
-                                        </p>
 
                                         {travel.status === "missing_expense" ? (
+                                            <span className="shrink-0 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-500">
+                                                기록 필요
+                                            </span>
+                                        ) : (
+                                            <p className="shrink-0 text-lg font-bold text-gray-900">
+                                                {formatMoney(travel.amount, data?.currency ?? null)}
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    {travel.status === "missing_expense" ? (
+                                        <>
+                                            <p className="mt-3 text-sm text-gray-500">
+                                                여행 지출을 기록하면 생활비에 반영할 수 있어요.
+                                            </p>
+
                                             <button
                                                 type="button"
                                                 onClick={() => router.push(`/travel/list/${travel.sourceId}`)}
-                                                className="text-xs font-medium text-gray-400 transition hover:text-gray-700"
+                                                className="mt-4 w-full rounded-2xl bg-gray-900 py-3 text-[13px] font-medium text-white transition-colors hover:bg-gray-800"
                                             >
-                                                기록하기 →
+                                                지출 기록하기
                                             </button>
-                                        ) : (
-                                            <div className="flex items-center gap-3">
+                                        </>
+                                    ) : (
+                                        <>
+                                            <p className="mt-3 text-sm text-gray-500">생활비에 반영할까요?</p>
+
+                                            <div className="mt-4 flex gap-2">
                                                 <button
                                                     type="button"
                                                     onClick={() => router.push(`/travel/list/${travel.sourceId}`)}
-                                                    className="text-xs font-medium text-gray-400 transition hover:text-gray-700"
+                                                    className="flex-1 rounded-2xl bg-gray-100 py-3 text-[13px] font-medium text-gray-700 transition-colors hover:bg-gray-200"
                                                 >
                                                     지출 수정
                                                 </button>
@@ -352,15 +315,13 @@ export default function LivingPage() {
                                                     type="button"
                                                     disabled={isReflecting === `trip-${travel.sourceId}`}
                                                     onClick={() => void reflectIntegration("trip", travel.sourceId)}
-                                                    className="text-xs font-semibold text-blue-600 transition hover:text-blue-700 disabled:opacity-50"
+                                                    className="flex-1 rounded-2xl bg-gray-900 py-3 text-[13px] font-semibold text-white transition-colors hover:bg-gray-800 disabled:opacity-50"
                                                 >
-                                                    {isReflecting === `trip-${travel.sourceId}`
-                                                        ? "반영 중..."
-                                                        : "생활비에 반영 →"}
+                                                    {isReflecting === `trip-${travel.sourceId}` ? "반영 중..." : "반영하기"}
                                                 </button>
                                             </div>
-                                        )}
-                                    </div>
+                                        </>
+                                    )}
                                 </div>
                             ))}
 
@@ -387,20 +348,15 @@ export default function LivingPage() {
                                         </button>
                                     </div>
                                 ) : (
-                                    <div
-                                        key={`payroll-${payroll.sourceId}`}
-                                        className="rounded-3xl border border-blue-100 bg-blue-50 p-5 shadow-sm"
-                                    >
+                                    <div key={`payroll-${payroll.sourceId}`} className="rounded-3xl bg-white p-5 shadow-sm">
                                         <div className="flex items-start justify-between gap-4">
                                             <div>
-                                                <p className="text-xs text-blue-500">급여</p>
+                                                <p className="text-xs text-gray-400">급여</p>
 
                                                 <p className="mt-2 text-lg font-semibold text-gray-900">
                                                     이번 급여{" "}
-                                                    <span className="text-blue-600">
-                                                        {formatMoney(payroll.amount ?? 0, data?.currency ?? null)}
-                                                    </span>
-                                                    이 입력되어 있어요
+                                                    <span>{formatMoney(payroll.amount ?? 0, data?.currency ?? null)}</span>이
+                                                    입력되어 있어요
                                                 </p>
 
                                                 <p className="mt-1 text-sm text-gray-500">
@@ -415,7 +371,7 @@ export default function LivingPage() {
                                             <button
                                                 type="button"
                                                 onClick={() => router.push("/salary/pay-history")}
-                                                className="flex-1 rounded-2xl bg-white py-3 text-[13px] font-medium text-gray-600 shadow-sm transition hover:bg-gray-50"
+                                                className="flex-1 rounded-2xl bg-gray-100 py-3 text-[13px] font-medium text-gray-700 transition-colors hover:bg-gray-200"
                                             >
                                                 급여 수정
                                             </button>
@@ -424,7 +380,7 @@ export default function LivingPage() {
                                                 type="button"
                                                 disabled={isReflecting === `payroll-${payroll.sourceId}`}
                                                 onClick={() => void reflectIntegration("payroll", payroll.sourceId)}
-                                                className="flex-1 rounded-2xl bg-blue-600 py-3 text-[13px] font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
+                                                className="flex-1 rounded-2xl bg-gray-900 py-3 text-[13px] font-semibold text-white transition-colors hover:bg-gray-800 disabled:opacity-50"
                                             >
                                                 {isReflecting === `payroll-${payroll.sourceId}` ? "반영 중..." : "반영하기"}
                                             </button>
@@ -514,102 +470,98 @@ export default function LivingPage() {
 
                     {/* Variable spending */}
                     <section className="rounded-3xl bg-white p-5 shadow-sm">
-                        <div className="mb-8">
-                            <div className="flex items-end justify-between">
-                                <div>
-                                    <p className="text-xs text-gray-400">이번 달 지출</p>
-                                    <h2 className="mt-1 text-lg font-bold">변동지출</h2>
-                                </div>
+                        {(() => {
+                            const items = data?.variableSpending ?? [];
+                            const total = items.reduce((sum, item) => sum + item.amount, 0);
 
-                                <p className="text-md font-medium text-gray-900">
-                                    {formatMoney(
-                                        data?.variableSpending?.reduce((sum, item) => sum + item.amount, 0) ?? 0,
-                                        data?.currency ?? null,
-                                    )}
-                                </p>
-                            </div>
-                        </div>
+                            return (
+                                <>
+                                    <div className="flex items-start justify-between gap-4">
+                                        <div>
+                                            <p className="text-xs text-gray-400">이번 달 지출</p>
 
-                        {data?.variableSpending?.length ? (
-                            (() => {
-                                const total = data.variableSpending.reduce((sum, item) => sum + item.amount, 0);
+                                            <h2 className="mt-1 text-lg font-bold text-gray-900">변동지출</h2>
+                                        </div>
 
-                                return (
-                                    <div className="space-y-2">
-                                        {data.variableSpending.map((category) => {
-                                            const percentage = total > 0 ? (category.amount / total) * 100 : 0;
+                                        <p className="text-lg font-bold text-gray-900">
+                                            {formatMoney(total, data?.currency ?? null)}
+                                        </p>
+                                    </div>
 
-                                            return (
-                                                <button
-                                                    key={category.name}
-                                                    type="button"
-                                                    onClick={() =>
-                                                        router.push(
-                                                            `/living/manage?category=${encodeURIComponent(category.name)}`,
-                                                        )
-                                                    }
-                                                    className="relative flex h-10 w-full items-center overflow-hidden rounded-sm bg-gray-50 text-left"
-                                                >
-                                                    <div
-                                                        className="absolute inset-y-0 left-0 bg-[#304B67]/15"
-                                                        style={{
-                                                            width: `${percentage}%`,
-                                                        }}
-                                                    />
+                                    {items.length > 0 ? (
+                                        <div className="mt-5 space-y-4">
+                                            {items.map((category) => {
+                                                const percentage = total > 0 ? (category.amount / total) * 100 : 0;
 
-                                                    <div className="relative z-10 flex w-full items-center justify-between px-3">
-                                                        <span className="text-[13px] font-medium text-gray-700">
-                                                            {category.name}
-                                                        </span>
-
-                                                        <div className="flex items-center gap-3">
-                                                            <span className="text-sm font-medium text-gray-900">
-                                                                {formatMoney(category.amount, data?.currency ?? null)}
+                                                return (
+                                                    <button
+                                                        key={category.name}
+                                                        type="button"
+                                                        onClick={() =>
+                                                            router.push(
+                                                                `/living/manage?category=${encodeURIComponent(category.name)}`,
+                                                            )
+                                                        }
+                                                        className="block w-full text-left"
+                                                    >
+                                                        <div className="flex items-baseline justify-between gap-3">
+                                                            <span className="truncate text-sm font-medium text-gray-800">
+                                                                {category.name}
                                                             </span>
 
-                                                            <span className="text-xs text-gray-400">
-                                                                {percentage.toFixed(0)}%
+                                                            <span className="shrink-0 text-sm font-semibold text-gray-900">
+                                                                {formatMoney(category.amount, data?.currency ?? null)}
+                                                                <span className="ml-2 text-xs font-normal text-gray-400">
+                                                                    {percentage.toFixed(0)}%
+                                                                </span>
                                                             </span>
                                                         </div>
-                                                    </div>
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                );
-                            })()
-                        ) : (
-                            <div className="flex h-56 items-center justify-center text-sm text-gray-400">
-                                이번 달 지출이 아직 없어요.
-                            </div>
-                        )}
+
+                                                        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-100">
+                                                            <div
+                                                                className="h-full rounded-full bg-gray-800"
+                                                                style={{ width: `${Math.max(percentage, 2)}%` }}
+                                                            />
+                                                        </div>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    ) : (
+                                        <div className="mt-5 rounded-2xl bg-gray-50 px-5 py-8 text-center">
+                                            <p className="text-sm font-medium text-gray-600">이번 달 지출이 아직 없어요.</p>
+
+                                            <p className="mt-1 text-xs text-gray-400">지출을 기록하면 카테고리별로 보여드려요.</p>
+                                        </div>
+                                    )}
+                                </>
+                            );
+                        })()}
                     </section>
 
                     {/* Savings */}
                     <section className="rounded-3xl bg-white p-5 shadow-sm">
-                        <div>
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-xs text-gray-400">저축 현황</p>
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-xs text-gray-400">저축 현황</p>
 
-                                    <h2 className="mt-1 text-lg font-bold">저축</h2>
-                                </div>
-
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setSavingsGoalInput(String(data?.savings.goal ?? ""));
-                                        setIsEditingSavingsGoal(true);
-                                    }}
-                                    className="text-xs text-gray-400 transition-colors hover:text-gray-700"
-                                >
-                                    목표 수정
-                                </button>
+                                <h2 className="mt-1 text-lg font-bold">저축</h2>
                             </div>
+
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setSavingsGoalInput(String(data?.savings.goal ?? ""));
+                                    setIsEditingSavingsGoal(true);
+                                }}
+                                className="text-xs text-gray-400 transition-colors hover:text-gray-700"
+                            >
+                                목표 수정
+                            </button>
                         </div>
 
-                        <div className="mt-2 flex items-start justify-between gap-3">
-                            <div>
+                        <div className="mt-2 flex items-end justify-between gap-3">
+                            <div className="min-w-0">
                                 <p className="text-3xl font-bold">
                                     {formatMoney(data?.savings.current ?? 0, data?.currency ?? null)}
                                 </p>
@@ -633,7 +585,13 @@ export default function LivingPage() {
                                 </div>
                             </div>
 
-                            <SavingsDollar progress={savingsProgress} />
+                            <div className="shrink-0 text-center">
+                                <SavingsPlant progress={savingsProgress} className="h-28 w-28" />
+
+                                <p className="mt-1 text-[11px] font-medium text-gray-400">
+                                    {(data?.savings.goal ?? 0) > 0 ? `${savingsProgress.toFixed(0)}% 달성` : "목표를 정해보세요"}
+                                </p>
+                            </div>
                         </div>
 
                         <div className="mt-6 flex gap-2">
@@ -657,16 +615,9 @@ export default function LivingPage() {
                 </div>
             )}
 
-            {isEditingSavingsGoal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center px-5">
-                    <button
-                        type="button"
-                        aria-label="모달 닫기"
-                        onClick={() => setIsEditingSavingsGoal(false)}
-                        className="absolute inset-0 bg-black/30"
-                    />
-
-                    <div className="relative w-full max-w-sm rounded-3xl bg-white p-5 shadow-xl">
+            <BottomSheet isOpen={Boolean(isEditingSavingsGoal)} onClose={() => setIsEditingSavingsGoal(false)}>
+                {isEditingSavingsGoal && (
+                    <>
                         <div className="mb-5">
                             <p className="text-xs text-gray-400">저축</p>
 
@@ -743,9 +694,9 @@ export default function LivingPage() {
                                 {isSavingGoal ? "저장 중" : "저장"}
                             </button>
                         </div>
-                    </div>
-                </div>
-            )}
+                    </>
+                )}
+            </BottomSheet>
 
             <LivingStartSheet
                 isOpen={isLivingStartOpen}

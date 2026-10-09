@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { formatCurrency, getCurrencySymbol } from "@/lib/salary/format";
+import { useDialog } from "@/components/DialogProvider";
 
 type LivingStartSheetProps = {
     isOpen: boolean;
@@ -10,6 +11,7 @@ type LivingStartSheetProps = {
 };
 
 export default function LivingStartSheet({ isOpen, onClose, onSaved }: LivingStartSheetProps) {
+    const { alert: showAlert } = useDialog();
     const [isMounted, setIsMounted] = useState(false);
     const [isAnimating, setIsAnimating] = useState(false);
 
@@ -126,7 +128,7 @@ export default function LivingStartSheet({ isOpen, onClose, onSaved }: LivingSta
             onClose();
         } catch (error) {
             console.error(error);
-            alert(error instanceof Error ? error.message : "생활 설정을 저장하지 못했어요.");
+            showAlert(error instanceof Error ? error.message : "생활 설정을 저장하지 못했어요.");
         } finally {
             setIsSaving(false);
         }

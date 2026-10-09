@@ -7,6 +7,11 @@ import { formatDate } from "@/lib/payPeriod";
 import BackButtonHeader from "@/components/BackButtonHeader";
 import { useUpgrade } from "@/components/UpgradeProvider";
 import { getCurrencySymbol } from "@/lib/salary/format";
+import { parseDateOnly, todayDateString, yesterdayDateString } from "@/lib/dateOnly";
+import BottomSheet from "@/components/BottomSheet";
+import { useDialog } from "@/components/DialogProvider";
+import UsageMeter from "@/components/UsageMeter";
+import { FREE_PLAN_LIMITS } from "@/lib/plans";
 
 type TripCity = {
     id?: number;
@@ -55,8 +60,8 @@ type CitySearchResult = {
 type UpcomingFilter = "month" | "3months" | "6months" | "year" | "custom" | "all";
 
 const getNights = (startDate: string, endDate: string) => {
-    const start = new Date(startDate);
-    const end = new Date(endDate);
+    const start = parseDateOnly(startDate);
+    const end = parseDateOnly(endDate);
 
     return Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
 };
@@ -124,7 +129,8 @@ const getDestinationLabel = (destinations: TripDestination[]) => {
 };
 
 export default function TravelListPage() {
-    const { openUpgrade } = useUpgrade();
+    const { alert: showAlert } = useDialog();
+    const { openUpgrade, isPro } = useUpgrade();
 
     /*
      * ---------------------------------------------------------
@@ -318,7 +324,7 @@ export default function TravelListPage() {
      */
 
     // 무료회원은 3개까지
-    const canAddTrip = trips.length < 3;
+    const canAddTrip = isPro || trips.length < FREE_PLAN_LIMITS.trips;
 
     const addDestinationCity = async (result: CitySearchResult, countryNameOverride?: string) => {
         const countryInfo = await getCountryInfo(result.countryCode);
@@ -448,7 +454,7 @@ export default function TravelListPage() {
             new Set(
                 trips
                     .filter((trip) => trip.tripType === "completed")
-                    .map((trip) => new Date(trip.startDate).getFullYear().toString()),
+                    .map((trip) => parseDateOnly(trip.startDate).getFullYear().toString()),
             ),
         ).sort((a, b) => Number(b) - Number(a));
     }, [trips]);
@@ -471,7 +477,7 @@ export default function TravelListPage() {
         const upcoming = [...allUpcomingTrips];
 
         const sortByStartDate = (items: SavedTrip[]) => {
-            return items.sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+            return items.sort((a, b) => parseDateOnly(a.startDate).getTime() - parseDateOnly(b.startDate).getTime());
         };
 
         if (upcomingFilter === "all") {
@@ -521,7 +527,7 @@ export default function TravelListPage() {
 
         return sortByStartDate(
             upcoming.filter((trip) => {
-                const date = new Date(trip.startDate);
+                const date = parseDateOnly(trip.startDate);
                 date.setHours(0, 0, 0, 0);
 
                 return date >= today && date <= endDate;
@@ -540,9 +546,9 @@ export default function TravelListPage() {
         const filtered =
             completedYearFilter === "all"
                 ? completed
-                : completed.filter((trip) => new Date(trip.startDate).getFullYear().toString() === completedYearFilter);
+                : completed.filter((trip) => parseDateOnly(trip.startDate).getFullYear().toString() === completedYearFilter);
 
-        return [...filtered].sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
+        return [...filtered].sort((a, b) => parseDateOnly(b.startDate).getTime() - parseDateOnly(a.startDate).getTime());
     }, [trips, completedYearFilter]);
 
     /*
@@ -574,12 +580,12 @@ export default function TravelListPage() {
      */
     const handleSaveTrip = async () => {
         if (destinations.length === 0 || !startDate || !endDate) {
-            alert("여행지와 여행 정보를 모두 입력해주세요.");
+            showAlert("여행지와 여행 정보를 모두 입력해주세요.");
             return;
         }
 
-        if (new Date(endDate) < new Date(startDate)) {
-            alert("여행 종료일은 시작일보다 빠를 수 없어요.");
+        if (parseDateOnly(endDate) < parseDateOnly(startDate)) {
+            showAlert("여행 종료일은 시작일보다 빠를 수 없어요.");
             return;
         }
 
@@ -587,7 +593,7 @@ export default function TravelListPage() {
         const firstCity = firstDestination?.cities[0];
 
         if (!firstDestination || !firstCity) {
-            alert("여행지를 하나 이상 추가해주세요.");
+            showAlert("여행지를 하나 이상 추가해주세요.");
             return;
         }
 
@@ -649,7 +655,7 @@ export default function TravelListPage() {
 
             const message = error instanceof Error ? error.message : "여행을 저장하지 못했어요.";
 
-            alert(message);
+            showAlert(message);
         }
     };
 
@@ -693,6 +699,8 @@ export default function TravelListPage() {
                 title="내 여행"
                 description="내가 다녀온 여행과 앞으로의 여행을 한곳에서 확인해보세요."
             />
+
+            <UsageMeter label="여행" used={trips.length} limit={FREE_PLAN_LIMITS.trips} reason="trip-limit" className="mt-5" />
 
             {trips.length === 0 ? (
                 /* --------------------------------------------------
@@ -895,8 +903,8 @@ export default function TravelListPage() {
                                                         )}
 
                                                         <p className="mt-4 text-xs text-gray-500">
-                                                            {formatDate(new Date(trip.startDate))} ~{" "}
-                                                            {formatDate(new Date(trip.endDate))}
+                                                            {formatDate(parseDateOnly(trip.startDate))} ~{" "}
+                                                            {formatDate(parseDateOnly(trip.endDate))}
                                                         </p>
 
                                                         <p className="mt-1 text-xs text-gray-400">
@@ -911,7 +919,7 @@ export default function TravelListPage() {
                                                         {Math.max(
                                                             0,
                                                             Math.ceil(
-                                                                (new Date(trip.startDate).getTime() - Date.now()) /
+                                                                (parseDateOnly(trip.startDate).getTime() - Date.now()) /
                                                                     (1000 * 60 * 60 * 24),
                                                             ),
                                                         )}
@@ -1080,8 +1088,8 @@ export default function TravelListPage() {
                                                         </p>
 
                                                         <p className="mt-4 text-xs text-gray-500">
-                                                            {formatDate(new Date(trip.startDate))} ~{" "}
-                                                            {formatDate(new Date(trip.endDate))}
+                                                            {formatDate(parseDateOnly(trip.startDate))} ~{" "}
+                                                            {formatDate(parseDateOnly(trip.endDate))}
                                                         </p>
 
                                                         <div className="mt-1 flex items-end justify-between">
@@ -1135,660 +1143,643 @@ export default function TravelListPage() {
             {/* ==================================================
             여행 추가 완료 팝업
             ================================================== */}
-            {savedTrip && (
-                <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/30 px-5">
-                    <div className="w-full max-w-md rounded-3xl bg-white p-5 shadow-xl">
-                        <p className="text-lg font-bold">여행이 추가됐어요 ✈️</p>
+            <BottomSheet isOpen={Boolean(savedTrip)} onClose={() => setSavedTrip(null)}>
+                {savedTrip && (
+                    <>
+                            <p className="text-lg font-bold">여행이 추가됐어요 ✈️</p>
 
-                        {savedTrip.title ? (
-                            <p className="mt-4 text-2xl font-bold">{savedTrip.title}</p>
-                        ) : (
-                            <p className="mt-4 text-2xl font-bold">{getFirstCity(savedTrip)}</p>
-                        )}
+                            {savedTrip.title ? (
+                                <p className="mt-4 text-2xl font-bold">{savedTrip.title}</p>
+                            ) : (
+                                <p className="mt-4 text-2xl font-bold">{getFirstCity(savedTrip)}</p>
+                            )}
 
-                        <p className="mt-2 text-sm text-gray-500">{getDestinationLabel(normalizeDestinations(savedTrip))}</p>
+                            <p className="mt-2 text-sm text-gray-500">{getDestinationLabel(normalizeDestinations(savedTrip))}</p>
 
-                        <p className="mt-1 text-sm text-gray-500">
-                            {(() => {
-                                const start = new Date(savedTrip.startDate);
-                                const end = new Date(savedTrip.endDate);
+                            <p className="mt-1 text-sm text-gray-500">
+                                {(() => {
+                                    const start = parseDateOnly(savedTrip.startDate);
+                                    const end = parseDateOnly(savedTrip.endDate);
 
-                                const nights = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+                                    const nights = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
 
-                                return nights === 0
-                                    ? `당일치기 · ${savedTrip.people}명`
-                                    : `${nights}박 ${nights + 1}일 · ${savedTrip.people}명`;
-                            })()}
-                        </p>
+                                    return nights === 0
+                                        ? `당일치기 · ${savedTrip.people}명`
+                                        : `${nights}박 ${nights + 1}일 · ${savedTrip.people}명`;
+                                })()}
+                            </p>
 
-                        <p className="mt-6 text-sm text-gray-500">여행 지출도 기록할까요?</p>
+                            <p className="mt-6 text-sm text-gray-500">여행 지출도 기록할까요?</p>
 
-                        <div className="mt-5 space-y-2">
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    window.location.href = `/travel/${savedTrip.id}`;
-                                }}
-                                className="w-full rounded-2xl bg-black py-4 text-sm font-medium text-white"
-                            >
-                                지출 기록하기
-                            </button>
+                            <div className="mt-5 space-y-2">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        window.location.href = `/travel/${savedTrip.id}`;
+                                    }}
+                                    className="w-full rounded-2xl bg-black py-4 text-sm font-medium text-white"
+                                >
+                                    지출 기록하기
+                                </button>
 
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setSavedTrip(null);
-                                }}
-                                className="w-full rounded-2xl bg-gray-100 py-4 text-sm font-medium text-gray-700"
-                            >
-                                나중에 할게요
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setSavedTrip(null);
+                                    }}
+                                    className="w-full rounded-2xl bg-gray-100 py-4 text-sm font-medium text-gray-700"
+                                >
+                                    나중에 할게요
+                                </button>
+                            </div>
+                
+                
+                    </>
+                )}
+            </BottomSheet>
 
             {/* ==================================================
             여행 추가 모달
             ================================================== */}
-            {isAddModalOpen && (
-                <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/30 px-4 pb-4 modal-overlay">
-                    <div className="modal-content w-full max-w-md overflow-hidden rounded-3xl bg-white p-5 shadow-xl">
-                        {/* 헤더 */}
-                        <div className="flex items-center justify-between">
-                            <h2 className="text-xl font-bold">여행 추가</h2>
+            <BottomSheet
+                    isOpen={Boolean(isAddModalOpen)}
+                    onClose={() => {
+                        resetTripForm();
+                        setAddStep("type");
+                        setIsAddModalOpen(false);
+                    }}
+                >
+                {isAddModalOpen && (
+                    <>
+                            {/* 헤더 */}
+                            <div className="flex items-center justify-between">
+                                <h2 className="text-xl font-bold">여행 추가</h2>
 
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    resetTripForm();
-                                    setAddStep("type");
-                                    setIsAddModalOpen(false);
-                                }}
-                                className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-500"
-                            >
-                                ×
-                            </button>
-                        </div>
-
-                        {/* 화면 영역 */}
-                        <div
-                            className={`relative mt-5 overflow-hidden transition-[height] duration-500 ease-in-out ${
-                                addStep === "form" && tripType === "upcoming"
-                                    ? "h-[720px]"
-                                    : addStep === "form" && tripType === "completed"
-                                      ? "h-[700px]"
-                                      : "h-[210px]"
-                            }`}
-                        >
-                            {/* ==================================================
-                            여행 종류 선택
-                            ================================================== */}
-                            <div
-                                ref={typeRef}
-                                onScroll={() => {
-                                    if (addStep !== "form" && typeRef.current) {
-                                        typeRef.current.scrollTop = 0;
-                                    }
-                                }}
-                                className={`absolute inset-0 px-1 transition-[height] duration-500 ease-in-out duration-500 ease-out ${
-                                    addStep === "type"
-                                        ? "translate-x-0 opacity-100"
-                                        : "-translate-x-5 pointer-events-none opacity-0"
-                                }`}
-                            >
-                                <div className="flex flex-col gap-5">
-                                    <p className="text-center text-lg font-semibold">어떤 여행인가요?</p>
-
-                                    <div className="flex gap-3">
-                                        {/* 예정된 여행 */}
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setTripType("upcoming");
-
-                                                if (formRef.current) {
-                                                    formRef.current.scrollTop = 0;
-                                                }
-
-                                                setAddStep("form");
-                                            }}
-                                            className="flex flex-1 flex-col items-center rounded-3xl border border-gray-200 py-12 transition-transform active:scale-[0.98]"
-                                        >
-                                            <Plane size={25} strokeWidth={1.7} className="mb-2" />
-
-                                            <span className="text-sm font-medium">예정된 여행</span>
-                                        </button>
-
-                                        {/* 다녀온 여행 */}
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setTripType("completed");
-
-                                                if (formRef.current) {
-                                                    formRef.current.scrollTop = 0;
-                                                }
-
-                                                setAddStep("form");
-                                            }}
-                                            className="flex flex-1 flex-col items-center rounded-3xl border border-gray-200 py-12 transition-transform active:scale-[0.98]"
-                                        >
-                                            <CheckCircle2 size={25} strokeWidth={1.7} className="mb-2" />
-
-                                            <span className="text-sm font-medium">다녀온 여행</span>
-                                        </button>
-                                    </div>
-                                </div>
                             </div>
 
-                            {/* ==================================================
-                            입력 폼
-                            ================================================== */}
+                            {/* 화면 영역 */}
                             <div
-                                ref={formRef}
-                                className={`absolute inset-0 overflow-y-auto scrollbar-hide px-1 transition-[opacity,transform] duration-500 ease-out ${
-                                    addStep === "form"
-                                        ? "translate-x-0 opacity-100"
-                                        : "translate-x-3 pointer-events-none opacity-0"
+                                className={`relative mt-5 overflow-hidden transition-[height] duration-500 ease-in-out ${
+                                    addStep === "form" && tripType === "upcoming"
+                                        ? "h-[720px]"
+                                        : addStep === "form" && tripType === "completed"
+                                          ? "h-[700px]"
+                                          : "h-[210px]"
                                 }`}
                             >
-                                <div className="space-y-5">
-                                    {/* 선택한 여행 종류 */}
-                                    <div className="mb-7 rounded-2xl bg-gray-50 p-4">
-                                        <div className="flex items-center gap-2">
-                                            {tripType === "upcoming" ? (
-                                                <Plane size={18} strokeWidth={1.8} />
-                                            ) : (
-                                                <CheckCircle2 size={18} strokeWidth={1.8} />
-                                            )}
+                                {/* ==================================================
+                                여행 종류 선택
+                                ================================================== */}
+                                <div
+                                    ref={typeRef}
+                                    onScroll={() => {
+                                        if (addStep !== "form" && typeRef.current) {
+                                            typeRef.current.scrollTop = 0;
+                                        }
+                                    }}
+                                    className={`absolute inset-0 px-1 transition-[height] duration-500 ease-in-out duration-500 ease-out ${
+                                        addStep === "type"
+                                            ? "translate-x-0 opacity-100"
+                                            : "-translate-x-5 pointer-events-none opacity-0"
+                                    }`}
+                                >
+                                    <div className="flex flex-col gap-5">
+                                        <p className="text-center text-lg font-semibold">어떤 여행인가요?</p>
 
-                                            <p className="text-sm font-medium">
-                                                {tripType === "upcoming" ? "예정된 여행" : "다녀온 여행"}
+                                        <div className="flex gap-3">
+                                            {/* 예정된 여행 */}
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setTripType("upcoming");
+
+                                                    if (formRef.current) {
+                                                        formRef.current.scrollTop = 0;
+                                                    }
+
+                                                    setAddStep("form");
+                                                }}
+                                                className="flex flex-1 flex-col items-center rounded-3xl border border-gray-200 py-12 transition-transform active:scale-[0.98]"
+                                            >
+                                                <Plane size={25} strokeWidth={1.7} className="mb-2" />
+
+                                                <span className="text-sm font-medium">예정된 여행</span>
+                                            </button>
+
+                                            {/* 다녀온 여행 */}
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setTripType("completed");
+
+                                                    if (formRef.current) {
+                                                        formRef.current.scrollTop = 0;
+                                                    }
+
+                                                    setAddStep("form");
+                                                }}
+                                                className="flex flex-1 flex-col items-center rounded-3xl border border-gray-200 py-12 transition-transform active:scale-[0.98]"
+                                            >
+                                                <CheckCircle2 size={25} strokeWidth={1.7} className="mb-2" />
+
+                                                <span className="text-sm font-medium">다녀온 여행</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* ==================================================
+                                입력 폼
+                                ================================================== */}
+                                <div
+                                    ref={formRef}
+                                    className={`absolute inset-0 overflow-y-auto scrollbar-hide px-1 transition-[opacity,transform] duration-500 ease-out ${
+                                        addStep === "form"
+                                            ? "translate-x-0 opacity-100"
+                                            : "translate-x-3 pointer-events-none opacity-0"
+                                    }`}
+                                >
+                                    <div className="space-y-5">
+                                        {/* 선택한 여행 종류 */}
+                                        <div className="mb-7 rounded-2xl bg-gray-50 p-4">
+                                            <div className="flex items-center gap-2">
+                                                {tripType === "upcoming" ? (
+                                                    <Plane size={18} strokeWidth={1.8} />
+                                                ) : (
+                                                    <CheckCircle2 size={18} strokeWidth={1.8} />
+                                                )}
+
+                                                <p className="text-sm font-medium">
+                                                    {tripType === "upcoming" ? "예정된 여행" : "다녀온 여행"}
+                                                </p>
+                                            </div>
+
+                                            <p className="mt-1 text-xs text-gray-400">
+                                                {tripType === "upcoming"
+                                                    ? "앞으로 떠날 여행 정보를 입력해주세요."
+                                                    : "이미 다녀온 여행 정보를 입력해주세요."}
                                             </p>
                                         </div>
 
-                                        <p className="mt-1 text-xs text-gray-400">
-                                            {tripType === "upcoming"
-                                                ? "앞으로 떠날 여행 정보를 입력해주세요."
-                                                : "이미 다녀온 여행 정보를 입력해주세요."}
-                                        </p>
-                                    </div>
-
-                                    {/* 여행 제목 */}
-                                    <div>
-                                        <p className="text-sm font-medium text-gray-700">여행 제목</p>
-
-                                        <input
-                                            type="text"
-                                            value={title}
-                                            onChange={(e) => setTitle(e.target.value)}
-                                            placeholder="이 여행을 한마디로 남겨보세요"
-                                            maxLength={50}
-                                            className="mt-2 w-full rounded-2xl bg-gray-100 px-4 py-4 text-sm outline-none"
-                                        />
-                                    </div>
-
-                                    {/* ==================================================
-                                    여행지
-                                    ================================================== */}
-                                    <div className="relative">
-                                        <p className="text-sm font-medium text-gray-700">여행지</p>
-
-                                        {/* 선택된 여행지 */}
-                                        {destinations.length > 0 && (
-                                            <div className="mt-2 space-y-2">
-                                                {destinations.map((destination) => (
-                                                    <div key={destination.countryCode} className="rounded-2xl bg-gray-50 p-4">
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white">
-                                                                <img
-                                                                    src={`https://flagcdn.com/w40/${destination.countryCode.toLowerCase()}.png`}
-                                                                    alt={destination.country}
-                                                                    className="h-3 w-auto object-cover"
-                                                                />
-                                                            </span>
-
-                                                            <p className="text-sm font-semibold text-gray-900">
-                                                                {destination.country}
-                                                            </p>
-                                                        </div>
-
-                                                        <div className="mt-3 space-y-1.5">
-                                                            {destination.cities.map((destinationCity) => (
-                                                                <div
-                                                                    key={`${destination.countryCode}-${destinationCity.city}`}
-                                                                    className="flex items-center justify-between rounded-xl bg-white px-3 py-2.5"
-                                                                >
-                                                                    <p className="truncate text-sm text-gray-700">
-                                                                        {destinationCity.city}
-                                                                    </p>
-
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() =>
-                                                                            removeDestinationCity(
-                                                                                destination.countryCode,
-                                                                                destinationCity.city,
-                                                                            )
-                                                                        }
-                                                                        className="ml-3 shrink-0 text-xs text-gray-400"
-                                                                    >
-                                                                        ×
-                                                                    </button>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-
-                                        {/* 도시 검색 입력 */}
-                                        <input
-                                            type="text"
-                                            value={city}
-                                            onChange={(e) => {
-                                                const value = e.target.value;
-
-                                                setCity(value);
-
-                                                setCitySearchResults([]);
-
-                                                setShowCityResults(value.trim().length >= 2);
-                                            }}
-                                            onFocus={() => {
-                                                if (city.trim().length >= 2 && citySearchResults.length > 0) {
-                                                    setShowCityResults(true);
-                                                }
-                                            }}
-                                            placeholder="도시를 추가해주세요 (예: New York)"
-                                            className="mt-2 h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
-                                        />
-
-                                        {/* 검색 결과 */}
-                                        {showCityResults && (
-                                            <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-2xl bg-white shadow-lg ring-1 ring-black/5">
-                                                {isCitySearching ? (
-                                                    <div className="px-4 py-4 text-sm text-gray-400">도시를 찾고 있어요...</div>
-                                                ) : citySearchResults.length > 0 ? (
-                                                    <div className="max-h-64 overflow-y-auto scrollbar-hide">
-                                                        {citySearchResults.map((result) => (
-                                                            <button
-                                                                key={`${result.name}-${result.countryCode}`}
-                                                                type="button"
-                                                                onClick={() => handleCitySelect(result)}
-                                                                className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition hover:bg-gray-50 active:bg-gray-100"
-                                                            >
-                                                                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-50 text-lg">
-                                                                    <img
-                                                                        src={`https://flagcdn.com/w40/${result.countryCode.toLowerCase()}.png`}
-                                                                        alt={getCountryName(result.countryCode)}
-                                                                        className="h-3 object-cover"
-                                                                    />
-                                                                </span>
-
-                                                                <div className="min-w-0 flex-1">
-                                                                    <p className="truncate text-sm font-medium text-gray-900">
-                                                                        {result.name}
-                                                                    </p>
-
-                                                                    <p className="mt-0.5 truncate text-xs text-gray-400">
-                                                                        {getCountryName(result.countryCode)}
-                                                                    </p>
-                                                                </div>
-
-                                                                <span className="text-xs text-gray-300">+</span>
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                ) : (
-                                                    <div className="px-4 py-4">
-                                                        <p className="text-sm text-gray-400">일치하는 도시를 찾지 못했어요.</p>
-
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => {
-                                                                setNewCityCountryCode("");
-                                                                setNewCityLatitude("");
-                                                                setNewCityLongitude("");
-
-                                                                setIsAddCityModalOpen(true);
-                                                            }}
-                                                            className="mt-3 w-full rounded-2xl bg-gray-50 px-4 py-3 text-sm font-medium text-gray-700 transition active:bg-gray-100"
-                                                        >
-                                                            ＋ 이 도시 추가하기
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* 날짜 */}
-                                    <div>
-                                        <p className="text-sm font-medium text-gray-700">여행 날짜</p>
-
-                                        <div className="mt-2 grid grid-cols-2 gap-3">
-                                            <input
-                                                type="date"
-                                                value={startDate}
-                                                onChange={(e) => {
-                                                    const value = e.target.value;
-
-                                                    setStartDate(value);
-
-                                                    if (endDate && value > endDate) {
-                                                        setEndDate("");
-                                                    }
-                                                }}
-                                                min={tripType === "upcoming" ? new Date().toISOString().split("T")[0] : undefined}
-                                                max={
-                                                    tripType === "completed"
-                                                        ? new Date(Date.now() - 86400000).toISOString().split("T")[0]
-                                                        : undefined
-                                                }
-                                                className="w-full rounded-2xl bg-gray-100 px-4 py-4 text-sm outline-none"
-                                            />
-
-                                            <input
-                                                type="date"
-                                                value={endDate}
-                                                onChange={(e) => setEndDate(e.target.value)}
-                                                min={
-                                                    startDate ||
-                                                    (tripType === "upcoming" ? new Date().toISOString().split("T")[0] : undefined)
-                                                }
-                                                max={
-                                                    tripType === "completed"
-                                                        ? new Date(Date.now() - 86400000).toISOString().split("T")[0]
-                                                        : undefined
-                                                }
-                                                disabled={!startDate}
-                                                className="w-full rounded-2xl bg-gray-100 px-4 py-4 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                                            />
-                                        </div>
-                                    </div>
-
-                                    {/* 인원 */}
-                                    <div>
-                                        <p className="text-sm font-medium text-gray-700">인원</p>
-
-                                        <input
-                                            type="number"
-                                            min="1"
-                                            value={people}
-                                            onChange={(e) => {
-                                                setPeople(e.target.value.replace(/^0+(?=\d)/, ""));
-                                            }}
-                                            className="mt-2 w-full rounded-2xl bg-gray-100 px-4 py-4 text-sm outline-none"
-                                        />
-                                    </div>
-
-                                    {/* 예산 */}
-                                    {tripType === "upcoming" && (
+                                        {/* 여행 제목 */}
                                         <div>
-                                            <p className="text-sm font-medium text-gray-700">여행 예산</p>
+                                            <p className="text-sm font-medium text-gray-700">여행 제목</p>
 
                                             <input
-                                                type="number"
-                                                min="0"
-                                                value={budget}
-                                                onChange={(e) => {
-                                                    setBudget(e.target.value.replace(/^0+(?=\d)/, ""));
-                                                }}
-                                                placeholder="예: 2000"
+                                                type="text"
+                                                value={title}
+                                                onChange={(e) => setTitle(e.target.value)}
+                                                placeholder="이 여행을 한마디로 남겨보세요"
+                                                maxLength={50}
                                                 className="mt-2 w-full rounded-2xl bg-gray-100 px-4 py-4 text-sm outline-none"
                                             />
                                         </div>
-                                    )}
 
-                                    {/* 평점 */}
-                                    {tripType === "completed" && (
+                                        {/* ==================================================
+                                        여행지
+                                        ================================================== */}
+                                        <div className="relative">
+                                            <p className="text-sm font-medium text-gray-700">여행지</p>
+
+                                            {/* 선택된 여행지 */}
+                                            {destinations.length > 0 && (
+                                                <div className="mt-2 space-y-2">
+                                                    {destinations.map((destination) => (
+                                                        <div key={destination.countryCode} className="rounded-2xl bg-gray-50 p-4">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white">
+                                                                    <img
+                                                                        src={`https://flagcdn.com/w40/${destination.countryCode.toLowerCase()}.png`}
+                                                                        alt={destination.country}
+                                                                        className="h-3 w-auto object-cover"
+                                                                    />
+                                                                </span>
+
+                                                                <p className="text-sm font-semibold text-gray-900">
+                                                                    {destination.country}
+                                                                </p>
+                                                            </div>
+
+                                                            <div className="mt-3 space-y-1.5">
+                                                                {destination.cities.map((destinationCity) => (
+                                                                    <div
+                                                                        key={`${destination.countryCode}-${destinationCity.city}`}
+                                                                        className="flex items-center justify-between rounded-xl bg-white px-3 py-2.5"
+                                                                    >
+                                                                        <p className="truncate text-sm text-gray-700">
+                                                                            {destinationCity.city}
+                                                                        </p>
+
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            {/* 도시 검색 입력 */}
+                                            <input
+                                                type="text"
+                                                value={city}
+                                                onChange={(e) => {
+                                                    const value = e.target.value;
+
+                                                    setCity(value);
+
+                                                    setCitySearchResults([]);
+
+                                                    setShowCityResults(value.trim().length >= 2);
+                                                }}
+                                                onFocus={() => {
+                                                    if (city.trim().length >= 2 && citySearchResults.length > 0) {
+                                                        setShowCityResults(true);
+                                                    }
+                                                }}
+                                                placeholder="도시를 추가해주세요 (예: New York)"
+                                                className="mt-2 h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
+                                            />
+
+                                            {/* 검색 결과 */}
+                                            {showCityResults && (
+                                                <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-2xl bg-white shadow-lg ring-1 ring-black/5">
+                                                    {isCitySearching ? (
+                                                        <div className="px-4 py-4 text-sm text-gray-400">도시를 찾고 있어요...</div>
+                                                    ) : citySearchResults.length > 0 ? (
+                                                        <div className="max-h-64 overflow-y-auto scrollbar-hide">
+                                                            {citySearchResults.map((result) => (
+                                                                <button
+                                                                    key={`${result.name}-${result.countryCode}`}
+                                                                    type="button"
+                                                                    onClick={() => handleCitySelect(result)}
+                                                                    className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition hover:bg-gray-50 active:bg-gray-100"
+                                                                >
+                                                                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-50 text-lg">
+                                                                        <img
+                                                                            src={`https://flagcdn.com/w40/${result.countryCode.toLowerCase()}.png`}
+                                                                            alt={getCountryName(result.countryCode)}
+                                                                            className="h-3 object-cover"
+                                                                        />
+                                                                    </span>
+
+                                                                    <div className="min-w-0 flex-1">
+                                                                        <p className="truncate text-sm font-medium text-gray-900">
+                                                                            {result.name}
+                                                                        </p>
+
+                                                                        <p className="mt-0.5 truncate text-xs text-gray-400">
+                                                                            {getCountryName(result.countryCode)}
+                                                                        </p>
+                                                                    </div>
+
+                                                                    <span className="text-xs text-gray-300">+</span>
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <div className="px-4 py-4">
+                                                            <p className="text-sm text-gray-400">일치하는 도시를 찾지 못했어요.</p>
+
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setNewCityCountryCode("");
+                                                                    setNewCityLatitude("");
+                                                                    setNewCityLongitude("");
+
+                                                                    setIsAddCityModalOpen(true);
+                                                                }}
+                                                                className="mt-3 w-full rounded-2xl bg-gray-50 px-4 py-3 text-sm font-medium text-gray-700 transition active:bg-gray-100"
+                                                            >
+                                                                ＋ 이 도시 추가하기
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* 날짜 */}
                                         <div>
-                                            <p className="text-sm font-medium text-gray-700">여행 평점</p>
+                                            <p className="text-sm font-medium text-gray-700">여행 날짜</p>
 
-                                            <div className="mt-3 flex items-center gap-1">
-                                                <div className="flex items-center">
-                                                    {[1, 2, 3, 4, 5].map((star) => {
-                                                        const isFull = rating >= star;
+                                            <div className="mt-2 grid grid-cols-2 gap-3">
+                                                <input
+                                                    type="date"
+                                                    value={startDate}
+                                                    onChange={(e) => {
+                                                        const value = e.target.value;
 
-                                                        const isHalf = rating === star - 0.5;
+                                                        setStartDate(value);
 
-                                                        return (
-                                                            <div key={star} className="relative h-8 w-8">
-                                                                <Star
-                                                                    size={25}
-                                                                    strokeWidth={1.7}
-                                                                    className="absolute left-0 top-0 text-gray-200"
-                                                                />
+                                                        if (endDate && value > endDate) {
+                                                            setEndDate("");
+                                                        }
+                                                    }}
+                                                    min={tripType === "upcoming" ? todayDateString() : undefined}
+                                                    max={
+                                                        tripType === "completed"
+                                                            ? yesterdayDateString()
+                                                            : undefined
+                                                    }
+                                                    className="w-full rounded-2xl bg-gray-100 px-4 py-4 text-sm outline-none"
+                                                />
 
-                                                                {isFull && (
+                                                <input
+                                                    type="date"
+                                                    value={endDate}
+                                                    onChange={(e) => setEndDate(e.target.value)}
+                                                    min={
+                                                        startDate ||
+                                                        (tripType === "upcoming" ? todayDateString() : undefined)
+                                                    }
+                                                    max={
+                                                        tripType === "completed"
+                                                            ? yesterdayDateString()
+                                                            : undefined
+                                                    }
+                                                    disabled={!startDate}
+                                                    className="w-full rounded-2xl bg-gray-100 px-4 py-4 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* 인원 */}
+                                        <div>
+                                            <p className="text-sm font-medium text-gray-700">인원</p>
+
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                value={people}
+                                                onChange={(e) => {
+                                                    setPeople(e.target.value.replace(/^0+(?=\d)/, ""));
+                                                }}
+                                                className="mt-2 w-full rounded-2xl bg-gray-100 px-4 py-4 text-sm outline-none"
+                                            />
+                                        </div>
+
+                                        {/* 예산 */}
+                                        {tripType === "upcoming" && (
+                                            <div>
+                                                <p className="text-sm font-medium text-gray-700">여행 예산</p>
+
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    value={budget}
+                                                    onChange={(e) => {
+                                                        setBudget(e.target.value.replace(/^0+(?=\d)/, ""));
+                                                    }}
+                                                    placeholder="예: 2000"
+                                                    className="mt-2 w-full rounded-2xl bg-gray-100 px-4 py-4 text-sm outline-none"
+                                                />
+                                            </div>
+                                        )}
+
+                                        {/* 평점 */}
+                                        {tripType === "completed" && (
+                                            <div>
+                                                <p className="text-sm font-medium text-gray-700">여행 평점</p>
+
+                                                <div className="mt-3 flex items-center gap-1">
+                                                    <div className="flex items-center">
+                                                        {[1, 2, 3, 4, 5].map((star) => {
+                                                            const isFull = rating >= star;
+
+                                                            const isHalf = rating === star - 0.5;
+
+                                                            return (
+                                                                <div key={star} className="relative h-8 w-8">
                                                                     <Star
                                                                         size={25}
                                                                         strokeWidth={1.7}
-                                                                        className="absolute left-0 top-0 fill-gray-900 text-gray-900"
+                                                                        className="absolute left-0 top-0 text-gray-200"
                                                                     />
-                                                                )}
 
-                                                                {isHalf && (
-                                                                    <svg
-                                                                        className="absolute left-0 top-0"
-                                                                        width="25"
-                                                                        height="25"
-                                                                        viewBox="0 0 24 24"
-                                                                    >
-                                                                        <defs>
-                                                                            <clipPath id={`half-star-${star}`}>
-                                                                                <rect x="0" y="0" width="12" height="24" />
-                                                                            </clipPath>
-                                                                        </defs>
-
+                                                                    {isFull && (
                                                                         <Star
                                                                             size={25}
                                                                             strokeWidth={1.7}
-                                                                            className="fill-gray-900 text-gray-900"
-                                                                            clipPath={`url(#half-star-${star})`}
+                                                                            className="absolute left-0 top-0 fill-gray-900 text-gray-900"
                                                                         />
-                                                                    </svg>
-                                                                )}
+                                                                    )}
 
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => setRating(star - 0.5)}
-                                                                    className="absolute left-0 top-0 z-10 h-full w-1/2"
-                                                                    aria-label={`${star - 0.5}점`}
-                                                                />
+                                                                    {isHalf && (
+                                                                        <svg
+                                                                            className="absolute left-0 top-0"
+                                                                            width="25"
+                                                                            height="25"
+                                                                            viewBox="0 0 24 24"
+                                                                        >
+                                                                            <defs>
+                                                                                <clipPath id={`half-star-${star}`}>
+                                                                                    <rect x="0" y="0" width="12" height="24" />
+                                                                                </clipPath>
+                                                                            </defs>
 
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => setRating(star)}
-                                                                    className="absolute right-0 top-0 z-10 h-full w-1/2"
-                                                                    aria-label={`${star}점`}
-                                                                />
-                                                            </div>
-                                                        );
-                                                    })}
+                                                                            <Star
+                                                                                size={25}
+                                                                                strokeWidth={1.7}
+                                                                                className="fill-gray-900 text-gray-900"
+                                                                                clipPath={`url(#half-star-${star})`}
+                                                                            />
+                                                                        </svg>
+                                                                    )}
+
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => setRating(star - 0.5)}
+                                                                        className="absolute left-0 top-0 z-10 h-full w-1/2"
+                                                                        aria-label={`${star - 0.5}점`}
+                                                                    />
+
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => setRating(star)}
+                                                                        className="absolute right-0 top-0 z-10 h-full w-1/2"
+                                                                        aria-label={`${star}점`}
+                                                                    />
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+
+                                                    <span className="ml-2 text-sm text-gray-400">{rating.toFixed(1)}</span>
                                                 </div>
-
-                                                <span className="ml-2 text-sm text-gray-400">{rating.toFixed(1)}</span>
                                             </div>
+                                        )}
+
+                                        {/* 뒤로가기 / 저장 */}
+                                        <div className="mt-8 flex gap-3 pb-4">
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    if (formRef.current) {
+                                                        formRef.current.scrollTop = 0;
+                                                    }
+
+                                                    resetTripForm();
+                                                    setAddStep("type");
+                                                }}
+                                                className="flex-1 rounded-2xl border border-gray-200 py-4 text-sm font-medium text-gray-700"
+                                            >
+                                                ← 돌아가기
+                                            </button>
+
+                                            <button
+                                                type="button"
+                                                onClick={handleSaveTrip}
+                                                className="flex-1 rounded-2xl bg-black py-4 text-sm font-medium text-white"
+                                            >
+                                                저장하기
+                                            </button>
                                         </div>
-                                    )}
-
-                                    {/* 뒤로가기 / 저장 */}
-                                    <div className="mt-8 flex gap-3 pb-4">
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                if (formRef.current) {
-                                                    formRef.current.scrollTop = 0;
-                                                }
-
-                                                resetTripForm();
-                                                setAddStep("type");
-                                            }}
-                                            className="flex-1 rounded-2xl border border-gray-200 py-4 text-sm font-medium text-gray-700"
-                                        >
-                                            ← 돌아가기
-                                        </button>
-
-                                        <button
-                                            type="button"
-                                            onClick={handleSaveTrip}
-                                            className="flex-1 rounded-2xl bg-black py-4 text-sm font-medium text-white"
-                                        >
-                                            저장하기
-                                        </button>
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    </div>
-                </div>
-            )}
+                
+                
+                    </>
+                )}
+            </BottomSheet>
 
             {/* ==================================================
             도시 추가 모달
             ================================================== */}
-            {isAddCityModalOpen && (
-                <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/30 px-5">
-                    <div className="w-full max-w-md rounded-3xl bg-white p-5 shadow-xl">
-                        <div className="flex items-center justify-between">
-                            <h2 className="text-xl font-bold">도시 추가</h2>
+            <BottomSheet isOpen={Boolean(isAddCityModalOpen)} onClose={() => setIsAddCityModalOpen(false)}>
+                {isAddCityModalOpen && (
+                    <>
+                            <div className="flex items-center justify-between">
+                                <h2 className="text-xl font-bold">도시 추가</h2>
 
-                            <button
-                                type="button"
-                                onClick={() => setIsAddCityModalOpen(false)}
-                                className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-500"
-                            >
-                                ×
-                            </button>
-                        </div>
+                            </div>
 
-                        <div className="mt-6">
-                            <p className="text-sm font-medium text-gray-700">도시</p>
+                            <div className="mt-6">
+                                <p className="text-sm font-medium text-gray-700">도시</p>
 
-                            <div className="mt-2 rounded-2xl bg-gray-100 px-4 py-4 text-sm text-gray-700">{city}</div>
-                        </div>
+                                <div className="mt-2 rounded-2xl bg-gray-100 px-4 py-4 text-sm text-gray-700">{city}</div>
+                            </div>
 
-                        <div className="mt-5">
-                            <p className="text-sm font-medium text-gray-700">국가</p>
+                            <div className="mt-5">
+                                <p className="text-sm font-medium text-gray-700">국가</p>
 
-                            <select
-                                value={newCityCountryCode}
-                                onChange={(e) => setNewCityCountryCode(e.target.value)}
-                                className="mt-2 h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
-                            >
-                                <option value="">국가를 선택해주세요</option>
-                                <option value="CA">🇨🇦 Canada</option>
-                                <option value="US">🇺🇸 United States</option>
-                                <option value="KR">🇰🇷 South Korea</option>
-                                <option value="JP">🇯🇵 Japan</option>
-                            </select>
-                        </div>
+                                <select
+                                    value={newCityCountryCode}
+                                    onChange={(e) => setNewCityCountryCode(e.target.value)}
+                                    className="mt-2 h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
+                                >
+                                    <option value="">국가를 선택해주세요</option>
+                                    <option value="CA">🇨🇦 Canada</option>
+                                    <option value="US">🇺🇸 United States</option>
+                                    <option value="KR">🇰🇷 South Korea</option>
+                                    <option value="JP">🇯🇵 Japan</option>
+                                </select>
+                            </div>
 
-                        <div className="mt-5">
-                            <p className="text-sm font-medium text-gray-700">위도</p>
+                            <div className="mt-5">
+                                <p className="text-sm font-medium text-gray-700">위도</p>
 
-                            <input
-                                type="number"
-                                step="any"
-                                value={newCityLatitude}
-                                onChange={(e) => setNewCityLatitude(e.target.value)}
-                                placeholder="예: 40.7128"
-                                className="mt-2 h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
-                            />
-                        </div>
+                                <input
+                                    type="number"
+                                    step="any"
+                                    value={newCityLatitude}
+                                    onChange={(e) => setNewCityLatitude(e.target.value)}
+                                    placeholder="예: 40.7128"
+                                    className="mt-2 h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
+                                />
+                            </div>
 
-                        <div className="mt-5">
-                            <p className="text-sm font-medium text-gray-700">경도</p>
+                            <div className="mt-5">
+                                <p className="text-sm font-medium text-gray-700">경도</p>
 
-                            <input
-                                type="number"
-                                step="any"
-                                value={newCityLongitude}
-                                onChange={(e) => setNewCityLongitude(e.target.value)}
-                                placeholder="예: -74.0060"
-                                className="mt-2 h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
-                            />
-                        </div>
+                                <input
+                                    type="number"
+                                    step="any"
+                                    value={newCityLongitude}
+                                    onChange={(e) => setNewCityLongitude(e.target.value)}
+                                    placeholder="예: -74.0060"
+                                    className="mt-2 h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
+                                />
+                            </div>
 
-                        <div className="mt-6 flex gap-3">
-                            <button
-                                type="button"
-                                onClick={() => setIsAddCityModalOpen(false)}
-                                className="flex-1 rounded-2xl border border-gray-200 py-4 text-sm font-medium text-gray-700"
-                            >
-                                취소
-                            </button>
+                            <div className="mt-6 flex gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsAddCityModalOpen(false)}
+                                    className="flex-1 rounded-2xl border border-gray-200 py-4 text-sm font-medium text-gray-700"
+                                >
+                                    취소
+                                </button>
 
-                            <button
-                                type="button"
-                                disabled={!newCityCountryCode || !newCityLatitude || !newCityLongitude}
-                                onClick={async () => {
-                                    const countryInfo = await getCountryInfo(newCityCountryCode);
+                                <button
+                                    type="button"
+                                    disabled={!newCityCountryCode || !newCityLatitude || !newCityLongitude}
+                                    onClick={async () => {
+                                        const countryInfo = await getCountryInfo(newCityCountryCode);
 
-                                    const newCity: TripCity = {
-                                        city: formatCityName(city),
-                                        latitude: Number(newCityLatitude),
-                                        longitude: Number(newCityLongitude),
-                                    };
+                                        const newCity: TripCity = {
+                                            city: formatCityName(city),
+                                            latitude: Number(newCityLatitude),
+                                            longitude: Number(newCityLongitude),
+                                        };
 
-                                    setDestinations((prev) => {
-                                        const existingDestination = prev.find(
-                                            (destination) => destination.countryCode === newCityCountryCode,
-                                        );
-
-                                        if (existingDestination) {
-                                            const isDuplicate = existingDestination.cities.some(
-                                                (existingCity) => existingCity.city.toLowerCase() === newCity.city.toLowerCase(),
+                                        setDestinations((prev) => {
+                                            const existingDestination = prev.find(
+                                                (destination) => destination.countryCode === newCityCountryCode,
                                             );
 
-                                            if (isDuplicate) {
-                                                return prev;
+                                            if (existingDestination) {
+                                                const isDuplicate = existingDestination.cities.some(
+                                                    (existingCity) => existingCity.city.toLowerCase() === newCity.city.toLowerCase(),
+                                                );
+
+                                                if (isDuplicate) {
+                                                    return prev;
+                                                }
+
+                                                return prev.map((destination) =>
+                                                    destination.countryCode === newCityCountryCode
+                                                        ? {
+                                                              ...destination,
+                                                              cities: [...destination.cities, newCity],
+                                                          }
+                                                        : destination,
+                                                );
                                             }
 
-                                            return prev.map((destination) =>
-                                                destination.countryCode === newCityCountryCode
-                                                    ? {
-                                                          ...destination,
-                                                          cities: [...destination.cities, newCity],
-                                                      }
-                                                    : destination,
-                                            );
-                                        }
+                                            return [
+                                                ...prev,
+                                                {
+                                                    country: countryInfo.name || getCountryName(newCityCountryCode),
+                                                    countryCode: newCityCountryCode,
+                                                    cities: [newCity],
+                                                },
+                                            ];
+                                        });
 
-                                        return [
-                                            ...prev,
-                                            {
-                                                country: countryInfo.name || getCountryName(newCityCountryCode),
-                                                countryCode: newCityCountryCode,
-                                                cities: [newCity],
-                                            },
-                                        ];
-                                    });
+                                        isSelectingCityRef.current = true;
 
-                                    isSelectingCityRef.current = true;
+                                        setCity("");
+                                        setCitySearchResults([]);
+                                        setShowCityResults(false);
 
-                                    setCity("");
-                                    setCitySearchResults([]);
-                                    setShowCityResults(false);
+                                        setNewCityCountryCode("");
+                                        setNewCityLatitude("");
+                                        setNewCityLongitude("");
 
-                                    setNewCityCountryCode("");
-                                    setNewCityLatitude("");
-                                    setNewCityLongitude("");
-
-                                    setIsAddCityModalOpen(false);
-                                }}
-                                className="flex-1 rounded-2xl bg-black py-4 text-sm font-medium text-white disabled:opacity-30"
-                            >
-                                추가하기
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+                                        setIsAddCityModalOpen(false);
+                                    }}
+                                    className="flex-1 rounded-2xl bg-black py-4 text-sm font-medium text-white disabled:opacity-30"
+                                >
+                                    추가하기
+                                </button>
+                            </div>
+                
+                
+                    </>
+                )}
+            </BottomSheet>
         </div>
     );
 }

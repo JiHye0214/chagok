@@ -5,6 +5,8 @@ import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, X, GripVertical, Lock 
 import { useSearchParams } from "next/navigation";
 import BackButtonHeader from "@/components/BackButtonHeader";
 import { useUpgrade } from "@/components/UpgradeProvider";
+import { useDialog } from "@/components/DialogProvider";
+import UsageMeter from "@/components/UsageMeter";
 
 type TransactionType = "income" | "expense" | "transfer";
 
@@ -126,6 +128,7 @@ const ProBadge = () => (
 );
 
 export default function LivingManagePage() {
+    const { confirm, alert: showAlert } = useDialog();
     const { openUpgrade } = useUpgrade();
 
     const searchParams = useSearchParams();
@@ -618,17 +621,17 @@ export default function LivingManagePage() {
         const amount = Number(form.amount);
 
         if (!form.date) {
-            alert("날짜를 선택해주세요.");
+            showAlert("날짜를 선택해주세요.");
             return;
         }
 
         if (!Number.isFinite(amount) || amount <= 0) {
-            alert("금액을 0보다 크게 입력해주세요.");
+            showAlert("금액을 0보다 크게 입력해주세요.");
             return;
         }
 
         if (form.type !== "transfer" && !form.categoryId) {
-            alert("카테고리를 선택해주세요.");
+            showAlert("카테고리를 선택해주세요.");
             return;
         }
 
@@ -659,7 +662,7 @@ export default function LivingManagePage() {
 
             if (!response.ok) {
                 const data = await response.json().catch(() => null);
-                alert(data?.error ?? "저장하지 못했습니다.");
+                showAlert(data?.error ?? "저장하지 못했습니다.");
                 return;
             }
 
@@ -669,12 +672,12 @@ export default function LivingManagePage() {
             await loadTransactions();
         } catch (error) {
             console.error(error);
-            alert("저장 중 문제가 발생했습니다.");
+            showAlert("저장 중 문제가 발생했습니다.");
         }
     };
 
     const deleteTransaction = async (id: number) => {
-        if (!window.confirm("이 기록을 삭제할까요?")) {
+        if (!await confirm("이 기록을 삭제할까요?")) {
             return;
         }
 
@@ -777,7 +780,7 @@ export default function LivingManagePage() {
     };
 
     const deleteFixedExpense = async (id: number) => {
-        if (!window.confirm("이 고정지출을 삭제할까요?")) {
+        if (!await confirm("이 고정지출을 삭제할까요?")) {
             return;
         }
 
@@ -954,7 +957,7 @@ export default function LivingManagePage() {
             return;
         }
 
-        if (!window.confirm(`"${category.name}" 카테고리를 삭제할까요?`)) {
+        if (!await confirm(`"${category.name}" 카테고리를 삭제할까요?`)) {
             return;
         }
 
@@ -994,6 +997,14 @@ export default function LivingManagePage() {
     return (
         <div className="mx-auto max-w-md">
             <BackButtonHeader href="/living" title="생활 관리" description="수입과 지출을 기록하고 관리해보세요." />
+
+            <UsageMeter
+                label="생활 기록"
+                used={totalTransactionCount}
+                limit={FREE_LIVING_TRANSACTION_LIMIT}
+                reason="living-limit"
+                className="mt-6"
+            />
 
             {/* Month navigation */}
             <div className="mt-10 flex items-center justify-between">
@@ -1072,6 +1083,14 @@ export default function LivingManagePage() {
                         <p className="mt-3 text-sm font-medium text-gray-600">고정지출 관리는 Pro에서 사용할 수 있어요.</p>
 
                         <p className="mt-1 text-xs text-gray-400">매달 반복되는 지출을 관리해보세요.</p>
+
+                        <button
+                            type="button"
+                            onClick={() => openUpgrade("fixed-expense")}
+                            className="mt-4 rounded-full bg-gray-900 px-4 py-2 text-xs font-medium text-white"
+                        >
+                            Pro 알아보기
+                        </button>
                     </div>
                 ) : (
                     <>

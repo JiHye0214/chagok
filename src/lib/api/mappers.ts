@@ -11,13 +11,15 @@ const toNullableNumber = (value: unknown) => (value === null || value === undefi
 // 값이 없는 숫자는 null이 아니라 생략(undefined)해서 내려준다. (화면이 `!== undefined`로 비어 있는지 판단함)
 const toOptionalNumber = (value: unknown) => (value === null || value === undefined ? undefined : Number(value));
 
-export const toSalarySettingsDto = (row: Row) => ({
+export const toSalarySettingsDto = (row: Row, hourlyWageHistory: { effectiveDate: string; hourlyWage: number }[] = []) => ({
     // 국가·통화는 프로필(/api/user/profile)이 기준이라 여기서는 내려주지 않는다.
     employmentType: (row.employment_type as string | null) ?? null,
     countryOptions: (row.country_options as Record<string, unknown> | null) ?? {},
     payType: row.pay_type as string,
     payFrequency: row.pay_frequency as string,
     hourlyWage: toOptionalNumber(row.hourly_wage),
+    // 시급이 바뀐 날짜별 이력 (오래된 것 먼저). hourlyWage 는 오늘 적용되는 시급.
+    hourlyWageHistory,
     monthlySalary: toOptionalNumber(row.monthly_salary),
     hasTips: Boolean(row.has_tips),
     tipType: (row.tip_type as string | null) ?? null,
