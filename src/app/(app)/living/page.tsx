@@ -1,5 +1,6 @@
 "use client";
 
+import LoadingScreen from "@/components/LoadingScreen";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronRight, Settings } from "lucide-react";
 import LivingStartSheet from "@/components/LivingStartSheet";
@@ -206,6 +207,11 @@ export default function LivingPage() {
 
     const savingsProgress = data?.savings.goal ? Math.min(((data?.savings.current ?? 0) / data.savings.goal) * 100, 100) : 0;
 
+    // 다른 페이지처럼 불러오는 동안에는 로딩 화면만 보여준다 (헤더가 비쳐 보이지 않게)
+    if (isLivingSettingsLoading || loading) {
+        return <LoadingScreen />;
+    }
+
     return (
         <div className="mx-auto max-w-md">
             {/* Header */}
@@ -228,15 +234,7 @@ export default function LivingPage() {
                 <p className="mt-2 text-sm text-gray-500">이번 달 생활비를 한눈에 확인해보세요.</p>
             </header>
 
-            {isLivingSettingsLoading || loading ? (
-                <div className="space-y-5">
-                    <div className="h-48 animate-pulse rounded-3xl bg-white" />
-
-                    <div className="h-72 animate-pulse rounded-3xl bg-white" />
-
-                    <div className="h-64 animate-pulse rounded-3xl bg-white" />
-                </div>
-            ) : !hasLivingSettings ? (
+            {!hasLivingSettings ? (
                 <section className="rounded-3xl bg-white p-6 shadow-sm">
                     <p className="text-xs font-medium text-gray-400">생활 설정</p>
 
@@ -286,9 +284,7 @@ export default function LivingPage() {
 
                                     {travel.status === "missing_expense" ? (
                                         <>
-                                            <p className="mt-3 text-sm text-gray-500">
-                                                여행 지출을 기록하면 생활비에 반영할 수 있어요.
-                                            </p>
+                                            <p className="mt-3 text-sm text-gray-500">여행 지출을 기록하면 생활비에 반영할 수 있어요.</p>
 
                                             <button
                                                 type="button"
@@ -348,15 +344,18 @@ export default function LivingPage() {
                                         </button>
                                     </div>
                                 ) : (
-                                    <div key={`payroll-${payroll.sourceId}`} className="rounded-3xl bg-white p-5 shadow-sm">
+                                    <div
+                                        key={`payroll-${payroll.sourceId}`}
+                                        className="rounded-3xl bg-white p-5 shadow-sm"
+                                    >
                                         <div className="flex items-start justify-between gap-4">
                                             <div>
                                                 <p className="text-xs text-gray-400">급여</p>
 
                                                 <p className="mt-2 text-lg font-semibold text-gray-900">
                                                     이번 급여{" "}
-                                                    <span>{formatMoney(payroll.amount ?? 0, data?.currency ?? null)}</span>이
-                                                    입력되어 있어요
+                                                    <span>{formatMoney(payroll.amount ?? 0, data?.currency ?? null)}</span>
+                                                    이 입력되어 있어요
                                                 </p>
 
                                                 <p className="mt-1 text-sm text-gray-500">
@@ -560,36 +559,36 @@ export default function LivingPage() {
                             </button>
                         </div>
 
-                        <div className="mt-2 flex items-end justify-between gap-3">
+                        <div className="mt-4 flex items-center gap-4 rounded-2xl bg-gray-50 p-4">
+                            <SavingsPlant progress={savingsProgress} className="h-28 w-28 shrink-0" />
+
                             <div className="min-w-0">
-                                <p className="text-3xl font-bold">
+                                <p className="text-xs text-gray-400">모은 금액</p>
+
+                                <p className="mt-1 truncate text-2xl font-bold tracking-tight text-gray-900">
                                     {formatMoney(data?.savings.current ?? 0, data?.currency ?? null)}
                                 </p>
 
-                                <div className="mt-5 space-y-1.5">
-                                    <div className="flex items-center justify-between gap-8">
-                                        <span className="text-xs text-gray-400">목표</span>
+                                <span className="mt-3 inline-flex rounded-full bg-white px-3 py-1.5 text-[11px] font-medium text-gray-600 shadow-sm">
+                                    {(data?.savings.goal ?? 0) > 0 ? `${savingsProgress.toFixed(0)}% 달성` : "목표를 정해보세요"}
+                                </span>
+                            </div>
+                        </div>
 
-                                        <span className="text-sm font-medium text-gray-900">
-                                            {formatMoney(data?.savings.goal ?? 0, data?.currency ?? null)}
-                                        </span>
-                                    </div>
+                        <div className="mt-4 grid grid-cols-2 divide-x divide-gray-100">
+                            <div className="pr-4">
+                                <p className="text-xs text-gray-400">목표</p>
 
-                                    <div className="flex items-center justify-between gap-8">
-                                        <span className="text-xs text-gray-400">남은 금액</span>
-
-                                        <span className="text-sm font-medium text-gray-900">
-                                            {formatMoney(remainingSavings, data?.currency ?? null)}
-                                        </span>
-                                    </div>
-                                </div>
+                                <p className="mt-1 truncate text-sm font-semibold text-gray-900">
+                                    {formatMoney(data?.savings.goal ?? 0, data?.currency ?? null)}
+                                </p>
                             </div>
 
-                            <div className="shrink-0 text-center">
-                                <SavingsPlant progress={savingsProgress} className="h-28 w-28" />
+                            <div className="pl-4">
+                                <p className="text-xs text-gray-400">남은 금액</p>
 
-                                <p className="mt-1 text-[11px] font-medium text-gray-400">
-                                    {(data?.savings.goal ?? 0) > 0 ? `${savingsProgress.toFixed(0)}% 달성` : "목표를 정해보세요"}
+                                <p className="mt-1 truncate text-sm font-semibold text-gray-900">
+                                    {formatMoney(remainingSavings, data?.currency ?? null)}
                                 </p>
                             </div>
                         </div>
@@ -618,82 +617,84 @@ export default function LivingPage() {
             <BottomSheet isOpen={Boolean(isEditingSavingsGoal)} onClose={() => setIsEditingSavingsGoal(false)}>
                 {isEditingSavingsGoal && (
                     <>
-                        <div className="mb-5">
-                            <p className="text-xs text-gray-400">저축</p>
+                            <div className="mb-5">
+                                <p className="text-xs text-gray-400">저축</p>
 
-                            <h3 className="mt-1 text-lg font-semibold tracking-[-0.03em] text-gray-900">저축 목표 수정</h3>
-                        </div>
+                                <h3 className="mt-1 text-lg font-semibold tracking-[-0.03em] text-gray-900">저축 목표 수정</h3>
+                            </div>
 
-                        <div>
-                            <label className="mb-2 block text-xs text-gray-400">목표 금액</label>
+                            <div>
+                                <label className="mb-2 block text-xs text-gray-400">목표 금액</label>
 
-                            <input
-                                type="number"
-                                min="1"
-                                value={savingsGoalInput}
-                                onChange={(e) => setSavingsGoalInput(e.target.value)}
-                                autoFocus
-                                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm outline-none transition-colors"
-                                placeholder="목표 금액을 입력하세요"
-                            />
-                        </div>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    value={savingsGoalInput}
+                                    onChange={(e) => setSavingsGoalInput(e.target.value)}
+                                    autoFocus
+                                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm outline-none transition-colors"
+                                    placeholder="목표 금액을 입력하세요"
+                                />
+                            </div>
 
-                        <div className="mt-5 flex gap-2">
-                            <button
-                                type="button"
-                                onClick={() => setIsEditingSavingsGoal(false)}
-                                className="flex-1 rounded-2xl bg-gray-100 py-3 text-[13px] font-medium text-gray-700 transition-colors hover:bg-gray-200"
-                            >
-                                취소
-                            </button>
+                            <div className="mt-5 flex gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsEditingSavingsGoal(false)}
+                                    className="flex-1 rounded-2xl bg-gray-100 py-3 text-[13px] font-medium text-gray-700 transition-colors hover:bg-gray-200"
+                                >
+                                    취소
+                                </button>
 
-                            <button
-                                type="button"
-                                disabled={isSavingGoal}
-                                onClick={async () => {
-                                    const targetAmount = Number(savingsGoalInput);
+                                <button
+                                    type="button"
+                                    disabled={isSavingGoal}
+                                    onClick={async () => {
+                                        const targetAmount = Number(savingsGoalInput);
 
-                                    if (!Number.isFinite(targetAmount) || targetAmount <= 0) {
-                                        return;
-                                    }
-
-                                    try {
-                                        setIsSavingGoal(true);
-
-                                        const response = await fetch("/api/living/savings-goal", {
-                                            method: "PUT",
-                                            headers: {
-                                                "Content-Type": "application/json",
-                                            },
-                                            body: JSON.stringify({
-                                                targetAmount,
-                                            }),
-                                        });
-
-                                        if (!response.ok) {
-                                            throw new Error("저축 목표 수정에 실패했습니다.");
+                                        if (!Number.isFinite(targetAmount) || targetAmount <= 0) {
+                                            return;
                                         }
 
-                                        setIsEditingSavingsGoal(false);
+                                        try {
+                                            setIsSavingGoal(true);
 
-                                        const refreshResponse = await fetch(`/api/living?month=${getCurrentMonth()}`);
+                                            const response = await fetch("/api/living/savings-goal", {
+                                                method: "PUT",
+                                                headers: {
+                                                    "Content-Type": "application/json",
+                                                },
+                                                body: JSON.stringify({
+                                                    targetAmount,
+                                                }),
+                                            });
 
-                                        if (refreshResponse.ok) {
-                                            const refreshedData = await refreshResponse.json();
+                                            if (!response.ok) {
+                                                throw new Error("저축 목표 수정에 실패했습니다.");
+                                            }
 
-                                            setData(refreshedData);
+                                            setIsEditingSavingsGoal(false);
+
+                                            const refreshResponse = await fetch(`/api/living?month=${getCurrentMonth()}`);
+
+                                            if (refreshResponse.ok) {
+                                                const refreshedData = await refreshResponse.json();
+
+                                                setData(refreshedData);
+                                            }
+                                        } catch (error) {
+                                            console.error(error);
+                                        } finally {
+                                            setIsSavingGoal(false);
                                         }
-                                    } catch (error) {
-                                        console.error(error);
-                                    } finally {
-                                        setIsSavingGoal(false);
-                                    }
-                                }}
-                                className="flex-1 rounded-2xl bg-gray-900 py-3 text-[13px] font-medium text-white transition-colors hover:bg-gray-800 disabled:opacity-50"
-                            >
-                                {isSavingGoal ? "저장 중" : "저장"}
-                            </button>
-                        </div>
+                                    }}
+                                    className="flex-1 rounded-2xl bg-gray-900 py-3 text-[13px] font-medium text-white transition-colors hover:bg-gray-800 disabled:opacity-50"
+                                >
+                                    {isSavingGoal ? "저장 중" : "저장"}
+                                </button>
+                            </div>
+                
+                
                     </>
                 )}
             </BottomSheet>

@@ -33,7 +33,7 @@ export default function UpgradeSheet({ isOpen, onClose, reason = "general", isPr
     const selectedPrice = billingInterval === "yearly" ? price.yearly : price.monthly;
 
     return (
-        <BottomSheet isOpen={isOpen} onClose={onClose} title="Pro">
+        <BottomSheet isOpen={isOpen} onClose={onClose} title="차곡의 Pro 요금제">
             <p className="text-sm leading-6 text-gray-600">{UPGRADE_MESSAGES[reason]}</p>
 
             {isPro ? (

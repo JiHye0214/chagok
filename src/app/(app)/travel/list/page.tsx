@@ -1,5 +1,6 @@
 "use client";
 
+import LoadingScreen from "@/components/LoadingScreen";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, Lock, Plane, Star } from "lucide-react";
@@ -665,11 +666,7 @@ export default function TravelListPage() {
      * ---------------------------------------------------------
      */
     if (isTripsLoading) {
-        return (
-            <div className="flex h-[calc(100vh-152px)] items-center justify-center">
-                <p className="text-sm text-gray-400">여행 기록 리스트를 불러오는 중...</p>
-            </div>
-        );
+        return <LoadingScreen />;
     }
 
     return (
@@ -1175,7 +1172,7 @@ export default function TravelListPage() {
                                 <button
                                     type="button"
                                     onClick={() => {
-                                        window.location.href = `/travel/${savedTrip.id}`;
+                                        window.location.href = `/travel/list/${savedTrip.id}`;
                                     }}
                                     className="w-full rounded-2xl bg-black py-4 text-sm font-medium text-white"
                                 >
@@ -1366,10 +1363,23 @@ export default function TravelListPage() {
                                                                         key={`${destination.countryCode}-${destinationCity.city}`}
                                                                         className="flex items-center justify-between rounded-xl bg-white px-3 py-2.5"
                                                                     >
-                                                                        <p className="truncate text-sm text-gray-700">
+                                                                        <p className="min-w-0 flex-1 truncate text-sm text-gray-700">
                                                                             {destinationCity.city}
                                                                         </p>
 
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() =>
+                                                                                removeDestinationCity(
+                                                                                    destination.countryCode,
+                                                                                    destinationCity.city,
+                                                                                )
+                                                                            }
+                                                                            className="shrink-0 pl-3 text-xs text-gray-400 transition hover:text-gray-700"
+                                                                            aria-label={`${destinationCity.city} 삭제`}
+                                                                        >
+                                                                            삭제
+                                                                        </button>
                                                                     </div>
                                                                 ))}
                                                             </div>
@@ -1396,7 +1406,7 @@ export default function TravelListPage() {
                                                         setShowCityResults(true);
                                                     }
                                                 }}
-                                                placeholder="도시를 추가해주세요 (예: New York)"
+                                                placeholder="도시를 추가해주세요 (예: 뉴욕)"
                                                 className="mt-2 h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
                                             />
 
@@ -1670,10 +1680,10 @@ export default function TravelListPage() {
                                     className="mt-2 h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
                                 >
                                     <option value="">국가를 선택해주세요</option>
-                                    <option value="CA">🇨🇦 Canada</option>
-                                    <option value="US">🇺🇸 United States</option>
-                                    <option value="KR">🇰🇷 South Korea</option>
-                                    <option value="JP">🇯🇵 Japan</option>
+                                    <option value="CA">🇨🇦 캐나다</option>
+                                    <option value="US">🇺🇸 미국</option>
+                                    <option value="KR">🇰🇷 대한민국</option>
+                                    <option value="JP">🇯🇵 일본</option>
                                 </select>
                             </div>
 

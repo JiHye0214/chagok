@@ -16,15 +16,12 @@ export default function CountryPage() {
         localStorage.setItem("chagok_country", country.code);
         localStorage.removeItem("chagok_region");
 
-        // 지역을 고르는 나라는 지역 선택에서 시간대가 정해진다
+        // 지역을 고르는 나라는 로그인 뒤 지역 선택에서 시간대가 정해진다
         if (country.hasRegions) {
             localStorage.removeItem("chagok_timezone");
-
-            router.push("/onboarding/region");
-            return;
+        } else {
+            localStorage.setItem("chagok_timezone", country.defaultTimezone);
         }
-
-        localStorage.setItem("chagok_timezone", country.defaultTimezone);
 
         router.push("/auth/login");
     };

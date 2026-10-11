@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/user";
+import { getPlanCode } from "@/lib/api/plan";
 
 type DestinationCity = {
     city: string;
@@ -110,22 +111,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
         }
 
-        const subscription = await sql`
-            SELECT
-                s.plan_id,
-                p.code AS plan_code
-            FROM subscriptions s
-            JOIN plans p
-                ON p.id = s.plan_id
-            WHERE s.user_id = ${user.id}
-            LIMIT 1
-        `;
-
-        if (subscription.length === 0) {
-            return NextResponse.json({ error: "구독 정보를 찾을 수 없습니다." }, { status: 403 });
-        }
-
-        const planCode = subscription[0].plan_code;
+        const planCode = await getPlanCode(user.id);
 
         if (planCode === "free") {
             const tripCount = await sql`

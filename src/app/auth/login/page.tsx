@@ -15,6 +15,7 @@ export default function LoginPage() {
 
     const handleGoogleLogin = async () => {
         sessionStorage.setItem("chagok_login_splash", "true");
+        sessionStorage.setItem("chagok_login_check", "true");
 
         await authClient.signIn.social({
             provider: "google",
@@ -24,6 +25,7 @@ export default function LoginPage() {
 
     const handleKakaoLogin = async () => {
         sessionStorage.setItem("chagok_login_splash", "true");
+        sessionStorage.setItem("chagok_login_check", "true");
 
         await authClient.signIn.social({
             provider: "kakao",
@@ -107,11 +109,7 @@ export default function LoginPage() {
                 <button
                     type="button"
                     onClick={() => {
-                        if (countryConfig?.hasRegions) {
-                            window.location.href = "/onboarding/region";
-                        } else {
-                            window.location.href = "/onboarding/country";
-                        }
+                        window.location.href = "/onboarding/country";
                     }}
                     className="absolute bottom-8 left-6 text-xs text-gray-400 transition hover:text-gray-900"
                 >

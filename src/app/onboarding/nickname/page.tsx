@@ -35,6 +35,20 @@ export default function NicknamePage() {
                     router.replace("/");
                     return;
                 }
+
+                // 로그인만 하고 언어·국가를 고르지 않은 새 사용자는 처음 단계부터 진행한다
+                const chosenCountry = getCountry(savedCountry);
+
+                if (!chosenCountry) {
+                    router.replace("/onboarding/language");
+                    return;
+                }
+
+                // 지역을 고르는 나라인데 지역이 아직 없으면 지역 선택으로 보낸다
+                if (chosenCountry.hasRegions && !localStorage.getItem("chagok_region")) {
+                    router.replace("/onboarding/region");
+                    return;
+                }
             } catch (error) {
                 console.error("프로필 확인 실패:", error);
             } finally {
@@ -180,7 +194,7 @@ export default function NicknamePage() {
 
                 <button
                     type="button"
-                    onClick={() => router.push("/auth/login")}
+                    onClick={() => router.push(getCountry(country)?.hasRegions ? "/onboarding/region" : "/onboarding/country")}
                     className="absolute bottom-8 left-6 text-xs text-gray-400 transition hover:text-gray-900"
                 >
                     ← 이전

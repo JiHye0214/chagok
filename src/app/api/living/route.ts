@@ -1,3 +1,4 @@
+import { getFixedExpenseTotalForMonth } from "@/lib/api/fixedExpenses";
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/user";
@@ -97,13 +98,8 @@ export async function GET(request: Request) {
                     lt.id DESC
             `,
 
-            sql`
-                SELECT
-                    COALESCE(SUM(amount), 0) AS total
-                FROM living_fixed_expenses
-                WHERE user_id = ${user.id}
-                  AND is_active = TRUE
-            `,
+            // 그 달에 적용되는 고정지출 합계 (달마다 금액이 다를 수 있다)
+            getFixedExpenseTotalForMonth(user.id, currentMonth.start.slice(0, 7)),
 
             sql`
                 SELECT

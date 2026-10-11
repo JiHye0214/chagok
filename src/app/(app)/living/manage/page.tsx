@@ -1,5 +1,6 @@
 "use client";
 
+import LoadingScreen, { InlineLoading } from "@/components/LoadingScreen";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, X, GripVertical, Lock } from "lucide-react";
 import { useSearchParams } from "next/navigation";
@@ -7,6 +8,7 @@ import BackButtonHeader from "@/components/BackButtonHeader";
 import { useUpgrade } from "@/components/UpgradeProvider";
 import { useDialog } from "@/components/DialogProvider";
 import UsageMeter from "@/components/UsageMeter";
+import BottomSheet from "@/components/BottomSheet";
 
 type TransactionType = "income" | "expense" | "transfer";
 
@@ -40,6 +42,19 @@ type FixedExpense = {
     paymentDay: number;
     memo: string | null;
     sortOrder: number;
+    // 아직 시작 전인 고정지출 (startMonth: "YYYY-MM")
+    startMonth: string | null;
+    isUpcoming: boolean;
+};
+
+type FixedChangeScope = "this-month-only" | "from-this-month" | "from-next-month";
+type FixedDeleteMode = "this-month-only" | "from-this-month" | "all";
+
+// 고정지출은 "이번 달" 기준으로 보여주고 바꾼다
+const getThisMonthString = () => {
+    const now = new Date();
+
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 };
 
 type Holiday = {
@@ -151,7 +166,6 @@ export default function LivingManagePage() {
 
     const [holidays, setHolidays] = useState<Holiday[]>([]);
     const [totalTransactionCount, setTotalTransactionCount] = useState(0);
-    const [totalFixedExpenseCount, setTotalFixedExpenseCount] = useState(0);
 
     const [selectedDate, setSelectedDate] = useState<string>(formatDate(new Date()));
 
@@ -199,16 +213,22 @@ export default function LivingManagePage() {
         categoryId: "",
         paymentDay: "1",
         memo: "",
+        // 새로 추가할 때만 쓴다
+        startMode: "this-month" as "this-month" | "next-month",
     });
 
+    // 금액·결제일을 바꿀 때 "언제부터 적용할지" 고르는 시트 / 삭제 방식을 고르는 시트
+    const [isFixedScopeSheetOpen, setIsFixedScopeSheetOpen] = useState(false);
+    const [fixedDeleteTarget, setFixedDeleteTarget] = useState<FixedExpense | null>(null);
+
     const FREE_LIVING_TRANSACTION_LIMIT = 300;
-    const FREE_FIXED_EXPENSE_LIMIT = 5;
 
     const isFree = planCode === "free";
 
     const isLivingTransactionLimitReached = isFree && totalTransactionCount >= FREE_LIVING_TRANSACTION_LIMIT;
 
-    const isFixedExpenseLimitReached = isFree && totalFixedExpenseCount >= FREE_FIXED_EXPENSE_LIMIT;
+    // 고정지출은 Pro 전용이라 무료 플랜은 추가할 수 없다.
+    const isFixedExpenseLimitReached = isFree;
 
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
@@ -260,7 +280,10 @@ export default function LivingManagePage() {
         );
     }, [transactions]);
 
-    const fixedExpenseTotal = useMemo(() => fixedExpenses.reduce((sum, expense) => sum + expense.amount, 0), [fixedExpenses]);
+    const fixedExpenseTotal = useMemo(
+        () => fixedExpenses.filter((expense) => !expense.isUpcoming).reduce((sum, expense) => sum + expense.amount, 0),
+        [fixedExpenses],
+    );
 
     const transactionsByDate = useMemo(() => {
         const grouped = new Map<string, LivingTransaction[]>();
@@ -331,7 +354,7 @@ export default function LivingManagePage() {
         try {
             setFixedLoading(true);
 
-            const response = await fetch("/api/living/fixed-expenses");
+            const response = await fetch(`/api/living/fixed-expenses?month=${getThisMonthString()}`);
 
             if (!response.ok) {
                 throw new Error("고정지출을 불러오지 못했습니다.");
@@ -340,7 +363,6 @@ export default function LivingManagePage() {
             const data = await response.json();
 
             setFixedExpenses(data.fixedExpenses ?? []);
-            setTotalFixedExpenseCount(Number(data.totalCount ?? 0));
         } catch (error) {
             console.error(error);
         } finally {
@@ -713,6 +735,7 @@ export default function LivingManagePage() {
             categoryId: categories.find((category) => category.kind === "fixed")?.id.toString() ?? "",
             paymentDay: "1",
             memo: "",
+            startMode: "this-month",
         });
 
         setIsFixedFormOpen(true);
@@ -727,26 +750,32 @@ export default function LivingManagePage() {
             categoryId: String(expense.categoryId),
             paymentDay: String(expense.paymentDay),
             memo: expense.memo ?? "",
+            startMode: "this-month",
         });
 
         setIsFixedFormOpen(true);
     };
 
-    const saveFixedExpense = async () => {
+    const isFixedFormValid = () => {
         const amount = Number(fixedForm.amount);
         const paymentDay = Number(fixedForm.paymentDay);
 
-        if (!fixedForm.name.trim() || !amount || amount <= 0 || !fixedForm.categoryId || paymentDay < 1 || paymentDay > 31) {
+        return Boolean(fixedForm.name.trim() && amount && amount > 0 && fixedForm.categoryId && paymentDay >= 1 && paymentDay <= 31);
+    };
+
+    const submitFixedExpense = async (scope?: FixedChangeScope) => {
+        if (!isFixedFormValid()) {
             return;
         }
 
         try {
             const payload = {
                 name: fixedForm.name.trim(),
-                amount,
+                amount: Number(fixedForm.amount),
                 categoryId: Number(fixedForm.categoryId),
-                paymentDay,
+                paymentDay: Number(fixedForm.paymentDay),
                 memo: fixedForm.memo.trim() || null,
+                month: getThisMonthString(),
             };
 
             const response = await fetch("/api/living/fixed-expenses", {
@@ -759,8 +788,12 @@ export default function LivingManagePage() {
                         ? {
                               id: editingFixedExpense.id,
                               ...payload,
+                              scope,
                           }
-                        : payload,
+                        : {
+                              ...payload,
+                              startMode: fixedForm.startMode,
+                          },
                 ),
             });
 
@@ -770,22 +803,54 @@ export default function LivingManagePage() {
                 throw new Error(data?.error ?? "고정지출을 저장하지 못했습니다.");
             }
 
+            setIsFixedScopeSheetOpen(false);
             setIsFixedFormOpen(false);
             setEditingFixedExpense(null);
 
             await loadFixedExpenses();
         } catch (error) {
             console.error(error);
+
+            setIsFixedScopeSheetOpen(false);
+
+            showAlert(error instanceof Error ? error.message : "고정지출을 저장하지 못했어요.");
         }
     };
 
-    const deleteFixedExpense = async (id: number) => {
-        if (!await confirm("이 고정지출을 삭제할까요?")) {
+    const saveFixedExpense = async () => {
+        if (!isFixedFormValid()) {
             return;
         }
 
+        // 금액이나 결제일이 바뀌면 언제부터 적용할지 먼저 묻는다 (시작 전 항목은 묻지 않는다)
+        if (
+            editingFixedExpense &&
+            !editingFixedExpense.isUpcoming &&
+            (Number(fixedForm.amount) !== editingFixedExpense.amount || Number(fixedForm.paymentDay) !== editingFixedExpense.paymentDay)
+        ) {
+            setIsFixedScopeSheetOpen(true);
+            return;
+        }
+
+        await submitFixedExpense();
+    };
+
+    const requestDeleteFixedExpense = async (expense: FixedExpense) => {
+        // 시작 전 항목은 지울 방식이 하나뿐이다
+        if (expense.isUpcoming) {
+            if (await confirm("이 고정지출을 삭제할까요?")) {
+                await deleteFixedExpense(expense.id, "all");
+            }
+
+            return;
+        }
+
+        setFixedDeleteTarget(expense);
+    };
+
+    const deleteFixedExpense = async (id: number, mode: FixedDeleteMode) => {
         try {
-            const response = await fetch(`/api/living/fixed-expenses?id=${id}`, {
+            const response = await fetch(`/api/living/fixed-expenses?id=${id}&mode=${mode}&month=${getThisMonthString()}`, {
                 method: "DELETE",
             });
 
@@ -793,12 +858,17 @@ export default function LivingManagePage() {
                 throw new Error("고정지출을 삭제하지 못했습니다.");
             }
 
+            setFixedDeleteTarget(null);
             setIsFixedFormOpen(false);
             setEditingFixedExpense(null);
 
             await loadFixedExpenses();
         } catch (error) {
             console.error(error);
+
+            setFixedDeleteTarget(null);
+
+            showAlert("고정지출을 삭제하지 못했어요.");
         }
     };
 
@@ -994,6 +1064,11 @@ export default function LivingManagePage() {
 
     const categoryModalCategories = categories.filter((category) => category.kind === categoryForm.kind);
 
+    // 처음 불러오는 동안에는 로딩 화면만 보여준다 (헤더가 비쳐 보이지 않게)
+    if (loading && fixedLoading) {
+        return <LoadingScreen />;
+    }
+
     return (
         <div className="mx-auto max-w-md">
             <BackButtonHeader href="/living" title="생활 관리" description="수입과 지출을 기록하고 관리해보세요." />
@@ -1096,10 +1171,7 @@ export default function LivingManagePage() {
                     <>
                         <div className="mt-5">
                             {fixedLoading ? (
-                                <div className="space-y-3">
-                                    <div className="h-14 animate-pulse rounded-2xl bg-gray-50" />
-                                    <div className="h-14 animate-pulse rounded-2xl bg-gray-50" />
-                                </div>
+                                <InlineLoading />
                             ) : fixedExpenses.length === 0 ? (
                                 <div className="rounded-2xl bg-[#F7F7F5] px-5 py-7 text-center">
                                     <p className="text-sm font-medium text-gray-600">등록된 고정지출이 없어요.</p>
@@ -1132,6 +1204,12 @@ export default function LivingManagePage() {
                                                     <span className="shrink-0 text-[10px] text-gray-400">
                                                         {expense.paymentDay}일
                                                     </span>
+
+                                                    {expense.isUpcoming && expense.startMonth && (
+                                                        <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-gray-500">
+                                                            {Number(expense.startMonth.slice(5))}월부터
+                                                        </span>
+                                                    )}
                                                 </div>
 
                                                 <p className="mt-0.5 text-xs text-gray-400">{expense.categoryName}</p>
@@ -1177,7 +1255,9 @@ export default function LivingManagePage() {
                 </div>
 
                 {loading ? (
-                    <div className="h-96 animate-pulse rounded-2xl bg-gray-50" />
+                    <div className="flex h-96 items-center justify-center">
+                        <InlineLoading />
+                    </div>
                 ) : (
                     <div className="grid grid-cols-7 gap-y-1">
                         {calendarCells.map((day, index) => {
@@ -1644,24 +1724,26 @@ export default function LivingManagePage() {
                                     />
                                 )}
 
-                                <button
-                                    type="button"
-                                    onClick={saveTransaction}
-                                    className="w-full rounded-2xl bg-gray-900 py-3.5 text-sm font-medium text-white"
-                                >
-                                    {editingTransaction ? "수정하기" : "기록하기"}
-                                </button>
-
-                                {editingTransaction && (
+                                <div className="flex gap-3">
                                     <button
                                         type="button"
-                                        onClick={() => deleteTransaction(editingTransaction.id)}
-                                        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-red-50 py-3.5 text-sm font-medium text-red-500"
+                                        onClick={saveTransaction}
+                                        className="flex-1 rounded-2xl bg-gray-900 py-3.5 text-sm font-medium text-white"
                                     >
-                                        <Trash2 size={16} />
-                                        삭제하기
+                                        {editingTransaction ? "수정하기" : "기록하기"}
                                     </button>
-                                )}
+
+                                    {editingTransaction && (
+                                        <button
+                                            type="button"
+                                            onClick={() => deleteTransaction(editingTransaction.id)}
+                                            className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-red-50 py-3.5 text-sm font-medium text-red-500"
+                                        >
+                                            <Trash2 size={16} />
+                                            삭제하기
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1685,27 +1767,19 @@ export default function LivingManagePage() {
                             isFixedFormAnimating ? "translate-y-0" : "translate-y-full"
                         }`}
                     >
-                        <div className="flex shrink-0 items-center justify-center px-6 pb-4 pt-3">
+                        <div className="flex shrink-0 items-center justify-center px-6 pb-3 pt-3">
                             <div className="h-1.5 w-10 rounded-full bg-gray-300" />
                         </div>
 
                         <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-8 pt-2">
-                            <div className="mb-7 flex items-center justify-between">
+                            <div className="mb-6 flex items-center justify-between">
                                 <div>
                                     <p className="text-xs text-gray-400">고정지출</p>
 
-                                    <h2 className="mt-1 text-2xl font-bold tracking-[-0.04em] text-gray-950">
+                                    <h2 className="mt-1 text-xl font-semibold text-gray-900">
                                         {editingFixedExpense ? "고정지출 수정" : "고정지출 추가"}
                                     </h2>
                                 </div>
-
-                                <button
-                                    type="button"
-                                    onClick={() => setIsFixedFormOpen(false)}
-                                    className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-gray-500 shadow-sm"
-                                >
-                                    <X size={17} />
-                                </button>
                             </div>
 
                             <div className="space-y-4">
@@ -1719,10 +1793,10 @@ export default function LivingManagePage() {
                                             name: event.target.value,
                                         }))
                                     }
-                                    className="w-full rounded-3xl bg-white px-5 py-4 text-sm shadow-sm outline-none placeholder:text-gray-300"
+                                    className="w-full rounded-2xl bg-gray-100 px-4 py-3.5 text-sm outline-none"
                                 />
 
-                                <div className="flex items-center rounded-3xl bg-white px-5 py-4 shadow-sm">
+                                <div className="flex items-center rounded-2xl bg-gray-100 px-4 py-3">
                                     <span className="mr-2 text-lg font-medium text-gray-400">{getCurrencySymbol(currency)}</span>
 
                                     <input
@@ -1738,12 +1812,34 @@ export default function LivingManagePage() {
                                                 amount: event.target.value,
                                             }))
                                         }
-                                        className="w-full bg-transparent text-2xl font-bold text-gray-950 outline-none placeholder:text-gray-300"
+                                        className="w-full bg-transparent text-xl font-semibold text-gray-900 outline-none"
                                     />
                                 </div>
 
+                                {!editingFixedExpense && (
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {(
+                                            [
+                                                ["this-month", "이번 달부터"],
+                                                ["next-month", "다음 달부터"],
+                                            ] as const
+                                        ).map(([value, label]) => (
+                                            <button
+                                                key={value}
+                                                type="button"
+                                                onClick={() => setFixedForm((prev) => ({ ...prev, startMode: value }))}
+                                                className={`rounded-2xl py-3 text-sm font-medium ${
+                                                    fixedForm.startMode === value ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500"
+                                                }`}
+                                            >
+                                                {label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+
                                 <div>
-                                    <div className="grid grid-cols-2 gap-3">
+                                    <div className="grid grid-cols-2 gap-2">
                                         <select
                                             value={fixedForm.categoryId}
                                             onChange={(event) =>
@@ -1752,7 +1848,7 @@ export default function LivingManagePage() {
                                                     categoryId: event.target.value,
                                                 }))
                                             }
-                                            className="rounded-3xl bg-white px-5 py-4 text-sm shadow-sm outline-none"
+                                            className="rounded-2xl bg-gray-100 px-4 py-3.5 text-sm outline-none"
                                         >
                                             <option value="">카테고리</option>
 
@@ -1773,7 +1869,7 @@ export default function LivingManagePage() {
                                                     paymentDay: event.target.value,
                                                 }))
                                             }
-                                            className="rounded-3xl bg-white px-5 py-4 text-sm shadow-sm outline-none"
+                                            className="rounded-2xl bg-gray-100 px-4 py-3.5 text-sm outline-none"
                                         >
                                             {Array.from({ length: 31 }, (_, index) => index + 1).map((day) => (
                                                 <option key={day} value={day}>
@@ -1786,10 +1882,10 @@ export default function LivingManagePage() {
                                     <button
                                         type="button"
                                         onClick={() => openAddCategoryForm("fixed")}
-                                        className={`mt-3 flex w-full items-center justify-center gap-2 rounded-3xl border border-dashed py-3.5 text-[13px] font-medium transition-colors ${
+                                        className={`mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed py-3 text-[13px] font-medium transition-colors ${
                                             isFree
-                                                ? "border-gray-100 bg-white text-gray-300"
-                                                : "border-gray-200 bg-white text-gray-500 hover:border-gray-300"
+                                                ? "border-gray-100 bg-gray-50 text-gray-300"
+                                                : "border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-gray-50"
                                         }`}
                                     >
                                         {isFree ? <Lock size={14} /> : <Plus size={15} />}
@@ -1808,32 +1904,119 @@ export default function LivingManagePage() {
                                         }))
                                     }
                                     rows={3}
-                                    className="w-full resize-none rounded-3xl bg-white px-5 py-4 text-sm shadow-sm outline-none placeholder:text-gray-300"
+                                    className="w-full resize-none rounded-2xl bg-gray-100 px-4 py-3.5 text-sm outline-none"
                                 />
 
-                                <button
-                                    type="button"
-                                    onClick={saveFixedExpense}
-                                    className="w-full rounded-2xl bg-gray-900 py-4 text-sm font-semibold text-white transition-colors hover:bg-gray-800"
-                                >
-                                    {editingFixedExpense ? "수정하기" : "추가하기"}
-                                </button>
-
-                                {editingFixedExpense && (
+                                <div className="flex gap-3">
                                     <button
                                         type="button"
-                                        onClick={() => deleteFixedExpense(editingFixedExpense.id)}
-                                        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-red-50 py-4 text-sm font-medium text-red-500"
+                                        onClick={saveFixedExpense}
+                                        className="flex-1 rounded-2xl bg-gray-900 py-3.5 text-sm font-medium text-white"
                                     >
-                                        <Trash2 size={16} />
-                                        삭제하기
+                                        {editingFixedExpense ? "수정하기" : "추가하기"}
                                     </button>
-                                )}
+
+                                    {editingFixedExpense && (
+                                        <button
+                                            type="button"
+                                            onClick={() => void requestDeleteFixedExpense(editingFixedExpense)}
+                                            className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-red-50 py-3.5 text-sm font-medium text-red-500"
+                                        >
+                                            <Trash2 size={16} />
+                                            삭제하기
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
             )}
+
+            {/* 금액·결제일을 바꿀 때: 언제부터 적용할지 */}
+            <BottomSheet isOpen={isFixedScopeSheetOpen} onClose={() => setIsFixedScopeSheetOpen(false)}>
+                {isFixedScopeSheetOpen && (
+                    <>
+                        <div className="mb-5">
+                            <p className="text-xs text-gray-400">고정지출</p>
+
+                            <h3 className="mt-1 text-lg font-semibold tracking-[-0.03em] text-gray-900">언제부터 적용할까요?</h3>
+
+                            <p className="mt-2 text-sm leading-6 text-gray-500">
+                                지난 달 기록은 그대로 두고, 고른 시점부터 바뀐 금액과 결제일이 적용돼요.
+                            </p>
+                        </div>
+
+                        <div className="space-y-2">
+                            {(
+                                [
+                                    ["this-month-only", "이번 달만", "다음 달부터는 원래 금액과 결제일로 돌아가요."],
+                                    ["from-this-month", "이번 달부터 계속", "이번 달부터 새 금액과 결제일이 적용돼요."],
+                                    ["from-next-month", "다음 달부터 계속", "이번 달은 그대로 두고, 다음 달부터 바뀌어요."],
+                                ] as const
+                            ).map(([scope, title, description]) => (
+                                <button
+                                    key={scope}
+                                    type="button"
+                                    onClick={() => void submitFixedExpense(scope)}
+                                    className="w-full rounded-2xl bg-white px-4 py-4 text-left shadow-sm transition-colors active:bg-gray-50"
+                                >
+                                    <p className="text-sm font-semibold text-gray-900">{title}</p>
+
+                                    <p className="mt-1 text-xs text-gray-400">{description}</p>
+                                </button>
+                            ))}
+                        </div>
+                    </>
+                )}
+            </BottomSheet>
+
+            {/* 고정지출 삭제 방식 */}
+            <BottomSheet isOpen={Boolean(fixedDeleteTarget)} onClose={() => setFixedDeleteTarget(null)}>
+                {fixedDeleteTarget && (
+                    <>
+                        <div className="mb-5">
+                            <p className="text-xs text-gray-400">고정지출</p>
+
+                            <h3 className="mt-1 text-lg font-semibold tracking-[-0.03em] text-gray-900">
+                                &lsquo;{fixedDeleteTarget.name}&rsquo; 어떻게 할까요?
+                            </h3>
+                        </div>
+
+                        <div className="space-y-2">
+                            <button
+                                type="button"
+                                onClick={() => void deleteFixedExpense(fixedDeleteTarget.id, "this-month-only")}
+                                className="w-full rounded-2xl bg-white px-4 py-4 text-left shadow-sm transition-colors active:bg-gray-50"
+                            >
+                                <p className="text-sm font-semibold text-gray-900">이번 달만 종료</p>
+
+                                <p className="mt-1 text-xs text-gray-400">이번 달에는 나가지 않고, 다음 달부터 다시 나가요.</p>
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => void deleteFixedExpense(fixedDeleteTarget.id, "from-this-month")}
+                                className="w-full rounded-2xl bg-white px-4 py-4 text-left shadow-sm transition-colors active:bg-gray-50"
+                            >
+                                <p className="text-sm font-semibold text-gray-900">이번 달부터 종료</p>
+
+                                <p className="mt-1 text-xs text-gray-400">지난 달 기록은 그대로 남아요.</p>
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => void deleteFixedExpense(fixedDeleteTarget.id, "all")}
+                                className="w-full rounded-2xl bg-red-50 px-4 py-4 text-left transition-colors active:bg-red-100"
+                            >
+                                <p className="text-sm font-semibold text-red-500">전체 삭제</p>
+
+                                <p className="mt-1 text-xs text-red-400">지난 달 기록에서도 사라지고, 되돌릴 수 없어요.</p>
+                            </button>
+                        </div>
+                    </>
+                )}
+            </BottomSheet>
 
             {/* Category modal */}
             {isCategoryFormMounted && (

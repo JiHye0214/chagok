@@ -7,6 +7,7 @@ import { useUpgrade } from "@/components/UpgradeProvider";
 import TravelGlobe from "./TravelGlobe";
 import { Lock, NotebookTabs } from "lucide-react";
 import { parseDateOnly } from "@/lib/dateOnly";
+import LoadingScreen from "@/components/LoadingScreen";
 
 type TripCity = {
     id?: number;
@@ -485,11 +486,7 @@ export default function TravelPage() {
         .slice(0, 3);
 
     if (isTripsLoading) {
-        return (
-            <div className="flex h-[calc(100vh-152px)] items-center justify-center">
-                <p className="text-sm text-gray-400">여행 기록을 불러오는 중...</p>
-            </div>
-        );
+        return <LoadingScreen />;
     }
 
     // --------------------------------------------------
@@ -516,55 +513,83 @@ export default function TravelPage() {
         <div className="mx-auto max-w-md">
             {/* Header */}
             <header className="mt-5 mb-8">
-                <p className="text-sm text-gray-500">Chagok</p>
+                <p className="text-sm text-gray-500">차곡</p>
 
                 <div className="mt-2 flex items-center justify-between">
-                    <h1 className="text-3xl font-bold tracking-tight text-gray-900">Travel</h1>
+                    <h1 className="text-3xl font-bold tracking-tight text-gray-900">여행</h1>
 
                     <Link
                         href="/travel/list"
                         className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-gray-500 shadow-sm transition hover:bg-gray-50"
-                        aria-label="Travel records"
+                        aria-label="여행 기록"
                     >
                         <NotebookTabs size={18} strokeWidth={1.8} />
                     </Link>
                 </div>
 
                 <p className="mt-2 text-sm leading-relaxed text-gray-500">
-                    Save money for your trips and track your travel spending.
+                    다녀온 여행을 기록하고, 여행에 쓴 돈을 한눈에 확인해보세요.
                 </p>
             </header>
 
             {/* --------------------------------------------------
-        Travel Budget 
+        여행 요약 (모든 플랜)
         -------------------------------------------------- */}
             <section>
                 <div className="rounded-3xl bg-white p-5 shadow-sm">
-                    <div className="flex items-start justify-between">
-                        <div>
-                            <p className="text-xs text-gray-400">Travel Fund</p>
+                    <p className="text-xs text-gray-400">여행 요약</p>
 
-                            <p className="mt-1 text-lg font-bold text-gray-900">Until Your Next Trip</p>
+                    <p className="mt-1 text-lg font-bold text-gray-900">지금까지의 여행</p>
+
+                    <div className="mt-5 grid grid-cols-3 gap-3">
+                        <div className="rounded-2xl bg-gray-50 px-3 py-4 text-center">
+                            <p className="text-2xl font-bold tracking-tight text-gray-900">{completedTrips.length}</p>
+
+                            <p className="mt-1 text-[11px] text-gray-400">다녀온 여행</p>
                         </div>
 
-                        <span className="rounded-full bg-gray-100 px-3 py-2 text-xs font-medium text-gray-600">64%</span>
+                        <div className="rounded-2xl bg-gray-50 px-3 py-4 text-center">
+                            <p className="text-2xl font-bold tracking-tight text-gray-900">{traveledCountryCount}</p>
+
+                            <p className="mt-1 text-[11px] text-gray-400">방문 국가</p>
+                        </div>
+
+                        <div className="rounded-2xl bg-gray-50 px-3 py-4 text-center">
+                            <p className="text-2xl font-bold tracking-tight text-gray-900">{traveledCityCount}</p>
+
+                            <p className="mt-1 text-[11px] text-gray-400">방문 도시</p>
+                        </div>
                     </div>
 
-                    <div className="mt-5">
-                        <p className="text-3xl font-bold tracking-tight text-gray-900">$1,280</p>
+                    {recentCompletedTrips.length > 0 ? (
+                        <Link
+                            href={`/travel/list/${recentCompletedTrips[0].id}`}
+                            className="mt-4 flex items-center justify-between gap-3 border-t border-gray-100 pt-4"
+                        >
+                            <div className="min-w-0">
+                                <p className="text-[11px] text-gray-400">가장 최근 여행</p>
 
-                        <p className="mt-1 text-sm text-gray-400">$2,000 goal</p>
-                    </div>
+                                <p className="mt-0.5 truncate text-sm font-semibold text-gray-900">
+                                    {getDestinationLabel(recentCompletedTrips[0])}
+                                </p>
+                            </div>
 
-                    <div className="mt-4 h-2 overflow-hidden rounded-full bg-gray-100">
-                        <div className="h-full rounded-full bg-gray-900" style={{ width: "64%" }} />
-                    </div>
+                            <span className="shrink-0 text-xs text-gray-400">
+                                {formatDate(parseDateOnly(recentCompletedTrips[0].endDate))}
+                            </span>
+                        </Link>
+                    ) : (
+                        <div className="mt-4 border-t border-gray-100 pt-4">
+                            <p className="text-sm text-gray-500">아직 기록된 여행이 없어요. 첫 여행을 기록해보세요.</p>
 
-                    <div className="mt-4 flex items-center justify-between">
-                        <p className="text-xs text-gray-400">$720 to go</p>
-
-                        <p className="text-xs font-medium text-gray-700">New York ✈️</p>
-                    </div>
+                            <Link
+                                href="/travel/list"
+                                className="mt-3 inline-flex rounded-full bg-gray-900 px-4 py-2 text-xs font-medium text-white"
+                            >
+                                여행 기록하러 가기
+                            </Link>
+                        </div>
+                    )}
                 </div>
             </section>
 
@@ -582,7 +607,7 @@ export default function TravelPage() {
                                     <div className="flex items-center justify-between px-5 py-4">
                                         <div className="min-w-0">
                                             <div className="flex items-center gap-2">
-                                                <p className="text-xs font-medium text-blue-500">NEXT TRIP</p>
+                                                <p className="text-xs font-medium text-blue-500">다음 여행</p>
 
                                                 <span className="h-1 w-1 rounded-full bg-gray-300" />
 
@@ -615,7 +640,7 @@ export default function TravelPage() {
                                                 )}
                                             </span>
 
-                                            <span className="mt-1 text-[11px] text-gray-400">Until departure</span>
+                                            <span className="mt-1 text-[11px] text-gray-400">출발까지</span>
                                         </div>
                                     </div>
 
@@ -626,7 +651,7 @@ export default function TravelPage() {
                                         </p>
 
                                         <span className="text-xs font-medium text-gray-400 transition group-hover:text-gray-700">
-                                            View →
+                                            보기 →
                                         </span>
                                     </div>
                                 </div>
@@ -653,7 +678,7 @@ export default function TravelPage() {
                                     <Lock size={20} strokeWidth={2} className="text-gray-500" />
                                 </div>
 
-                                <p className="mt-4 text-sm font-semibold text-gray-900">Travel Statistics</p>
+                                <p className="mt-4 text-sm font-semibold text-gray-900">여행 통계</p>
 
                                 <p className="mt-1 text-xs text-gray-500">Pro에서 여행 통계를 확인할 수 있어요.</p>
 
@@ -678,9 +703,9 @@ export default function TravelPage() {
                     <div className="rounded-3xl bg-white p-5 shadow-sm">
                         <div className="flex items-start justify-between">
                             <div>
-                                <p className="text-xs text-gray-400">Travel Spending Analysis</p>
+                                <p className="text-xs text-gray-400">여행 지출 분석</p>
 
-                                <h2 className="mt-1 text-lg font-bold text-gray-900">Spending Patterns</h2>
+                                <h2 className="mt-1 text-lg font-bold text-gray-900">소비 패턴</h2>
                             </div>
 
                             {expenseCountry.name && (
@@ -691,9 +716,9 @@ export default function TravelPage() {
                         </div>
 
                         <p className="mt-5 text-base font-medium leading-relaxed text-gray-700">
-                            When I travel to {expenseCountry.name || "a destination"},
+                            {expenseCountry.name || "여행지"}에 가면,
                             <br />
-                            where do I spend the most?
+                            어디에 가장 많이 쓸까?
                         </p>
 
                         {categoryData.length > 0 ? (
@@ -728,16 +753,16 @@ export default function TravelPage() {
                             </div>
                         ) : (
                             <div className="mt-7 flex h-32 items-center justify-center rounded-2xl bg-gray-50">
-                                <p className="text-sm text-gray-400">No spending records yet</p>
+                                <p className="text-sm text-gray-400">아직 지출 기록이 없어요</p>
                             </div>
                         )}
 
                         <div className="mt-7 border-t border-gray-100 pt-5">
-                            <p className="text-xs text-gray-400">Average per night</p>
+                            <p className="text-xs text-gray-400">1박 평균</p>
 
                             <p className="mt-1 text-3xl font-bold tracking-tight text-gray-900">
                                 {expenseAnalysis.averagePerNight > 0
-                                    ? `$${Math.round(expenseAnalysis.averagePerNight).toLocaleString()}`
+                                    ? Math.round(expenseAnalysis.averagePerNight).toLocaleString()
                                     : "-"}
                                 <span className="ml-1 text-base font-normal text-gray-400">{expenseAnalysis.currency}</span>
                             </p>
@@ -745,15 +770,16 @@ export default function TravelPage() {
 
                         {categoryData.length > 0 ? (
                             <p className="mt-4 text-sm leading-relaxed text-gray-500">
-                                I spend the most on <span className="font-medium text-gray-900">{categoryData[0].name}</span>
+                                여행할 때{" "}
+                                <span className="font-medium text-gray-900">{categoryData[0].name}</span>에
                                 <br />
-                                when I travel.
+                                가장 많이 써요.
                             </p>
                         ) : (
                             <p className="mt-4 text-sm leading-relaxed text-gray-400">
-                                Record your travel spending
+                                여행 지출을 기록하면
                                 <br />
-                                to discover your spending patterns.
+                                나의 소비 패턴을 알려드려요.
                             </p>
                         )}
                     </div>
@@ -764,20 +790,20 @@ export default function TravelPage() {
                             <div className="p-5">
                                 <div className="flex items-start justify-between">
                                     <div>
-                                        <p className="text-xs text-gray-400">Travel Spending Analysis</p>
+                                        <p className="text-xs text-gray-400">여행 지출 분석</p>
 
-                                        <h2 className="mt-1 text-lg font-bold text-gray-900">Spending Patterns</h2>
+                                        <h2 className="mt-1 text-lg font-bold text-gray-900">소비 패턴</h2>
                                     </div>
 
                                     <span className="rounded-full bg-gray-100 px-3 py-2 text-xs font-medium text-gray-500">
-                                        United States
+                                        미국
                                     </span>
                                 </div>
 
                                 <p className="mt-5 text-base font-medium leading-relaxed text-gray-700">
-                                    When I travel to a destination,
+                                    여행지에 가면,
                                     <br />
-                                    where do I spend the most?
+                                    어디에 가장 많이 쓸까?
                                 </p>
 
                                 <div className="mt-7">
@@ -796,7 +822,7 @@ export default function TravelPage() {
                                                 </div>
 
                                                 <p className="mt-3 w-full truncate text-center text-[11px] font-medium text-gray-500">
-                                                    Category
+                                                    카테고리
                                                 </p>
                                             </div>
                                         ))}
@@ -804,18 +830,18 @@ export default function TravelPage() {
                                 </div>
 
                                 <div className="mt-7 border-t border-gray-100 pt-5">
-                                    <p className="text-xs text-gray-400">Average per night</p>
+                                    <p className="text-xs text-gray-400">1박 평균</p>
 
                                     <p className="mt-1 text-3xl font-bold tracking-tight text-gray-900">
-                                        $120
+                                        120
                                         <span className="ml-1 text-base font-normal text-gray-400">USD</span>
                                     </p>
                                 </div>
 
                                 <p className="mt-4 text-sm leading-relaxed text-gray-500">
-                                    I spend the most on Category
+                                    여행할 때 카테고리에
                                     <br />
-                                    when I travel.
+                                    가장 많이 써요.
                                 </p>
                             </div>
                         </div>
@@ -826,7 +852,7 @@ export default function TravelPage() {
                                 <Lock size={20} strokeWidth={2} className="text-gray-500" />
                             </div>
 
-                            <p className="mt-4 text-sm font-semibold text-gray-900">Travel Spending Analysis</p>
+                            <p className="mt-4 text-sm font-semibold text-gray-900">여행 지출 분석</p>
 
                             <p className="mt-1 text-xs text-gray-500">Pro에서 여행 지출 통계를 확인할 수 있어요.</p>
 

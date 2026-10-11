@@ -1,5 +1,6 @@
 "use client";
 
+import LoadingScreen from "@/components/LoadingScreen";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -216,6 +217,9 @@ export default function TravelDetailPage() {
 
     const [categories, setCategories] = useState<ExpenseCategory[]>([]);
     const [isCategoryLoading, setIsCategoryLoading] = useState(false);
+    // 경비와 카테고리를 처음 한 번 다 불러왔는지 (끝나기 전에는 로딩 화면만 보여준다)
+    const [hasLoadedExpenses, setHasLoadedExpenses] = useState(false);
+    const [hasLoadedCategories, setHasLoadedCategories] = useState(false);
 
     // 도시 검색
     const isCityInputChangedRef = useRef(false);
@@ -343,6 +347,8 @@ export default function TravelDetailPage() {
                 setExpenseCells(cells);
             } catch (error) {
                 console.error("여행 경비를 불러오지 못했습니다.", error);
+            } finally {
+                setHasLoadedExpenses(true);
             }
         };
 
@@ -403,6 +409,7 @@ export default function TravelDetailPage() {
                 console.error("여행 경비 카테고리를 불러오지 못했습니다.", error);
             } finally {
                 setIsCategoryLoading(false);
+                setHasLoadedCategories(true);
             }
         };
 
@@ -847,12 +854,8 @@ export default function TravelDetailPage() {
         };
     }, [displayCategoryIndex, displayCategoryAmount, displayCategoryPercentage]);
 
-    if (isLoading) {
-        return (
-            <div className="flex h-[calc(100vh-152px)] items-center justify-center">
-                <p className="text-sm text-gray-400">여행 기록을 불러오는 중...</p>
-            </div>
-        );
+    if (isLoading || (trip?.id && !(hasLoadedExpenses && hasLoadedCategories))) {
+        return <LoadingScreen />;
     }
 
     if (!trip) {
@@ -1699,7 +1702,7 @@ export default function TravelDetailPage() {
                                                 setShowEditCityResults(true);
                                             }
                                         }}
-                                        placeholder="도시를 추가해주세요 (예: New York)"
+                                        placeholder="도시를 추가해주세요 (예: 뉴욕)"
                                         className="h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
                                     />
 
@@ -2317,10 +2320,10 @@ export default function TravelDetailPage() {
                                     className="mt-2 h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
                                 >
                                     <option value="">국가를 선택해주세요</option>
-                                    <option value="CA">🇨🇦 Canada</option>
-                                    <option value="US">🇺🇸 United States</option>
-                                    <option value="KR">🇰🇷 South Korea</option>
-                                    <option value="JP">🇯🇵 Japan</option>
+                                    <option value="CA">🇨🇦 캐나다</option>
+                                    <option value="US">🇺🇸 미국</option>
+                                    <option value="KR">🇰🇷 대한민국</option>
+                                    <option value="JP">🇯🇵 일본</option>
                                 </select>
                             </div>
 

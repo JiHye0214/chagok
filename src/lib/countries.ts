@@ -125,7 +125,8 @@ export const getRegionLabel = (countryCode: string | null | undefined, regionCod
 
 /*
  * 온보딩 단계 번호. 지역을 고르는 나라는 한 단계가 더 있다.
- * 언어 01 → 국가 02 → (지역 03) → 로그인 → 닉네임
+ * 언어 01 → 국가 02 → 로그인 03 → (지역 04) → 닉네임
+ * (이미 가입한 사람은 로그인 뒤 바로 앱으로 들어가므로 지역·닉네임 단계를 거치지 않는다)
  */
 export type OnboardingStep = "language" | "country" | "region" | "login" | "nickname";
 
@@ -133,7 +134,7 @@ export const getOnboardingStepNumber = (step: OnboardingStep, countryCode: strin
     const regionStep = getCountry(countryCode)?.hasRegions ? 1 : 0;
 
     const number =
-        step === "language" ? 1 : step === "country" ? 2 : step === "region" ? 3 : step === "login" ? 3 + regionStep : 4 + regionStep;
+        step === "language" ? 1 : step === "country" ? 2 : step === "login" ? 3 : step === "region" ? 4 : 4 + regionStep;
 
     return String(number).padStart(2, "0");
 };

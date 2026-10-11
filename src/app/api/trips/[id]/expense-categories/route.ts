@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/user";
+import { getPlanCode } from "@/lib/api/plan";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
@@ -73,17 +74,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             return NextResponse.json({ error: "해당 여행을 찾을 수 없습니다." }, { status: 404 });
         }
 
-        const [subscription] = await sql`
-            SELECT
-                p.code AS plan_code
-            FROM subscriptions s
-            JOIN plans p
-                ON p.id = s.plan_id
-            WHERE s.user_id = ${user.id}
-            LIMIT 1
-        `;
-
-        const planCode = subscription?.plan_code ?? "free";
+        const planCode = await getPlanCode(user.id);
 
         if (planCode === "free") {
             return NextResponse.json(
@@ -166,17 +157,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         }
 
         // 여행 경비 커스텀 카테고리 수정은 Pro 전용
-        const [subscription] = await sql`
-            SELECT
-                p.code AS plan_code
-            FROM subscriptions s
-            JOIN plans p
-                ON p.id = s.plan_id
-            WHERE s.user_id = ${user.id}
-            LIMIT 1
-        `;
-
-        const planCode = subscription?.plan_code ?? "free";
+        const planCode = await getPlanCode(user.id);
 
         if (planCode === "free") {
             return NextResponse.json(
@@ -267,17 +248,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
         }
 
         // 여행 경비 커스텀 카테고리 삭제는 Pro 전용
-        const [subscription] = await sql`
-            SELECT
-                p.code AS plan_code
-            FROM subscriptions s
-            JOIN plans p
-                ON p.id = s.plan_id
-            WHERE s.user_id = ${user.id}
-            LIMIT 1
-        `;
-
-        const planCode = subscription?.plan_code ?? "free";
+        const planCode = await getPlanCode(user.id);
 
         if (planCode === "free") {
             return NextResponse.json(

@@ -20,7 +20,7 @@ export default function RegionPage() {
         }
 
         if (!savedCountry.hasRegions) {
-            router.replace("/auth/login");
+            router.replace("/onboarding/nickname");
             return;
         }
 
@@ -33,7 +33,7 @@ export default function RegionPage() {
         localStorage.setItem("chagok_region", regionCode);
         localStorage.setItem("chagok_timezone", timezoneCode);
 
-        router.push("/auth/login");
+        router.push("/onboarding/nickname");
     };
 
     if (!country) {
@@ -52,7 +52,7 @@ export default function RegionPage() {
                     <div className="w-full">
                         {/* Question */}
                         <div className="opacity-0 animate-[onboardingFadeUp_0.6s_ease-out_0.2s_forwards]">
-                            <p className="text-xs text-gray-400">03</p>
+                            <p className="text-xs text-gray-400">04</p>
 
                             <h1 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-gray-900">지역을 선택해 주세요</h1>
 
@@ -90,7 +90,7 @@ export default function RegionPage() {
                 {/* Back */}
                 <button
                     type="button"
-                    onClick={() => router.push("/onboarding/country")}
+                    onClick={() => router.push("/auth/login")}
                     className="absolute bottom-8 left-6 text-xs text-gray-400 transition hover:text-gray-900"
                 >
                     ← 이전

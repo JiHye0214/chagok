@@ -1,5 +1,6 @@
 "use client";
 
+import LoadingScreen from "@/components/LoadingScreen";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import BackButtonHeader from "@/components/BackButtonHeader";
@@ -997,17 +998,7 @@ export default function PayHistoryPage() {
     };
 
     if (isLoading || isSalaryLoading) {
-        return (
-            <div className="mx-auto max-w-md">
-                <BackButtonHeader
-                    href="/salary"
-                    title="급여 기록"
-                    description="지난 급여 기간과 실제 수령 금액을 확인해보세요."
-                />
-
-                <p className="mt-6 text-sm text-gray-400">급여 기록을 불러오는 중...</p>
-            </div>
-        );
+        return <LoadingScreen />;
     }
 
     return (

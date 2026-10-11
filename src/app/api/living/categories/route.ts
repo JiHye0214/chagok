@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/user";
+import { getPlanCode } from "@/lib/api/plan";
 
 type CategoryKind = "fixed" | "variable" | "income";
 
@@ -15,20 +16,6 @@ type CategoryRow = {
 const isCategoryKind = (value: unknown): value is CategoryKind => {
     return value === "fixed" || value === "variable" || value === "income";
 };
-
-async function getPlanCode(userId: string) {
-    const subscription = await sql`
-        SELECT
-            p.code AS plan_code
-        FROM subscriptions s
-        JOIN plans p
-            ON p.id = s.plan_id
-        WHERE s.user_id = ${userId}
-        LIMIT 1
-    `;
-
-    return subscription[0]?.plan_code ?? "free";
-}
 
 export async function GET() {
     try {

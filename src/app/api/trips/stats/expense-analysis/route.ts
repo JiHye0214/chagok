@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/user";
+import { getPlanCode } from "@/lib/api/plan";
 
 export async function GET() {
     try {
@@ -14,17 +15,7 @@ export async function GET() {
         // Pro 플랜 확인
         // --------------------------------------------------------
 
-        const [subscription] = await sql`
-            SELECT
-                p.code AS plan_code
-            FROM subscriptions s
-            JOIN plans p
-                ON p.id = s.plan_id
-            WHERE s.user_id = ${user.id}
-            LIMIT 1
-        `;
-
-        const planCode = subscription?.plan_code ?? "free";
+        const planCode = await getPlanCode(user.id);
 
         const [profileRow] = await sql`
             SELECT currency

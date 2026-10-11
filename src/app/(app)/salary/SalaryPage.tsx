@@ -1,5 +1,6 @@
 "use client";
 
+import LoadingScreen from "@/components/LoadingScreen";
 import { useEffect, useMemo, useState } from "react";
 import { formatDate, getSurroundingPayPeriods } from "@/lib/payPeriod";
 import Link from "next/link";
@@ -339,11 +340,7 @@ export default function SalaryPage() {
      */
 
     if (isLoading) {
-        return (
-            <div className="flex h-[calc(100vh-152px)] items-center justify-center">
-                <p className="text-sm text-gray-400">불러오는 중...</p>
-            </div>
-        );
+        return <LoadingScreen />;
     }
 
     /*

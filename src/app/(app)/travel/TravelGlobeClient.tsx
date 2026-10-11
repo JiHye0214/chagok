@@ -154,6 +154,9 @@ export default function TravelGlobeClient({ trips }: TravelGlobeClientProps) {
 
     const visitedCountryCount = new Set(trips.map((trip) => trip.countryCode.toUpperCase())).size;
 
+    // 같은 도시를 여러 번 다녀와도 한 번만 센다
+    const visitedCityCount = new Set(trips.map((trip) => `${trip.countryCode.toUpperCase()}:${trip.city}`)).size;
+
     // UN 회원국 기준 195개국
     const worldProgress = Math.min(Math.round((visitedCountryCount / 195) * 100), 100);
 
@@ -187,9 +190,9 @@ export default function TravelGlobeClient({ trips }: TravelGlobeClientProps) {
 
         {/* 제목 */}
         <div className="pointer-events-none absolute left-5 top-5">
-            <p className="text-xs font-medium tracking-wide text-gray-400">MY TRAVEL WORLD</p>
+            <p className="text-xs font-medium tracking-wide text-gray-400">나의 여행 지도</p>
 
-            <p className="mt-1 text-lg font-semibold text-gray-800">Places I've Been</p>
+            <p className="mt-1 text-lg font-semibold text-gray-800">내가 다녀온 곳</p>
         </div>
 
         {/* 여행 기록 보기 */}
@@ -197,22 +200,22 @@ export default function TravelGlobeClient({ trips }: TravelGlobeClientProps) {
             href="/travel/list"
             className="absolute right-5 top-5 shrink-0 rounded-full bg-gray-100 px-3 py-2 text-xs font-medium text-gray-600"
         >
-            Travel Log →
+            여행 기록 →
         </Link>
 
         {/* 여행 통계 */}
         <div className="pointer-events-none absolute bottom-5 left-5">
             <p className="text-sm text-gray-500">
-                {visitedCountryCount} countries · {trips.length} cities
+                {visitedCountryCount}개국 · {visitedCityCount}개 도시
             </p>
 
-            <p className="mt-1 text-xs text-gray-400">World travel {worldProgress}% complete</p>
+            <p className="mt-1 text-xs text-gray-400">세계 여행 {worldProgress}% 완료</p>
         </div>
 
         {/* 로딩 */}
         {!geoData && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <p className="text-xs text-gray-400">Loading world map...</p>
+                <p className="text-xs text-gray-400">세계 지도를 불러오는 중...</p>
             </div>
         )}
     </div>
