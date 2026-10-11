@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/user";
 import { getPlanCode } from "@/lib/api/plan";
+import { processPendingDowngrade } from "@/lib/api/downgrade";
 
 export async function GET() {
     const user = await getCurrentUser();
@@ -9,6 +10,9 @@ export async function GET() {
     if (!user) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    // 해지를 신청했고 결제 기간이 끝났다면, 여기서 한 번만 무료 한도에 맞춰 정리한다 (실패해도 던지지 않음)
+    await processPendingDowngrade(user.id);
 
     return NextResponse.json({
         id: user.id,

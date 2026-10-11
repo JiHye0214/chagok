@@ -1,6 +1,8 @@
 "use client";
 
 import LoadingScreen from "@/components/LoadingScreen";
+import { useI18n } from "@/components/I18nProvider";
+import { formatTripLength } from "@/lib/i18n/format";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, Lock, Plane, Star } from "lucide-react";
@@ -130,6 +132,7 @@ const getDestinationLabel = (destinations: TripDestination[]) => {
 };
 
 export default function TravelListPage() {
+    const { t } = useI18n();
     const { alert: showAlert } = useDialog();
     const { openUpgrade, isPro } = useUpgrade();
 
@@ -581,12 +584,12 @@ export default function TravelListPage() {
      */
     const handleSaveTrip = async () => {
         if (destinations.length === 0 || !startDate || !endDate) {
-            showAlert("여행지와 여행 정보를 모두 입력해주세요.");
+            showAlert(t("trip.alert.needAll"));
             return;
         }
 
         if (parseDateOnly(endDate) < parseDateOnly(startDate)) {
-            showAlert("여행 종료일은 시작일보다 빠를 수 없어요.");
+            showAlert(t("trip.alert.endBeforeStart"));
             return;
         }
 
@@ -594,7 +597,7 @@ export default function TravelListPage() {
         const firstCity = firstDestination?.cities[0];
 
         if (!firstDestination || !firstCity) {
-            showAlert("여행지를 하나 이상 추가해주세요.");
+            showAlert(t("trip.alert.needDestination"));
             return;
         }
 
@@ -654,7 +657,7 @@ export default function TravelListPage() {
         } catch (error) {
             console.error(error);
 
-            const message = error instanceof Error ? error.message : "여행을 저장하지 못했어요.";
+            const message = error instanceof Error ? error.message : t("trip.alert.saveFailed");
 
             showAlert(message);
         }
@@ -682,7 +685,7 @@ export default function TravelListPage() {
 
                     openAddTripModal();
                 }}
-                aria-label={canAddTrip ? "여행 추가" : "여행 추가 잠김"}
+                aria-label={canAddTrip ? t("trip.add") : t("trip.addLocked")}
                 className={"fixed bottom-24 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-black text-white shadow-lg transition active:scale-95"}
             >
                 {canAddTrip ? <span className="text-2xl font-light leading-none">+</span> : <Lock size={21} strokeWidth={2} />}
@@ -693,27 +696,27 @@ export default function TravelListPage() {
             -------------------------------------------------- */}
             <BackButtonHeader
                 href="/travel"
-                title="내 여행"
-                description="내가 다녀온 여행과 앞으로의 여행을 한곳에서 확인해보세요."
+                title={t("tl.k001")}
+                description={t("tl.k002")}
             />
 
-            <UsageMeter label="여행" used={trips.length} limit={FREE_PLAN_LIMITS.trips} reason="trip-limit" className="mt-5" />
+            <UsageMeter label={t("tl.k003")} used={trips.length} limit={FREE_PLAN_LIMITS.trips} reason="trip-limit" className="mt-5" />
 
             {trips.length === 0 ? (
                 /* --------------------------------------------------
                 여행 없음
                 -------------------------------------------------- */
                 <div className="mt-6 rounded-3xl bg-white px-5 py-10 text-center shadow-sm">
-                    <p className="text-sm font-medium text-gray-900">아직 여행 기록이 없어요</p>
+                    <p className="text-sm font-medium text-gray-900">{t("tl.k005")}</p>
 
-                    <p className="mt-1 text-xs text-gray-400">첫 여행을 추가해보세요.</p>
+                    <p className="mt-1 text-xs text-gray-400">{t("tl.k006")}</p>
 
                     <button
                         type="button"
                         onClick={openAddTripModal}
                         className="mt-5 inline-flex rounded-full bg-gray-900 px-5 py-2.5 text-sm font-medium text-white"
                     >
-                        여행 추가하기
+                        {t("tl.k007")}
                     </button>
                 </div>
             ) : (
@@ -728,14 +731,14 @@ export default function TravelListPage() {
                                 <div className="rounded-3xl bg-white shadow-sm">
                                     <div className="flex items-center justify-between px-5 py-4">
                                         <div className="flex items-center gap-2">
-                                            <h2 className="text-base font-semibold text-gray-900">예정된 여행</h2>
+                                            <h2 className="text-base font-semibold text-gray-900">{t("tl.k008")}</h2>
 
-                                            <span className="text-xs font-medium text-gray-400">{upcomingTrips.length}개</span>
+                                            <span className="text-xs font-medium text-gray-400">{t("trip.count", { count: upcomingTrips.length })}</span>
                                         </div>
 
                                         <button
                                             type="button"
-                                            aria-label={isUpcomingFilterOpen ? "필터 닫기" : "예정된 여행 필터 열기"}
+                                            aria-label={isUpcomingFilterOpen ? t("trip.filter.close") : t("trip.filter.openUpcoming")}
                                             onClick={() => setIsUpcomingFilterOpen((current) => !current)}
                                             className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-50"
                                         >
@@ -774,23 +777,23 @@ export default function TravelListPage() {
                                                 {[
                                                     {
                                                         value: "month" as const,
-                                                        label: "이번 달",
+                                                        label: t("trip.filter.month"),
                                                     },
                                                     {
                                                         value: "3months" as const,
-                                                        label: "3개월",
+                                                        label: t("trip.filter.3months"),
                                                     },
                                                     {
                                                         value: "6months" as const,
-                                                        label: "6개월",
+                                                        label: t("trip.filter.6months"),
                                                     },
                                                     {
                                                         value: "year" as const,
-                                                        label: "1년",
+                                                        label: t("trip.filter.year"),
                                                     },
                                                     {
                                                         value: "custom" as const,
-                                                        label: "사용자화",
+                                                        label: t("trip.filter.custom"),
                                                     },
                                                 ].map((option) => (
                                                     <button
@@ -820,7 +823,7 @@ export default function TravelListPage() {
                                                             : "bg-gray-100 text-gray-500"
                                                     }`}
                                                 >
-                                                    전체
+                                                    {t("tl.k009")}
                                                 </button>
                                             </div>
 
@@ -893,7 +896,7 @@ export default function TravelListPage() {
                                                                         (total, destination) => total + destination.cities.length,
                                                                         0,
                                                                     ) > 1
-                                                                        ? " 외"
+                                                                        ? t("trip.andMore")
                                                                         : ""}
                                                                 </p>
                                                             </div>
@@ -905,9 +908,7 @@ export default function TravelListPage() {
                                                         </p>
 
                                                         <p className="mt-1 text-xs text-gray-400">
-                                                            {nights === 0
-                                                                ? `당일치기 · ${trip.people}명`
-                                                                : `${nights}박 ${nights + 1}일 · ${trip.people}명`}
+                                                            {formatTripLength(t, nights, trip.people)}
                                                         </p>
                                                     </div>
 
@@ -928,9 +929,9 @@ export default function TravelListPage() {
                                 </div>
                             ) : (
                                 <div className="mt-4 rounded-3xl bg-white px-5 py-8 text-center shadow-sm">
-                                    <p className="text-sm font-medium text-gray-900">해당 기간에 예정된 여행이 없어요</p>
+                                    <p className="text-sm font-medium text-gray-900">{t("tl.k011")}</p>
 
-                                    <p className="mt-1 text-xs text-gray-400">다른 기간을 선택해보세요.</p>
+                                    <p className="mt-1 text-xs text-gray-400">{t("tl.k012")}</p>
                                 </div>
                             )}
                         </section>
@@ -943,14 +944,14 @@ export default function TravelListPage() {
                         <div className="rounded-3xl bg-white shadow-sm">
                             <div className="flex items-center justify-between px-5 py-4">
                                 <div className="flex items-center gap-2">
-                                    <h2 className="text-base font-semibold text-gray-900">다녀온 여행</h2>
+                                    <h2 className="text-base font-semibold text-gray-900">{t("tl.k013")}</h2>
 
-                                    <span className="text-xs font-medium text-gray-400">{completedTrips.length}개</span>
+                                    <span className="text-xs font-medium text-gray-400">{t("trip.count", { count: completedTrips.length })}</span>
                                 </div>
 
                                 <button
                                     type="button"
-                                    aria-label={isCompletedYearFilterOpen ? "필터 닫기" : "다녀온 여행 연도 필터 열기"}
+                                    aria-label={isCompletedYearFilterOpen ? t("trip.filter.close") : t("trip.filter.openCompleted")}
                                     onClick={() => setIsCompletedYearFilterOpen((current) => !current)}
                                     className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-50"
                                 >
@@ -1016,7 +1017,7 @@ export default function TravelListPage() {
                                                     : "bg-gray-100 text-gray-500"
                                             }`}
                                         >
-                                            전체
+                                            {t("tl.k009")}
                                         </button>
                                     </div>
                                 </div>
@@ -1091,9 +1092,7 @@ export default function TravelListPage() {
 
                                                         <div className="mt-1 flex items-end justify-between">
                                                             <p className="text-xs text-gray-400">
-                                                                {nights === 0
-                                                                    ? `당일치기 · ${trip.people}명`
-                                                                    : `${nights}박 ${nights + 1}일 · ${trip.people}명`}
+                                                                {formatTripLength(t, nights, trip.people)}
                                                             </p>
 
                                                             <p className="text-xs text-gray-400">
@@ -1116,20 +1115,20 @@ export default function TravelListPage() {
                                         onClick={() => setIsTravelExpanded((current) => !current)}
                                         className="mt-4 flex w-full items-center justify-center rounded-3xl bg-white py-3 text-xs font-medium text-gray-500 shadow-sm transition hover:bg-gray-50"
                                     >
-                                        {isTravelExpanded ? "접기" : `더보기 · ${completedTrips.length - 6}개`}
+                                        {isTravelExpanded ? t("trip.collapse") : t("trip.showMore", { count: completedTrips.length - 6 })}
                                     </button>
                                 )}
                             </>
                         ) : (
                             <div className="mt-4 rounded-3xl bg-white px-5 py-10 text-center shadow-sm">
                                 <p className="text-sm font-medium text-gray-900">
-                                    {completedYearFilter === "all" ? "아직 다녀온 여행이 없어요" : "해당 연도의 여행이 없어요"}
+                                    {completedYearFilter === "all" ? t("trip.empty.noneAll") : t("trip.empty.noneYear")}
                                 </p>
 
                                 <p className="mt-1 text-xs text-gray-400">
                                     {completedYearFilter === "all"
-                                        ? "여행을 다녀온 후 기록해보세요."
-                                        : "다른 연도를 선택해보세요."}
+                                        ? t("trip.empty.hintAll")
+                                        : t("trip.empty.hintYear")}
                                 </p>
                             </div>
                         )}
@@ -1143,7 +1142,7 @@ export default function TravelListPage() {
             <BottomSheet isOpen={Boolean(savedTrip)} onClose={() => setSavedTrip(null)}>
                 {savedTrip && (
                     <>
-                            <p className="text-lg font-bold">여행이 추가됐어요 ✈️</p>
+                            <p className="text-lg font-bold">{t("tl.k017")}</p>
 
                             {savedTrip.title ? (
                                 <p className="mt-4 text-2xl font-bold">{savedTrip.title}</p>
@@ -1160,13 +1159,11 @@ export default function TravelListPage() {
 
                                     const nights = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
 
-                                    return nights === 0
-                                        ? `당일치기 · ${savedTrip.people}명`
-                                        : `${nights}박 ${nights + 1}일 · ${savedTrip.people}명`;
+                                    return formatTripLength(t, nights, savedTrip.people);
                                 })()}
                             </p>
 
-                            <p className="mt-6 text-sm text-gray-500">여행 지출도 기록할까요?</p>
+                            <p className="mt-6 text-sm text-gray-500">{t("tl.k018")}</p>
 
                             <div className="mt-5 space-y-2">
                                 <button
@@ -1176,7 +1173,7 @@ export default function TravelListPage() {
                                     }}
                                     className="w-full rounded-2xl bg-black py-4 text-sm font-medium text-white"
                                 >
-                                    지출 기록하기
+                                    {t("tl.k019")}
                                 </button>
 
                                 <button
@@ -1186,7 +1183,7 @@ export default function TravelListPage() {
                                     }}
                                     className="w-full rounded-2xl bg-gray-100 py-4 text-sm font-medium text-gray-700"
                                 >
-                                    나중에 할게요
+                                    {t("tl.k020")}
                                 </button>
                             </div>
                 
@@ -1210,7 +1207,7 @@ export default function TravelListPage() {
                     <>
                             {/* 헤더 */}
                             <div className="flex items-center justify-between">
-                                <h2 className="text-xl font-bold">여행 추가</h2>
+                                <h2 className="text-xl font-bold">{t("tl.k022")}</h2>
 
                             </div>
 
@@ -1241,7 +1238,7 @@ export default function TravelListPage() {
                                     }`}
                                 >
                                     <div className="flex flex-col gap-5">
-                                        <p className="text-center text-lg font-semibold">어떤 여행인가요?</p>
+                                        <p className="text-center text-lg font-semibold">{t("tl.k024")}</p>
 
                                         <div className="flex gap-3">
                                             {/* 예정된 여행 */}
@@ -1260,7 +1257,7 @@ export default function TravelListPage() {
                                             >
                                                 <Plane size={25} strokeWidth={1.7} className="mb-2" />
 
-                                                <span className="text-sm font-medium">예정된 여행</span>
+                                                <span className="text-sm font-medium">{t("tl.k008")}</span>
                                             </button>
 
                                             {/* 다녀온 여행 */}
@@ -1279,7 +1276,7 @@ export default function TravelListPage() {
                                             >
                                                 <CheckCircle2 size={25} strokeWidth={1.7} className="mb-2" />
 
-                                                <span className="text-sm font-medium">다녀온 여행</span>
+                                                <span className="text-sm font-medium">{t("tl.k013")}</span>
                                             </button>
                                         </div>
                                     </div>
@@ -1307,26 +1304,26 @@ export default function TravelListPage() {
                                                 )}
 
                                                 <p className="text-sm font-medium">
-                                                    {tripType === "upcoming" ? "예정된 여행" : "다녀온 여행"}
+                                                    {tripType === "upcoming" ? t("trip.type.upcoming") : t("trip.type.completed")}
                                                 </p>
                                             </div>
 
                                             <p className="mt-1 text-xs text-gray-400">
                                                 {tripType === "upcoming"
-                                                    ? "앞으로 떠날 여행 정보를 입력해주세요."
-                                                    : "이미 다녀온 여행 정보를 입력해주세요."}
+                                                    ? t("trip.type.upcomingHint")
+                                                    : t("trip.type.completedHint")}
                                             </p>
                                         </div>
 
                                         {/* 여행 제목 */}
                                         <div>
-                                            <p className="text-sm font-medium text-gray-700">여행 제목</p>
+                                            <p className="text-sm font-medium text-gray-700">{t("tl.k026")}</p>
 
                                             <input
                                                 type="text"
                                                 value={title}
                                                 onChange={(e) => setTitle(e.target.value)}
-                                                placeholder="이 여행을 한마디로 남겨보세요"
+                                                placeholder={t("tl.k027")}
                                                 maxLength={50}
                                                 className="mt-2 w-full rounded-2xl bg-gray-100 px-4 py-4 text-sm outline-none"
                                             />
@@ -1336,7 +1333,7 @@ export default function TravelListPage() {
                                         여행지
                                         ================================================== */}
                                         <div className="relative">
-                                            <p className="text-sm font-medium text-gray-700">여행지</p>
+                                            <p className="text-sm font-medium text-gray-700">{t("tl.k028")}</p>
 
                                             {/* 선택된 여행지 */}
                                             {destinations.length > 0 && (
@@ -1376,9 +1373,9 @@ export default function TravelListPage() {
                                                                                 )
                                                                             }
                                                                             className="shrink-0 pl-3 text-xs text-gray-400 transition hover:text-gray-700"
-                                                                            aria-label={`${destinationCity.city} 삭제`}
+                                                                            aria-label={t("trip.removeCity", { city: destinationCity.city })}
                                                                         >
-                                                                            삭제
+                                                                            {t("tl.k029")}
                                                                         </button>
                                                                     </div>
                                                                 ))}
@@ -1406,7 +1403,7 @@ export default function TravelListPage() {
                                                         setShowCityResults(true);
                                                     }
                                                 }}
-                                                placeholder="도시를 추가해주세요 (예: 뉴욕)"
+                                                placeholder={t("tl.k030")}
                                                 className="mt-2 h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
                                             />
 
@@ -1414,7 +1411,7 @@ export default function TravelListPage() {
                                             {showCityResults && (
                                                 <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-2xl bg-white shadow-lg ring-1 ring-black/5">
                                                     {isCitySearching ? (
-                                                        <div className="px-4 py-4 text-sm text-gray-400">도시를 찾고 있어요...</div>
+                                                        <div className="px-4 py-4 text-sm text-gray-400">{t("tl.k031")}</div>
                                                     ) : citySearchResults.length > 0 ? (
                                                         <div className="max-h-64 overflow-y-auto scrollbar-hide">
                                                             {citySearchResults.map((result) => (
@@ -1448,7 +1445,7 @@ export default function TravelListPage() {
                                                         </div>
                                                     ) : (
                                                         <div className="px-4 py-4">
-                                                            <p className="text-sm text-gray-400">일치하는 도시를 찾지 못했어요.</p>
+                                                            <p className="text-sm text-gray-400">{t("tl.k032")}</p>
 
                                                             <button
                                                                 type="button"
@@ -1461,7 +1458,7 @@ export default function TravelListPage() {
                                                                 }}
                                                                 className="mt-3 w-full rounded-2xl bg-gray-50 px-4 py-3 text-sm font-medium text-gray-700 transition active:bg-gray-100"
                                                             >
-                                                                ＋ 이 도시 추가하기
+                                                                {t("trip.addThisCity")}
                                                             </button>
                                                         </div>
                                                     )}
@@ -1471,7 +1468,7 @@ export default function TravelListPage() {
 
                                         {/* 날짜 */}
                                         <div>
-                                            <p className="text-sm font-medium text-gray-700">여행 날짜</p>
+                                            <p className="text-sm font-medium text-gray-700">{t("tl.k033")}</p>
 
                                             <div className="mt-2 grid grid-cols-2 gap-3">
                                                 <input
@@ -1516,7 +1513,7 @@ export default function TravelListPage() {
 
                                         {/* 인원 */}
                                         <div>
-                                            <p className="text-sm font-medium text-gray-700">인원</p>
+                                            <p className="text-sm font-medium text-gray-700">{t("tl.k034")}</p>
 
                                             <input
                                                 type="number"
@@ -1532,7 +1529,7 @@ export default function TravelListPage() {
                                         {/* 예산 */}
                                         {tripType === "upcoming" && (
                                             <div>
-                                                <p className="text-sm font-medium text-gray-700">여행 예산</p>
+                                                <p className="text-sm font-medium text-gray-700">{t("tl.k035")}</p>
 
                                                 <input
                                                     type="number"
@@ -1541,7 +1538,7 @@ export default function TravelListPage() {
                                                     onChange={(e) => {
                                                         setBudget(e.target.value.replace(/^0+(?=\d)/, ""));
                                                     }}
-                                                    placeholder="예: 2000"
+                                                    placeholder={t("tl.k036")}
                                                     className="mt-2 w-full rounded-2xl bg-gray-100 px-4 py-4 text-sm outline-none"
                                                 />
                                             </div>
@@ -1550,7 +1547,7 @@ export default function TravelListPage() {
                                         {/* 평점 */}
                                         {tripType === "completed" && (
                                             <div>
-                                                <p className="text-sm font-medium text-gray-700">여행 평점</p>
+                                                <p className="text-sm font-medium text-gray-700">{t("tl.k037")}</p>
 
                                                 <div className="mt-3 flex items-center gap-1">
                                                     <div className="flex items-center">
@@ -1601,14 +1598,14 @@ export default function TravelListPage() {
                                                                         type="button"
                                                                         onClick={() => setRating(star - 0.5)}
                                                                         className="absolute left-0 top-0 z-10 h-full w-1/2"
-                                                                        aria-label={`${star - 0.5}점`}
+                                                                        aria-label={t("trip.stars", { stars: star - 0.5 })}
                                                                     />
 
                                                                     <button
                                                                         type="button"
                                                                         onClick={() => setRating(star)}
                                                                         className="absolute right-0 top-0 z-10 h-full w-1/2"
-                                                                        aria-label={`${star}점`}
+                                                                        aria-label={t("trip.stars", { stars: star })}
                                                                     />
                                                                 </div>
                                                             );
@@ -1634,7 +1631,7 @@ export default function TravelListPage() {
                                                 }}
                                                 className="flex-1 rounded-2xl border border-gray-200 py-4 text-sm font-medium text-gray-700"
                                             >
-                                                ← 돌아가기
+                                                {t("trip.back")}
                                             </button>
 
                                             <button
@@ -1642,7 +1639,7 @@ export default function TravelListPage() {
                                                 onClick={handleSaveTrip}
                                                 className="flex-1 rounded-2xl bg-black py-4 text-sm font-medium text-white"
                                             >
-                                                저장하기
+                                                {t("tl.k038")}
                                             </button>
                                         </div>
                                     </div>
@@ -1661,54 +1658,54 @@ export default function TravelListPage() {
                 {isAddCityModalOpen && (
                     <>
                             <div className="flex items-center justify-between">
-                                <h2 className="text-xl font-bold">도시 추가</h2>
+                                <h2 className="text-xl font-bold">{t("tl.k040")}</h2>
 
                             </div>
 
                             <div className="mt-6">
-                                <p className="text-sm font-medium text-gray-700">도시</p>
+                                <p className="text-sm font-medium text-gray-700">{t("tl.k041")}</p>
 
                                 <div className="mt-2 rounded-2xl bg-gray-100 px-4 py-4 text-sm text-gray-700">{city}</div>
                             </div>
 
                             <div className="mt-5">
-                                <p className="text-sm font-medium text-gray-700">국가</p>
+                                <p className="text-sm font-medium text-gray-700">{t("tl.k042")}</p>
 
                                 <select
                                     value={newCityCountryCode}
                                     onChange={(e) => setNewCityCountryCode(e.target.value)}
                                     className="mt-2 h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
                                 >
-                                    <option value="">국가를 선택해주세요</option>
-                                    <option value="CA">🇨🇦 캐나다</option>
-                                    <option value="US">🇺🇸 미국</option>
-                                    <option value="KR">🇰🇷 대한민국</option>
-                                    <option value="JP">🇯🇵 일본</option>
+                                    <option value="">{t("tl.k043")}</option>
+                                    <option value="CA">{t("tl.k044")}</option>
+                                    <option value="US">{t("tl.k045")}</option>
+                                    <option value="KR">{t("tl.k046")}</option>
+                                    <option value="JP">{t("tl.k047")}</option>
                                 </select>
                             </div>
 
                             <div className="mt-5">
-                                <p className="text-sm font-medium text-gray-700">위도</p>
+                                <p className="text-sm font-medium text-gray-700">{t("tl.k048")}</p>
 
                                 <input
                                     type="number"
                                     step="any"
                                     value={newCityLatitude}
                                     onChange={(e) => setNewCityLatitude(e.target.value)}
-                                    placeholder="예: 40.7128"
+                                    placeholder={t("tl.k049")}
                                     className="mt-2 h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
                                 />
                             </div>
 
                             <div className="mt-5">
-                                <p className="text-sm font-medium text-gray-700">경도</p>
+                                <p className="text-sm font-medium text-gray-700">{t("tl.k050")}</p>
 
                                 <input
                                     type="number"
                                     step="any"
                                     value={newCityLongitude}
                                     onChange={(e) => setNewCityLongitude(e.target.value)}
-                                    placeholder="예: -74.0060"
+                                    placeholder={t("tl.k051")}
                                     className="mt-2 h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
                                 />
                             </div>
@@ -1719,7 +1716,7 @@ export default function TravelListPage() {
                                     onClick={() => setIsAddCityModalOpen(false)}
                                     className="flex-1 rounded-2xl border border-gray-200 py-4 text-sm font-medium text-gray-700"
                                 >
-                                    취소
+                                    {t("tl.k052")}
                                 </button>
 
                                 <button
@@ -1782,7 +1779,7 @@ export default function TravelListPage() {
                                     }}
                                     className="flex-1 rounded-2xl bg-black py-4 text-sm font-medium text-white disabled:opacity-30"
                                 >
-                                    추가하기
+                                    {t("tl.k053")}
                                 </button>
                             </div>
                 

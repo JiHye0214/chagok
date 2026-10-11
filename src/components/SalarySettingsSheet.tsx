@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useI18n } from "@/components/I18nProvider";
 import { getPayPeriodEndDate } from "@/lib/payPeriod";
 import { getCurrencySymbol } from "@/lib/salary/format";
 import { getDefaultHolidayPayMode } from "@/lib/labor/rules";
@@ -65,6 +66,7 @@ type SalarySettingsSheetProps = {
 };
 
 export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePreset }: SalarySettingsSheetProps) {
+    const { t } = useI18n();
     const [payType, setPayType] = useState<PayType>("hourly");
     const [payFrequency, setPayFrequency] = useState<PayFrequency>("biweekly");
 
@@ -258,11 +260,11 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePres
      */
     const getWorkRegionLabel = () => {
         const countryLabels: Record<string, string> = {
-            KR: "🇰🇷 대한민국",
-            CA: "🇨🇦 캐나다",
-            US: "🇺🇸 미국",
-            AU: "🇦🇺 호주",
-            GB: "🇬🇧 영국",
+            KR: t("sset.country.KR"),
+            CA: t("sset.country.CA"),
+            US: t("sset.country.US"),
+            AU: t("sset.country.AU"),
+            GB: t("sset.country.GB"),
         };
 
         const regionLabels: Record<string, string> = {
@@ -275,7 +277,7 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePres
         };
 
         if (!countryCode) {
-            return "국가 설정 필요";
+            return t("sset.needCountry");
         }
 
         if (regionCode) {
@@ -311,29 +313,29 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePres
          * 지역이 없는 국가는 정상적으로 저장 가능하다.
          */
         if (!countryCode) {
-            setSaveError("프로필의 국가 설정을 확인해주세요.");
+            setSaveError(t("sset.err.country"));
             return;
         }
 
         if (payType === "hourly" && !(Number(hourlyWage) > 0)) {
-            setSaveError("시급을 입력해주세요.");
+            setSaveError(t("sset.err.hourly"));
             return;
         }
 
         if (payType === "salary" && !(Number(monthlySalary) > 0)) {
-            setSaveError("월급을 입력해주세요.");
+            setSaveError(t("sset.err.monthly"));
             return;
         }
 
         if (isWageChanged && wageApplyMode === "from-date" && !wageApplyDate) {
-            setSaveError("시급을 적용할 날짜를 선택해주세요.");
+            setSaveError(t("sset.err.wageDate"));
             return;
         }
 
         const needsStartDate = payFrequency === "weekly" || payFrequency === "biweekly" || payFrequency === "custom";
 
         if (needsStartDate && !payPeriodStartDate) {
-            setSaveError("급여 기간 시작일을 입력해주세요.");
+            setSaveError(t("sset.err.periodStart"));
             return;
         }
 
@@ -346,7 +348,7 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePres
                 const percent = Number(vacationPayPercent);
 
                 if (!Number.isFinite(percent) || percent < 0 || percent > 20) {
-                    setSaveError("베케이션 페이 비율은 0~20% 사이로 입력해주세요.");
+                    setSaveError(t("sset.err.vacation"));
                     return;
                 }
 
@@ -408,7 +410,7 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePres
         } catch (error) {
             console.error(error);
 
-            setSaveError("급여 설정 저장에 실패했어요. 잠시 후 다시 시도해주세요.");
+            setSaveError(t("sset.err.save"));
         } finally {
             setIsSaving(false);
         }
@@ -427,7 +429,7 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePres
             {/* 배경 */}
             <button
                 type="button"
-                aria-label="닫기"
+                aria-label={t("sset.k001")}
                 onClick={onClose}
                 className={`absolute inset-0 bg-black/30 transition-opacity duration-300 ease-out ${
                     isAnimating ? "opacity-100" : "opacity-0"
@@ -447,18 +449,18 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePres
 
                 {/* 내용 */}
                 <div className="min-h-0 overflow-y-auto px-6 pb-8 scrollbar-hide">
-                    <h1 className="mb-6 text-2xl font-semibold tracking-[-0.04em] text-gray-900">급여 설정</h1>
+                    <h1 className="mb-6 text-2xl font-semibold tracking-[-0.04em] text-gray-900">{t("sset.k002")}</h1>
 
                     {/* Pay Type */}
                     <section className="rounded-3xl bg-white p-6 shadow-sm">
-                        <h2 className="text-lg font-semibold">급여 받는 방식</h2>
+                        <h2 className="text-lg font-semibold">{t("sset.k003")}</h2>
 
                         <div className="mt-4 grid grid-cols-2 gap-2">
                             {[
-                                ["hourly", "시급"],
-                                ["salary", "월급"],
-                                ["commission", "커미션"],
-                                ["other", "기타"],
+                                ["hourly", t("sset.payType.hourly")],
+                                ["salary", t("sset.payType.salary")],
+                                ["commission", t("sset.payType.commission")],
+                                ["other", t("sset.payType.other")],
                             ].map(([value, label]) => (
                                 <button
                                     type="button"
@@ -483,15 +485,15 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePres
                     {/* Pay Frequency */}
                     {payType !== "salary" && (
                         <section className="mt-5 rounded-3xl bg-white p-6 shadow-sm">
-                            <h2 className="text-lg font-semibold">급여 받는 주기</h2>
+                            <h2 className="text-lg font-semibold">{t("sset.k004")}</h2>
 
                             <div className="mt-4 space-y-2">
                                 {[
-                                    ["weekly", "매주"],
-                                    ["biweekly", "격주"],
-                                    ["semi-monthly", "월 2회"],
-                                    ["monthly", "매월"],
-                                    ["custom", "직접 설정"],
+                                    ["weekly", t("sset.freq.weekly")],
+                                    ["biweekly", t("sset.freq.biweekly")],
+                                    ["semi-monthly", t("sset.freq.semi-monthly")],
+                                    ["monthly", t("sset.freq.monthly")],
+                                    ["custom", t("sset.freq.custom")],
                                 ].map(([value, label]) => (
                                     <button
                                         type="button"
@@ -508,7 +510,7 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePres
 
                             {payFrequency === "semi-monthly" && (
                                 <div className="mt-4 space-y-2">
-                                    <p className="text-sm text-gray-500">급여 기간 규칙을 선택해주세요.</p>
+                                    <p className="text-sm text-gray-500">{t("sset.k005")}</p>
 
                                     <button
                                         type="button"
@@ -517,7 +519,7 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePres
                                             semiMonthlyType === "first-fifteenth" ? "bg-black text-white" : "bg-gray-100"
                                         }`}
                                     >
-                                        1일 ~ 15일 / 16일 ~ 말일 (월 2회)
+                                        {t("sset.k006")}
                                     </button>
 
                                     <button
@@ -527,14 +529,14 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePres
                                             semiMonthlyType === "fifteenth-end" ? "bg-black text-white" : "bg-gray-100"
                                         }`}
                                     >
-                                        16일 ~ 다음달 15일 (월 1회)
+                                        {t("sset.k007")}
                                     </button>
                                 </div>
                             )}
 
                             {payFrequency === "custom" && (
                                 <div className="mt-4">
-                                    <p className="mb-2 text-sm text-gray-500">며칠마다 급여를 받나요?</p>
+                                    <p className="mb-2 text-sm text-gray-500">{t("sset.k008")}</p>
 
                                     <div className="flex items-center gap-3">
                                         <input
@@ -545,7 +547,7 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePres
                                             className="w-full rounded-2xl bg-gray-100 px-4 py-4 outline-none"
                                         />
 
-                                        <span className="shrink-0 text-sm text-gray-500">일마다</span>
+                                        <span className="shrink-0 text-sm text-gray-500">{t("sset.k009")}</span>
                                     </div>
                                 </div>
                             )}
@@ -555,7 +557,7 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePres
                     {/* Hourly Wage */}
                     {payType === "hourly" && (
                         <section className="mt-5 rounded-3xl bg-white p-6 shadow-sm">
-                            <h2 className="text-lg font-semibold">시급</h2>
+                            <h2 className="text-lg font-semibold">{t("sset.k010")}</h2>
 
                             <div className="mt-4 flex items-center rounded-2xl bg-gray-100 px-4">
                                 <span className="text-gray-500">{getCurrencySymbol(currency)}</span>
@@ -585,8 +587,10 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePres
 
                                 return (
                                     <p className="mt-2 text-xs text-gray-400">
-                                        최저시급 {getCurrencySymbol(currency)}
-                                        {minimum.hourlyWage} ({minimum.effectiveDate}부터)
+                                        {t("sset.minWage", {
+                                            amount: `${getCurrencySymbol(currency)}${minimum.hourlyWage}`,
+                                            date: minimum.effectiveDate,
+                                        })}
                                     </p>
                                 );
                             })()}
@@ -594,10 +598,10 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePres
                             {/* 시급을 바꾸면 언제부터 적용할지 묻는다 */}
                             {isWageChanged && (
                                 <div className="mt-4 rounded-2xl bg-gray-50 p-4">
-                                    <p className="text-sm font-semibold text-gray-900">언제부터 적용할까요?</p>
+                                    <p className="text-sm font-semibold text-gray-900">{t("sset.k011")}</p>
 
                                     <p className="mt-1 text-xs leading-5 text-gray-500">
-                                        그 날짜 전에 한 근무는 예전 시급으로, 그 날짜부터는 새 시급으로 계산해요. 다음 달부터 오르기로 한 것처럼 앞으로의 날짜도 고를 수 있어요.
+                                        {t("sset.k012")}
                                     </p>
 
                                     <div className="mt-3 grid grid-cols-2 gap-2">
@@ -610,7 +614,7 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePres
                                                     : "bg-white text-gray-600"
                                             }`}
                                         >
-                                            날짜부터
+                                            {t("sset.k013")}
                                         </button>
 
                                         <button
@@ -620,7 +624,7 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePres
                                                 wageApplyMode === "all" ? "bg-gray-900 text-white" : "bg-white text-gray-600"
                                             }`}
                                         >
-                                            처음부터 전부
+                                            {t("sset.k014")}
                                         </button>
                                     </div>
 
@@ -633,7 +637,7 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePres
                                         />
                                     ) : (
                                         <p className="mt-3 text-xs leading-5 text-gray-500">
-                                            이전 기록까지 모두 새 시급으로 계산해요. 시급을 잘못 입력했을 때 쓰세요.
+                                            {t("sset.k015")}
                                         </p>
                                     )}
                                 </div>
@@ -642,15 +646,15 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePres
                             {/* 시급 변경 이력 (2개 이상일 때만) */}
                             {wageHistory.length > 1 && (
                                 <div className="mt-4">
-                                    <p className="text-xs font-medium text-gray-400">시급 변경 이력</p>
+                                    <p className="text-xs font-medium text-gray-400">{t("sset.k016")}</p>
 
                                     <ul className="mt-2 space-y-1">
                                         {[...wageHistory].reverse().map((entry) => (
                                             <li key={entry.effectiveDate} className="flex justify-between text-xs text-gray-500">
                                                 <span>
                                                     {entry.effectiveDate === WAGE_BASELINE_DATE
-                                                        ? "처음"
-                                                        : `${entry.effectiveDate}부터`}
+                                                        ? t("sset.histFirst")
+                                                        : t("sset.histFrom", { date: entry.effectiveDate })}
                                                 </span>
 
                                                 <span className="font-medium text-gray-700">
@@ -668,7 +672,7 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePres
                     {/* Monthly Salary */}
                     {payType === "salary" && (
                         <section className="mt-5 rounded-3xl bg-white p-6 shadow-sm">
-                            <h2 className="text-lg font-semibold">월급</h2>
+                            <h2 className="text-lg font-semibold">{t("sset.k017")}</h2>
 
                             <div className="mt-4 flex items-center rounded-2xl bg-gray-100 px-4">
                                 <span className="text-gray-500">{getCurrencySymbol(currency)}</span>
@@ -692,7 +696,7 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePres
 
                     {/* Tips */}
                     <section className="mt-5 rounded-3xl bg-white p-6 shadow-sm">
-                        <h2 className="text-lg font-semibold">팁을 받나요?</h2>
+                        <h2 className="text-lg font-semibold">{t("sset.k018")}</h2>
 
                         <div className="mt-4 grid grid-cols-2 gap-2">
                             <button
@@ -702,7 +706,7 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePres
                                     hasTips ? "bg-black text-white" : "bg-gray-100"
                                 }`}
                             >
-                                예
+                                {t("sset.k019")}
                             </button>
 
                             <button
@@ -712,24 +716,24 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePres
                                     !hasTips ? "bg-black text-white" : "bg-gray-100"
                                 }`}
                             >
-                                아니오
+                                {t("sset.k020")}
                             </button>
                         </div>
 
                         {hasTips && (
                             <div className="mt-4 space-y-2">
-                                <p className="text-sm text-gray-500">팁 지급 방식</p>
+                                <p className="text-sm text-gray-500">{t("sset.k021")}</p>
 
                                 {[
-                                    ["cash", "현금"],
-                                    ["paycheque", "급여에 포함"],
-                                    ["both", "둘 다"],
+                                    ["cash", t("sset.tip.cash")],
+                                    ["paycheque", t("sset.tip.paycheque")],
+                                    ["both", t("sset.tip.both")],
                                 ].map(([value, label]) => (
                                     <button
                                         type="button"
                                         key={value}
                                         onClick={() => setTipType(value as TipType)}
-                                        className={`w-full rounded-2xl p-4 text-left text-sm ${
+                                        className={`w-full rounded-2xl p-3 text-left text-sm ${
                                             tipType === value ? "bg-black text-white" : "bg-gray-100"
                                         }`}
                                     >
@@ -742,13 +746,13 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePres
 
                     {/* Pay Period */}
                     <section className="mt-5 rounded-3xl bg-white p-6 shadow-sm">
-                        <h2 className="text-lg font-semibold">급여 기간</h2>
+                        <h2 className="text-lg font-semibold">{t("sset.k022")}</h2>
 
-                        <p className="mt-2 text-sm text-gray-400">최근 실제 근무 기간의 시작일과 급여일을 설정해주세요.</p>
+                        <p className="mt-2 text-sm text-gray-400">{t("sset.k023")}</p>
 
                         <div className="mt-4 space-y-4">
                             <div>
-                                <p className="mb-2 text-sm text-gray-500">급여 기간 시작일</p>
+                                <p className="mb-2 text-sm text-gray-500">{t("sset.k024")}</p>
 
                                 <input
                                     type="date"
@@ -759,15 +763,15 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePres
                             </div>
 
                             <div className="rounded-2xl bg-gray-50 p-4">
-                                <p className="text-sm text-gray-500">급여 기간 종료일</p>
+                                <p className="text-sm text-gray-500">{t("sset.k025")}</p>
 
-                                <p className="mt-1 font-semibold">{calculatedEndDate || "시작일과 주기를 먼저 설정해주세요"}</p>
+                                <p className="mt-1 font-semibold">{calculatedEndDate || t("sset.setStartFirst")}</p>
 
-                                <p className="mt-1 text-xs text-gray-400">급여 주기에 따라 자동으로 계산돼요.</p>
+                                <p className="mt-1 text-xs text-gray-400">{t("sset.k026")}</p>
                             </div>
 
                             <div>
-                                <p className="mb-2 text-sm text-gray-500">급여일</p>
+                                <p className="mb-2 text-sm text-gray-500">{t("sset.k027")}</p>
 
                                 <input
                                     type="date"
@@ -782,11 +786,11 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePres
                     {/* Vacation / Holiday Pay */}
                     {isSupportedCountry && (showVacationPay || payType === "hourly") && (
                         <section className="mt-5 rounded-3xl bg-white p-6 shadow-sm">
-                            <h2 className="text-lg font-semibold">휴가 · 공휴일 수당</h2>
+                            <h2 className="text-lg font-semibold">{t("sset.k028")}</h2>
 
                             {showVacationPay && (
                                 <div className="mt-4">
-                                    <p className="mb-2 text-sm text-gray-500">베케이션 페이 (매 급여에 얹어서 받는 비율)</p>
+                                    <p className="mb-2 text-sm text-gray-500">{t("sset.k029")}</p>
 
                                     <div className="flex items-center rounded-2xl bg-gray-100 px-4">
                                         <input
@@ -804,22 +808,22 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePres
                                     </div>
 
                                     <p className="mt-2 text-xs leading-5 text-gray-400">
-                                        온타리오 기본은 4%이고, 한 직장에서 5년 이상 일했다면 6%예요.
-                                        급여명세서에 적힌 비율을 그대로 입력하세요.
+                                        {t("sset.k030")}
+                                        {t("sset.k031")}
                                     </p>
                                 </div>
                             )}
 
                             {payType === "hourly" && (
                                 <div className="mt-5">
-                                    <p className="mb-2 text-sm text-gray-500">공휴일 수당 방식</p>
+                                    <p className="mb-2 text-sm text-gray-500">{t("sset.k032")}</p>
 
                                     <div className="space-y-2">
                                         {(
                                             [
-                                                ["full", "공휴일마다 수당을 받고, 일하면 가산 수당도 받아요"],
-                                                ["worked-only", "공휴일에 일한 날만 받아요"],
-                                                ["none", "공휴일 수당을 따로 받지 않아요"],
+                                                ["full", t("sset.holiday.full")],
+                                                ["worked-only", t("sset.holiday.worked-only")],
+                                                ["none", t("sset.holiday.none")],
                                             ] as [HolidayPayMode, string][]
                                         ).map(([value, label]) => (
                                             <button
@@ -841,20 +845,20 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePres
 
                     {/* Work Region */}
                     <section className="mt-5 rounded-3xl bg-white p-6 shadow-sm">
-                        <h2 className="text-lg font-semibold">근무 지역</h2>
+                        <h2 className="text-lg font-semibold">{t("sset.k033")}</h2>
 
                         <p className="mt-2 text-sm leading-6 text-gray-400">
-                            급여 계산은 프로필에 설정된 지역을 기준으로 적용돼요.
+                            {t("sset.k034")}
                         </p>
 
                         <div className="mt-4 rounded-2xl bg-gray-50 p-4">
-                            <p className="text-sm text-gray-500">현재 설정된 지역</p>
+                            <p className="text-sm text-gray-500">{t("sset.k035")}</p>
 
                             <p className="mt-1 font-semibold text-gray-900">{getWorkRegionLabel()}</p>
                         </div>
 
                         <p className="mt-4 text-xs leading-5 text-gray-400">
-                            지역을 변경하려면 프로필 설정에서 지역을 변경해주세요.
+                            {t("sset.k036")}
                         </p>
                     </section>
 
@@ -867,7 +871,7 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePres
                         disabled={isSaving}
                         className="mt-6 w-full rounded-2xl bg-black py-4 text-sm font-semibold text-white disabled:opacity-50"
                     >
-                        {isSaving ? "저장 중..." : "급여 설정 저장"}
+                        {isSaving ? t("common.saving") : t("sset.saveBtn")}
                     </button>
                 </div>
             </div>

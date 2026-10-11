@@ -39,3 +39,24 @@ export const yesterdayDateString = (): string => {
 
     return toLocalDateString(date);
 };
+
+/**
+ * 두 날짜 사이의 일수. DB에서 온 값이 문자열이든 Date든 날짜 부분만 보고 계산해서
+ * 서버 시간대나 서머타임에 영향을 받지 않는다. 읽을 수 없는 값이면 0.
+ */
+export const daysBetween = (from: string | Date | null | undefined, to: string | Date | null | undefined): number => {
+    const toKey = (value: string | Date | null | undefined) =>
+        value instanceof Date ? toLocalDateString(value) : toDateOnly(value);
+
+    const a = DATE_ONLY_PATTERN.exec(toKey(from));
+    const b = DATE_ONLY_PATTERN.exec(toKey(to));
+
+    if (!a || !b) {
+        return 0;
+    }
+
+    const start = Date.UTC(Number(a[1]), Number(a[2]) - 1, Number(a[3]));
+    const end = Date.UTC(Number(b[1]), Number(b[2]) - 1, Number(b[3]));
+
+    return Math.round((end - start) / 86400000);
+};

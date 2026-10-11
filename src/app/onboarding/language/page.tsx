@@ -1,10 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useI18n } from "@/components/I18nProvider";
 import { LANGUAGES } from "@/lib/countries";
 
 export default function LanguagePage() {
     const router = useRouter();
+    const { t } = useI18n();
 
     const handleLanguageSelect = (languageCode: string) => {
         localStorage.setItem("chagok_language", languageCode);
@@ -16,7 +18,7 @@ export default function LanguagePage() {
             <div className="relative mx-auto h-full w-full max-w-md px-6">
                 {/* Brand */}
                 <p className="absolute left-6 top-8 text-2xl font-semibold tracking-[-0.05em] text-gray-900 opacity-0 animate-[onboardingFadeUp_0.6s_ease-out_0.1s_forwards]">
-                    차곡
+                    {t("common.appName")}
                 </p>
                 {/* Content */}
                 <main className="flex h-full w-full items-center justify-center">
@@ -25,9 +27,9 @@ export default function LanguagePage() {
                         <div className="opacity-0 animate-[onboardingFadeUp_0.6s_ease-out_0.2s_forwards]">
                             <p className="text-xs text-gray-400">01</p>
 
-                            <h1 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-gray-900">언어를 선택해 주세요</h1>
+                            <h1 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-gray-900">Choose your language</h1>
 
-                            <p className="mt-2 text-sm text-gray-400">사용할 언어를 선택해 주세요.</p>
+                            <p className="mt-2 text-sm text-gray-400">언어를 선택해 주세요.</p>
                         </div>
 
                         {/* Languages */}

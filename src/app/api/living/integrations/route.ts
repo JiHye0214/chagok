@@ -2,10 +2,11 @@ import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/user";
 import { getPlanCode } from "@/lib/api/plan";
+import { FREE_PLAN_LIMITS } from "@/lib/plans";
 
 type SourceType = "trip" | "payroll";
 
-const FREE_LIVING_TRANSACTION_LIMIT = 300;
+const FREE_LIVING_TRANSACTION_LIMIT = FREE_PLAN_LIMITS.livingTransactions;
 
 const toNumber = (value: unknown) => Number(value ?? 0);
 
@@ -103,7 +104,7 @@ export async function POST(request: Request) {
             if (count >= FREE_LIVING_TRANSACTION_LIMIT) {
                 return NextResponse.json(
                     {
-                        error: "무료 플랜에서는 생활 기록을 최대 300개까지 저장할 수 있어요.",
+                        error: `무료 플랜에서는 생활 기록을 최대 ${FREE_LIVING_TRANSACTION_LIMIT}개까지 저장할 수 있어요.`,
                         code: "LIVING_TRANSACTION_LIMIT_REACHED",
                     },
                     { status: 403 },

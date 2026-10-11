@@ -9,6 +9,8 @@ import { formatCurrency } from "@/lib/salary/format";
 import BottomSheet from "@/components/BottomSheet";
 import { useDialog } from "@/components/DialogProvider";
 import SavingsPlant from "@/components/SavingsPlant";
+import { useI18n } from "@/components/I18nProvider";
+import { getCategoryLabel } from "@/lib/i18n/categories";
 
 type CategorySpending = {
     name: string;
@@ -71,6 +73,7 @@ const formatDisplayDate = (date: string) => {
 
 export default function LivingPage() {
     const { alert: showAlert } = useDialog();
+    const { t } = useI18n();
     const [planCode, setPlanCode] = useState<"free" | "pro">("free");
 
     const router = useRouter();
@@ -177,13 +180,13 @@ export default function LivingPage() {
             const result = await response.json();
 
             if (!response.ok) {
-                throw new Error(result.error || "생활비 반영에 실패했습니다.");
+                throw new Error(result.error || t("living.reflectFailed"));
             }
 
             const refreshResponse = await fetch(`/api/living?month=${month}`);
 
             if (!refreshResponse.ok) {
-                throw new Error("생활 데이터를 다시 불러오지 못했습니다.");
+                throw new Error(t("living.reflectFailed"));
             }
 
             const refreshedData = await refreshResponse.json();
@@ -191,7 +194,7 @@ export default function LivingPage() {
             setData(refreshedData);
         } catch (error) {
             console.error(error);
-            showAlert(error instanceof Error ? error.message : "생활비에 반영하지 못했어요.");
+            showAlert(error instanceof Error ? error.message : t("living.reflectFailed"));
         } finally {
             setIsReflecting(null);
         }
@@ -216,32 +219,32 @@ export default function LivingPage() {
         <div className="mx-auto max-w-md">
             {/* Header */}
             <header className="mt-5 mb-10">
-                <p className="text-sm text-gray-500">차곡</p>
+                <p className="text-sm text-gray-500">{t("common.appName")}</p>
 
                 <div className="mt-2 flex items-center justify-between">
-                    <h1 className="text-3xl font-bold">생활</h1>
+                    <h1 className="text-3xl font-bold">{t("living.title")}</h1>
 
                     <button
                         type="button"
                         onClick={() => setIsLivingStartOpen(true)}
                         className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-gray-500 shadow-sm transition hover:bg-gray-50"
-                        aria-label="생활 설정"
+                        aria-label={t("living.settingsAria")}
                     >
                         <Settings size={18} strokeWidth={1.8} />
                     </button>
                 </div>
 
-                <p className="mt-2 text-sm text-gray-500">이번 달 생활비를 한눈에 확인해보세요.</p>
+                <p className="mt-2 text-sm text-gray-500">{t("living.subtitle")}</p>
             </header>
 
             {!hasLivingSettings ? (
                 <section className="rounded-3xl bg-white p-6 shadow-sm">
-                    <p className="text-xs font-medium text-gray-400">생활 설정</p>
+                    <p className="text-xs font-medium text-gray-400">{t("living.setup.label")}</p>
 
-                    <h2 className="mt-2 text-lg font-bold text-gray-900">생활 정보를 먼저 설정해주세요</h2>
+                    <h2 className="mt-2 text-lg font-bold text-gray-900">{t("living.setup.title")}</h2>
 
                     <p className="mt-2 text-sm leading-6 text-gray-500">
-                        생활비와 수입을 관리하기 위해 기본 생활 정보를 설정하면 이번 달 생활비를 확인할 수 있어요.
+                        {t("living.setup.body")}
                     </p>
 
                     <button
@@ -249,7 +252,7 @@ export default function LivingPage() {
                         onClick={() => setIsLivingStartOpen(true)}
                         className="mt-5 w-full rounded-2xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-gray-800"
                     >
-                        생활 설정하기
+                        {t("living.setup.cta")}
                     </button>
                 </section>
             ) : (
@@ -260,7 +263,7 @@ export default function LivingPage() {
                         <section className="space-y-3">
                             {data.pendingIntegrations.travel.map((travel) => (
                                 <div key={`trip-${travel.sourceId}`} className="rounded-3xl bg-white p-5 shadow-sm">
-                                    <p className="text-xs text-gray-400">여행 지출</p>
+                                    <p className="text-xs text-gray-400">{t("living.trip.label")}</p>
 
                                     <div className="mt-1 flex items-start justify-between gap-4">
                                         <div className="min-w-0">
@@ -273,7 +276,7 @@ export default function LivingPage() {
 
                                         {travel.status === "missing_expense" ? (
                                             <span className="shrink-0 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-500">
-                                                기록 필요
+                                                {t("living.trip.needsRecord")}
                                             </span>
                                         ) : (
                                             <p className="shrink-0 text-lg font-bold text-gray-900">
@@ -284,19 +287,19 @@ export default function LivingPage() {
 
                                     {travel.status === "missing_expense" ? (
                                         <>
-                                            <p className="mt-3 text-sm text-gray-500">여행 지출을 기록하면 생활비에 반영할 수 있어요.</p>
+                                            <p className="mt-3 text-sm text-gray-500">{t("living.trip.needsRecordBody")}</p>
 
                                             <button
                                                 type="button"
                                                 onClick={() => router.push(`/travel/list/${travel.sourceId}`)}
                                                 className="mt-4 w-full rounded-2xl bg-gray-900 py-3 text-[13px] font-medium text-white transition-colors hover:bg-gray-800"
                                             >
-                                                지출 기록하기
+                                                {t("living.trip.recordCta")}
                                             </button>
                                         </>
                                     ) : (
                                         <>
-                                            <p className="mt-3 text-sm text-gray-500">생활비에 반영할까요?</p>
+                                            <p className="mt-3 text-sm text-gray-500">{t("living.reflectQuestion")}</p>
 
                                             <div className="mt-4 flex gap-2">
                                                 <button
@@ -304,7 +307,7 @@ export default function LivingPage() {
                                                     onClick={() => router.push(`/travel/list/${travel.sourceId}`)}
                                                     className="flex-1 rounded-2xl bg-gray-100 py-3 text-[13px] font-medium text-gray-700 transition-colors hover:bg-gray-200"
                                                 >
-                                                    지출 수정
+                                                    {t("living.trip.edit")}
                                                 </button>
 
                                                 <button
@@ -313,7 +316,7 @@ export default function LivingPage() {
                                                     onClick={() => void reflectIntegration("trip", travel.sourceId)}
                                                     className="flex-1 rounded-2xl bg-gray-900 py-3 text-[13px] font-semibold text-white transition-colors hover:bg-gray-800 disabled:opacity-50"
                                                 >
-                                                    {isReflecting === `trip-${travel.sourceId}` ? "반영 중..." : "반영하기"}
+                                                    {isReflecting === `trip-${travel.sourceId}` ? t("living.reflecting") : t("living.reflect")}
                                                 </button>
                                             </div>
                                         </>
@@ -327,12 +330,12 @@ export default function LivingPage() {
                                         key={`payroll-${payroll.payrollRecordId}`}
                                         className="rounded-3xl bg-white p-5 shadow-sm"
                                     >
-                                        <p className="text-xs text-gray-400">급여 기록</p>
+                                        <p className="text-xs text-gray-400">{t("living.payroll.recordLabel")}</p>
 
-                                        <h2 className="mt-1 text-lg font-bold text-gray-900">실제 수령액을 먼저 입력해주세요.</h2>
+                                        <h2 className="mt-1 text-lg font-bold text-gray-900">{t("living.payroll.enterActual")}</h2>
 
                                         <p className="mt-2 text-sm text-gray-500">
-                                            {formatDisplayDate(payroll.payDate)} 지급 급여의 실제 수령액이 아직 기록되지 않았어요.
+                                            {t("living.payroll.enterActualBody", { date: formatDisplayDate(payroll.payDate) })}
                                         </p>
 
                                         <button
@@ -340,7 +343,7 @@ export default function LivingPage() {
                                             onClick={() => router.push("/salary/pay-history")}
                                             className="mt-4 w-full rounded-2xl bg-gray-900 py-3 text-[13px] font-medium text-white transition-colors hover:bg-gray-800"
                                         >
-                                            급여 기록하기
+                                            {t("living.payroll.recordCta")}
                                         </button>
                                     </div>
                                 ) : (
@@ -350,21 +353,21 @@ export default function LivingPage() {
                                     >
                                         <div className="flex items-start justify-between gap-4">
                                             <div>
-                                                <p className="text-xs text-gray-400">급여</p>
+                                                <p className="text-xs text-gray-400">{t("living.payroll.label")}</p>
 
                                                 <p className="mt-2 text-lg font-semibold text-gray-900">
-                                                    이번 급여{" "}
-                                                    <span>{formatMoney(payroll.amount ?? 0, data?.currency ?? null)}</span>
-                                                    이 입력되어 있어요
+                                                    {t("living.payroll.entered", {
+                                                        amount: formatMoney(payroll.amount ?? 0, data?.currency ?? null),
+                                                    })}
                                                 </p>
 
                                                 <p className="mt-1 text-sm text-gray-500">
-                                                    지급일 {formatDisplayDate(payroll.payDate)}
+                                                    {t("living.payroll.payDate", { date: formatDisplayDate(payroll.payDate) })}
                                                 </p>
                                             </div>
                                         </div>
 
-                                        <p className="mt-4 text-sm text-gray-500">생활비에 반영할까요?</p>
+                                        <p className="mt-4 text-sm text-gray-500">{t("living.reflectQuestion")}</p>
 
                                         <div className="mt-3 flex gap-2">
                                             <button
@@ -372,7 +375,7 @@ export default function LivingPage() {
                                                 onClick={() => router.push("/salary/pay-history")}
                                                 className="flex-1 rounded-2xl bg-gray-100 py-3 text-[13px] font-medium text-gray-700 transition-colors hover:bg-gray-200"
                                             >
-                                                급여 수정
+                                                {t("living.payroll.edit")}
                                             </button>
 
                                             <button
@@ -381,7 +384,7 @@ export default function LivingPage() {
                                                 onClick={() => void reflectIntegration("payroll", payroll.sourceId)}
                                                 className="flex-1 rounded-2xl bg-gray-900 py-3 text-[13px] font-semibold text-white transition-colors hover:bg-gray-800 disabled:opacity-50"
                                             >
-                                                {isReflecting === `payroll-${payroll.sourceId}` ? "반영 중..." : "반영하기"}
+                                                {isReflecting === `payroll-${payroll.sourceId}` ? t("living.reflecting") : t("living.reflect")}
                                             </button>
                                         </div>
                                     </div>
@@ -413,7 +416,7 @@ export default function LivingPage() {
 
                                 {/* Balance */}
                                 <div>
-                                    <h2 className="mt-1 text-lg font-bold">이번 달 남은 금액</h2>
+                                    <h2 className="mt-1 text-lg font-bold">{t("living.balance.title")}</h2>
 
                                     <p className="mt-2 text-3xl font-bold">
                                         {formatMoney(data?.balance ?? 0, data?.currency ?? null)}
@@ -426,13 +429,13 @@ export default function LivingPage() {
                                 {/* Income / Expense */}
                                 <div className="space-y-2 text-sm text-gray-500">
                                     <div className="flex items-center justify-between">
-                                        <span>수입</span>
+                                        <span>{t("living.balance.income")}</span>
 
                                         <span>+ {formatMoney(data?.income ?? 0, data?.currency ?? null)}</span>
                                     </div>
 
                                     <div className="flex items-center justify-between">
-                                        <span>지출</span>
+                                        <span>{t("living.balance.expense")}</span>
 
                                         <span>
                                             -{" "}
@@ -447,7 +450,7 @@ export default function LivingPage() {
 
                                     {planCode === "pro" && (
                                         <div className="flex items-center justify-between">
-                                            <span>고정 지출</span>
+                                            <span>{t("living.balance.fixed")}</span>
 
                                             <span>- {formatMoney(data?.fixedExpense ?? 0, data?.currency ?? null)}</span>
                                         </div>
@@ -477,9 +480,9 @@ export default function LivingPage() {
                                 <>
                                     <div className="flex items-start justify-between gap-4">
                                         <div>
-                                            <p className="text-xs text-gray-400">이번 달 지출</p>
+                                            <p className="text-xs text-gray-400">{t("living.variable.label")}</p>
 
-                                            <h2 className="mt-1 text-lg font-bold text-gray-900">변동지출</h2>
+                                            <h2 className="mt-1 text-lg font-bold text-gray-900">{t("living.variable.title")}</h2>
                                         </div>
 
                                         <p className="text-lg font-bold text-gray-900">
@@ -505,7 +508,7 @@ export default function LivingPage() {
                                                     >
                                                         <div className="flex items-baseline justify-between gap-3">
                                                             <span className="truncate text-sm font-medium text-gray-800">
-                                                                {category.name}
+                                                                {getCategoryLabel(category.name, t)}
                                                             </span>
 
                                                             <span className="shrink-0 text-sm font-semibold text-gray-900">
@@ -528,9 +531,9 @@ export default function LivingPage() {
                                         </div>
                                     ) : (
                                         <div className="mt-5 rounded-2xl bg-gray-50 px-5 py-8 text-center">
-                                            <p className="text-sm font-medium text-gray-600">이번 달 지출이 아직 없어요.</p>
+                                            <p className="text-sm font-medium text-gray-600">{t("living.variable.emptyTitle")}</p>
 
-                                            <p className="mt-1 text-xs text-gray-400">지출을 기록하면 카테고리별로 보여드려요.</p>
+                                            <p className="mt-1 text-xs text-gray-400">{t("living.variable.emptyBody")}</p>
                                         </div>
                                     )}
                                 </>
@@ -542,9 +545,9 @@ export default function LivingPage() {
                     <section className="rounded-3xl bg-white p-5 shadow-sm">
                         <div className="flex items-center justify-between">
                             <div>
-                                <p className="text-xs text-gray-400">저축 현황</p>
+                                <p className="text-xs text-gray-400">{t("living.savings.label")}</p>
 
-                                <h2 className="mt-1 text-lg font-bold">저축</h2>
+                                <h2 className="mt-1 text-lg font-bold">{t("living.savings.title")}</h2>
                             </div>
 
                             <button
@@ -555,7 +558,7 @@ export default function LivingPage() {
                                 }}
                                 className="text-xs text-gray-400 transition-colors hover:text-gray-700"
                             >
-                                목표 수정
+                                {t("living.savings.editGoal")}
                             </button>
                         </div>
 
@@ -563,21 +566,21 @@ export default function LivingPage() {
                             <SavingsPlant progress={savingsProgress} className="h-28 w-28 shrink-0" />
 
                             <div className="min-w-0">
-                                <p className="text-xs text-gray-400">모은 금액</p>
+                                <p className="text-xs text-gray-400">{t("living.savings.saved")}</p>
 
                                 <p className="mt-1 truncate text-2xl font-bold tracking-tight text-gray-900">
                                     {formatMoney(data?.savings.current ?? 0, data?.currency ?? null)}
                                 </p>
 
                                 <span className="mt-3 inline-flex rounded-full bg-white px-3 py-1.5 text-[11px] font-medium text-gray-600 shadow-sm">
-                                    {(data?.savings.goal ?? 0) > 0 ? `${savingsProgress.toFixed(0)}% 달성` : "목표를 정해보세요"}
+                                    {(data?.savings.goal ?? 0) > 0 ? t("living.savings.achieved", { percent: savingsProgress.toFixed(0) }) : t("living.savings.setGoal")}
                                 </span>
                             </div>
                         </div>
 
                         <div className="mt-4 grid grid-cols-2 divide-x divide-gray-100">
                             <div className="pr-4">
-                                <p className="text-xs text-gray-400">목표</p>
+                                <p className="text-xs text-gray-400">{t("living.savings.goal")}</p>
 
                                 <p className="mt-1 truncate text-sm font-semibold text-gray-900">
                                     {formatMoney(data?.savings.goal ?? 0, data?.currency ?? null)}
@@ -585,7 +588,7 @@ export default function LivingPage() {
                             </div>
 
                             <div className="pl-4">
-                                <p className="text-xs text-gray-400">남은 금액</p>
+                                <p className="text-xs text-gray-400">{t("living.savings.remaining")}</p>
 
                                 <p className="mt-1 truncate text-sm font-semibold text-gray-900">
                                     {formatMoney(remainingSavings, data?.currency ?? null)}
@@ -599,7 +602,7 @@ export default function LivingPage() {
                                 onClick={() => router.push("/living/manage?type=transfer&direction=living_to_savings")}
                                 className="flex-1 rounded-2xl bg-gray-900 py-3 text-[13px] font-medium text-white transition-colors hover:bg-gray-800"
                             >
-                                저축하기
+                                {t("living.savings.deposit")}
                             </button>
 
                             <button
@@ -607,7 +610,7 @@ export default function LivingPage() {
                                 onClick={() => router.push("/living/manage?type=transfer&direction=savings_to_living")}
                                 className="flex-1 rounded-2xl bg-gray-100 py-3 text-[13px] font-medium text-gray-700 transition-colors hover:bg-gray-200"
                             >
-                                가져오기
+                                {t("living.savings.withdraw")}
                             </button>
                         </div>
                     </section>
@@ -618,13 +621,13 @@ export default function LivingPage() {
                 {isEditingSavingsGoal && (
                     <>
                             <div className="mb-5">
-                                <p className="text-xs text-gray-400">저축</p>
+                                <p className="text-xs text-gray-400">{t("living.goalSheet.label")}</p>
 
-                                <h3 className="mt-1 text-lg font-semibold tracking-[-0.03em] text-gray-900">저축 목표 수정</h3>
+                                <h3 className="mt-1 text-lg font-semibold tracking-[-0.03em] text-gray-900">{t("living.goalSheet.title")}</h3>
                             </div>
 
                             <div>
-                                <label className="mb-2 block text-xs text-gray-400">목표 금액</label>
+                                <label className="mb-2 block text-xs text-gray-400">{t("living.goalSheet.amount")}</label>
 
                                 <input
                                     type="number"
@@ -633,7 +636,7 @@ export default function LivingPage() {
                                     onChange={(e) => setSavingsGoalInput(e.target.value)}
                                     autoFocus
                                     className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm outline-none transition-colors"
-                                    placeholder="목표 금액을 입력하세요"
+                                    placeholder={t("living.goalSheet.placeholder")}
                                 />
                             </div>
 
@@ -643,7 +646,7 @@ export default function LivingPage() {
                                     onClick={() => setIsEditingSavingsGoal(false)}
                                     className="flex-1 rounded-2xl bg-gray-100 py-3 text-[13px] font-medium text-gray-700 transition-colors hover:bg-gray-200"
                                 >
-                                    취소
+                                    {t("common.cancel")}
                                 </button>
 
                                 <button
@@ -690,7 +693,7 @@ export default function LivingPage() {
                                     }}
                                     className="flex-1 rounded-2xl bg-gray-900 py-3 text-[13px] font-medium text-white transition-colors hover:bg-gray-800 disabled:opacity-50"
                                 >
-                                    {isSavingGoal ? "저장 중" : "저장"}
+                                    {isSavingGoal ? t("living.goalSheet.saving") : t("common.save")}
                                 </button>
                             </div>
                 

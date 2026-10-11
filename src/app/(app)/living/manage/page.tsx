@@ -9,6 +9,11 @@ import { useUpgrade } from "@/components/UpgradeProvider";
 import { useDialog } from "@/components/DialogProvider";
 import UsageMeter from "@/components/UsageMeter";
 import BottomSheet from "@/components/BottomSheet";
+import { useI18n } from "@/components/I18nProvider";
+import { getCategoryLabel } from "@/lib/i18n/categories";
+import type { MessageKey } from "@/lib/i18n";
+
+type TFn = (key: MessageKey, params?: Record<string, string | number>) => string;
 
 type TransactionType = "income" | "expense" | "transfer";
 
@@ -123,16 +128,16 @@ const getTransactionNet = (transaction: LivingTransaction) => {
     return transaction.transferDirection === "savings_to_living" ? transaction.amount : -transaction.amount;
 };
 
-const getTransactionLabel = (transaction: LivingTransaction) => {
+const getTransactionLabel = (transaction: LivingTransaction, t: TFn) => {
     if (transaction.type === "income") {
-        return transaction.categoryName ?? "수입";
+        return transaction.categoryName ? getCategoryLabel(transaction.categoryName, t) : t("manage.type.income");
     }
 
     if (transaction.type === "expense") {
-        return transaction.categoryName ?? "지출";
+        return transaction.categoryName ? getCategoryLabel(transaction.categoryName, t) : t("manage.type.expense");
     }
 
-    return transaction.transferDirection === "living_to_savings" ? "저축" : "저축에서 가져옴";
+    return transaction.transferDirection === "living_to_savings" ? t("manage.type.saving") : t("manage.type.fromSavings");
 };
 
 const ProBadge = () => (
@@ -145,6 +150,7 @@ const ProBadge = () => (
 export default function LivingManagePage() {
     const { confirm, alert: showAlert } = useDialog();
     const { openUpgrade } = useUpgrade();
+    const { t, locale } = useI18n();
 
     const searchParams = useSearchParams();
 
@@ -234,7 +240,7 @@ export default function LivingManagePage() {
     const month = currentDate.getMonth();
     const monthKey = formatMonth(currentDate);
 
-    const monthLabel = currentDate.toLocaleDateString("ko-KR", {
+    const monthLabel = currentDate.toLocaleDateString(locale, {
         year: "numeric",
         month: "long",
     });
@@ -304,7 +310,7 @@ export default function LivingManagePage() {
 
     const selectedDateObject = new Date(`${selectedDate}T00:00:00`);
 
-    const selectedDateLabel = selectedDateObject.toLocaleDateString("ko-KR", {
+    const selectedDateLabel = selectedDateObject.toLocaleDateString(locale, {
         month: "long",
         day: "numeric",
         weekday: "short",
@@ -643,17 +649,17 @@ export default function LivingManagePage() {
         const amount = Number(form.amount);
 
         if (!form.date) {
-            showAlert("날짜를 선택해주세요.");
+            showAlert(t("manage.alert.date"));
             return;
         }
 
         if (!Number.isFinite(amount) || amount <= 0) {
-            showAlert("금액을 0보다 크게 입력해주세요.");
+            showAlert(t("manage.alert.amount"));
             return;
         }
 
         if (form.type !== "transfer" && !form.categoryId) {
-            showAlert("카테고리를 선택해주세요.");
+            showAlert(t("manage.alert.category"));
             return;
         }
 
@@ -684,7 +690,7 @@ export default function LivingManagePage() {
 
             if (!response.ok) {
                 const data = await response.json().catch(() => null);
-                showAlert(data?.error ?? "저장하지 못했습니다.");
+                showAlert(data?.error ?? t("manage.alert.saveFailed"));
                 return;
             }
 
@@ -694,12 +700,12 @@ export default function LivingManagePage() {
             await loadTransactions();
         } catch (error) {
             console.error(error);
-            showAlert("저장 중 문제가 발생했습니다.");
+            showAlert(t("manage.alert.saveError"));
         }
     };
 
     const deleteTransaction = async (id: number) => {
-        if (!await confirm("이 기록을 삭제할까요?")) {
+        if (!await confirm(t("manage.confirm.deleteRecord"))) {
             return;
         }
 
@@ -709,7 +715,7 @@ export default function LivingManagePage() {
             });
 
             if (!response.ok) {
-                throw new Error("삭제하지 못했습니다.");
+                throw new Error(t("manage.alert.deleteFailed"));
             }
 
             setIsFormOpen(false);
@@ -800,7 +806,7 @@ export default function LivingManagePage() {
             if (!response.ok) {
                 const data = await response.json().catch(() => null);
 
-                throw new Error(data?.error ?? "고정지출을 저장하지 못했습니다.");
+                throw new Error(data?.error ?? t("manage.alert.fixedSaveFailed"));
             }
 
             setIsFixedScopeSheetOpen(false);
@@ -813,7 +819,7 @@ export default function LivingManagePage() {
 
             setIsFixedScopeSheetOpen(false);
 
-            showAlert(error instanceof Error ? error.message : "고정지출을 저장하지 못했어요.");
+            showAlert(error instanceof Error ? error.message : t("manage.alert.fixedSaveFailed"));
         }
     };
 
@@ -838,7 +844,7 @@ export default function LivingManagePage() {
     const requestDeleteFixedExpense = async (expense: FixedExpense) => {
         // 시작 전 항목은 지울 방식이 하나뿐이다
         if (expense.isUpcoming) {
-            if (await confirm("이 고정지출을 삭제할까요?")) {
+            if (await confirm(t("manage.confirm.deleteFixed"))) {
                 await deleteFixedExpense(expense.id, "all");
             }
 
@@ -868,7 +874,7 @@ export default function LivingManagePage() {
 
             setFixedDeleteTarget(null);
 
-            showAlert("고정지출을 삭제하지 못했어요.");
+            showAlert(t("manage.alert.fixedDeleteFailed"));
         }
     };
 
@@ -984,7 +990,7 @@ export default function LivingManagePage() {
             const data = await response.json().catch(() => null);
 
             if (!response.ok) {
-                throw new Error(data?.error ?? "카테고리를 저장하지 못했습니다.");
+                throw new Error(data?.error ?? t("manage.alert.categorySaveFailed"));
             }
 
             await loadCategories();
@@ -1027,7 +1033,7 @@ export default function LivingManagePage() {
             return;
         }
 
-        if (!await confirm(`"${category.name}" 카테고리를 삭제할까요?`)) {
+        if (!await confirm(t("manage.confirm.deleteCategory", { name: getCategoryLabel(category.name, t) }))) {
             return;
         }
 
@@ -1039,7 +1045,7 @@ export default function LivingManagePage() {
             if (!response.ok) {
                 const data = await response.json().catch(() => null);
 
-                throw new Error(data?.error ?? "카테고리를 삭제하지 못했습니다.");
+                throw new Error(data?.error ?? t("manage.alert.categoryDeleteFailed"));
             }
 
             if (form.categoryId === String(category.id)) {
@@ -1071,10 +1077,10 @@ export default function LivingManagePage() {
 
     return (
         <div className="mx-auto max-w-md">
-            <BackButtonHeader href="/living" title="생활 관리" description="수입과 지출을 기록하고 관리해보세요." />
+            <BackButtonHeader href="/living" title={t("manage.title")} description={t("manage.description")} />
 
             <UsageMeter
-                label="생활 기록"
+                label={t("manage.usageLabel")}
                 used={totalTransactionCount}
                 limit={FREE_LIVING_TRANSACTION_LIMIT}
                 reason="living-limit"
@@ -1106,7 +1112,7 @@ export default function LivingManagePage() {
             <section className="mt-5 rounded-[28px] bg-white px-6 py-5 shadow-sm">
                 <div className="flex items-center">
                     <div className="flex flex-1 items-center justify-between pr-5">
-                        <span className="text-[12px] font-medium text-gray-400">수입</span>
+                        <span className="text-[12px] font-medium text-gray-400">{t("manage.type.income")}</span>
 
                         <span className="text-[15px] font-semibold text-gray-900">
                             +{formatMoney(monthTotals.income, currency)}
@@ -1116,7 +1122,7 @@ export default function LivingManagePage() {
                     <div className="h-5 w-px bg-gray-100" />
 
                     <div className="flex flex-1 items-center justify-between pl-5">
-                        <span className="text-[12px] font-medium text-gray-400">지출</span>
+                        <span className="text-[12px] font-medium text-gray-400">{t("manage.type.expense")}</span>
 
                         <span className="text-[15px] font-semibold text-gray-900">
                             -{formatMoney(monthTotals.expense, currency)}
@@ -1129,10 +1135,10 @@ export default function LivingManagePage() {
             <section className="mt-5 rounded-[28px] bg-white p-5 shadow-sm">
                 <div className="flex items-start justify-between">
                     <div>
-                        <p className="text-xs text-gray-400">고정지출 관리</p>
+                        <p className="text-xs text-gray-400">{t("manage.fixed.manage")}</p>
 
                         <div className="mt-1 flex items-center gap-2">
-                            <h2 className="text-lg font-semibold">고정지출</h2>
+                            <h2 className="text-lg font-semibold">{t("manage.fixed.title")}</h2>
 
                             {planCode === "free" && (
                                 <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-1 text-[10px] font-semibold text-gray-400">
@@ -1146,7 +1152,7 @@ export default function LivingManagePage() {
                     {planCode !== "free" && fixedExpenses.length > 0 && (
                         <p className="text-[13px] font-medium text-gray-500">
                             {formatMoney(fixedExpenseTotal, currency)}
-                            /월
+                            {t("manage.fixed.perMonth")}
                         </p>
                     )}
                 </div>
@@ -1155,16 +1161,16 @@ export default function LivingManagePage() {
                     <div className="mt-5 rounded-2xl bg-[#F7F7F5] px-5 py-7 text-center">
                         <Lock size={18} className="mx-auto text-gray-300" />
 
-                        <p className="mt-3 text-sm font-medium text-gray-600">고정지출 관리는 Pro에서 사용할 수 있어요.</p>
+                        <p className="mt-3 text-sm font-medium text-gray-600">{t("manage.fixed.proOnly")}</p>
 
-                        <p className="mt-1 text-xs text-gray-400">매달 반복되는 지출을 관리해보세요.</p>
+                        <p className="mt-1 text-xs text-gray-400">{t("manage.fixed.proBody")}</p>
 
                         <button
                             type="button"
                             onClick={() => openUpgrade("fixed-expense")}
                             className="mt-4 rounded-full bg-gray-900 px-4 py-2 text-xs font-medium text-white"
                         >
-                            Pro 알아보기
+                            {t("manage.fixed.learnPro")}
                         </button>
                     </div>
                 ) : (
@@ -1174,9 +1180,9 @@ export default function LivingManagePage() {
                                 <InlineLoading />
                             ) : fixedExpenses.length === 0 ? (
                                 <div className="rounded-2xl bg-[#F7F7F5] px-5 py-7 text-center">
-                                    <p className="text-sm font-medium text-gray-600">등록된 고정지출이 없어요.</p>
+                                    <p className="text-sm font-medium text-gray-600">{t("manage.fixed.emptyTitle")}</p>
 
-                                    <p className="mt-1 text-xs text-gray-400">매달 반복되는 지출을 추가해보세요.</p>
+                                    <p className="mt-1 text-xs text-gray-400">{t("manage.fixed.emptyBody")}</p>
                                 </div>
                             ) : (
                                 <div className="space-y-2">
@@ -1202,17 +1208,17 @@ export default function LivingManagePage() {
                                                     <p className="truncate text-sm font-medium text-gray-800">{expense.name}</p>
 
                                                     <span className="shrink-0 text-[10px] text-gray-400">
-                                                        {expense.paymentDay}일
+                                                        {t("manage.fixed.dayShort", { day: expense.paymentDay })}
                                                     </span>
 
                                                     {expense.isUpcoming && expense.startMonth && (
                                                         <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-gray-500">
-                                                            {Number(expense.startMonth.slice(5))}월부터
+                                                            {t("manage.fixed.startsFrom", { month: new Date(2000, Number(expense.startMonth.slice(5)) - 1, 1).toLocaleDateString(locale, { month: "short" }) })}
                                                         </span>
                                                     )}
                                                 </div>
 
-                                                <p className="mt-0.5 text-xs text-gray-400">{expense.categoryName}</p>
+                                                <p className="mt-0.5 text-xs text-gray-400">{getCategoryLabel(expense.categoryName, t)}</p>
                                             </div>
 
                                             <p className="shrink-0 text-sm font-medium text-gray-900">
@@ -1238,7 +1244,7 @@ export default function LivingManagePage() {
                             className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-gray-200 py-3 text-[13px] font-medium text-gray-500 transition-colors hover:border-gray-300 hover:bg-gray-50"
                         >
                             <Plus size={16} />
-                            고정지출 추가
+                            {t("manage.fixed.add")}
                         </button>
                     </>
                 )}
@@ -1247,7 +1253,9 @@ export default function LivingManagePage() {
             {/* Calendar */}
             <section className="mt-5 rounded-[28px] bg-white p-5 pt-10 shadow-sm">
                 <div className="grid grid-cols-7 text-center">
-                    {["일", "월", "화", "수", "목", "금", "토"].map((day) => (
+                    {Array.from({ length: 7 }, (_, index) =>
+                        new Date(2023, 0, 1 + index).toLocaleDateString(locale, { weekday: "short" }),
+                    ).map((day) => (
                         <div key={day} className="pb-3 text-[11px] font-medium text-gray-400">
                             {day}
                         </div>
@@ -1346,12 +1354,12 @@ export default function LivingManagePage() {
                 <div className="mt-4 flex items-center gap-4 text-xs text-gray-400">
                     <div className="flex items-center gap-2">
                         <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
-                        공휴일
+                        {t("manage.legend.holiday")}
                     </div>
 
                     <div className="flex items-center gap-2">
                         <span className="h-2.5 w-2.5 rounded-full bg-gray-900" />
-                        선택한 날짜
+                        {t("manage.legend.selected")}
                     </div>
                 </div>
             </section>
@@ -1360,7 +1368,7 @@ export default function LivingManagePage() {
             <section className="mt-5 rounded-[28px] bg-white p-5 shadow-sm">
                 <div className="flex items-end justify-between">
                     <div>
-                        <p className="text-xs text-gray-400">선택한 날짜</p>
+                        <p className="text-xs text-gray-400">{t("manage.legend.selected")}</p>
 
                         <h2 className={`mt-1 text-lg font-semibold ${selectedHoliday ? "text-red-500" : "text-gray-900"}`}>
                             {selectedDateLabel}
@@ -1369,14 +1377,14 @@ export default function LivingManagePage() {
                         {selectedHoliday && <p className="mt-1 text-xs font-medium text-red-500">{selectedHoliday.name}</p>}
                     </div>
 
-                    {selectedTransactions.length > 0 && <p className="text-xs text-gray-400">{selectedTransactions.length}건</p>}
+                    {selectedTransactions.length > 0 && <p className="text-xs text-gray-400">{t("manage.count", { count: selectedTransactions.length })}</p>}
                 </div>
 
                 {selectedTransactions.length === 0 ? (
                     <div className="mt-6 rounded-2xl bg-[#F7F7F5] px-5 py-8 text-center">
-                        <p className="text-sm font-medium text-gray-600">이 날에는 기록이 없어요.</p>
+                        <p className="text-sm font-medium text-gray-600">{t("manage.day.emptyTitle")}</p>
 
-                        <p className="mt-1 text-xs text-gray-400">수입이나 지출을 기록해보세요.</p>
+                        <p className="mt-1 text-xs text-gray-400">{t("manage.day.emptyBody")}</p>
                     </div>
                 ) : (
                     <div className="mt-5 divide-y divide-gray-100">
@@ -1401,11 +1409,11 @@ export default function LivingManagePage() {
                                                           : "text-[#718FB8]"
                                                 }`}
                                             >
-                                                {transaction.type === "transfer" ? "저축" : net > 0 ? "수입" : "지출"}{" "}
+                                                {transaction.type === "transfer" ? t("manage.type.saving") : net > 0 ? t("manage.type.income") : t("manage.type.expense")}{" "}
                                             </span>
 
                                             <p className="truncate text-sm font-medium text-gray-800">
-                                                {getTransactionLabel(transaction)}
+                                                {getTransactionLabel(transaction, t)}
                                             </p>
                                         </div>
 
@@ -1436,7 +1444,7 @@ export default function LivingManagePage() {
                     >
                         {isLivingTransactionLimitReached ? <Lock size={15} /> : <Plus size={16} />}
 
-                        {isLivingTransactionLimitReached ? "기록 한도 도달" : "지출 기록"}
+                        {isLivingTransactionLimitReached ? t("manage.limitReached") : t("manage.recordExpense")}
                     </button>
 
                     <button
@@ -1468,7 +1476,7 @@ export default function LivingManagePage() {
                     >
                         {isLivingTransactionLimitReached ? <Lock size={15} /> : <Plus size={16} />}
 
-                        {isLivingTransactionLimitReached ? "기록 한도 도달" : "수입 기록"}
+                        {isLivingTransactionLimitReached ? t("manage.limitReached") : t("manage.recordIncome")}
                     </button>
                 </div>
             </section>
@@ -1479,7 +1487,7 @@ export default function LivingManagePage() {
                     {/* Backdrop */}
                     <button
                         type="button"
-                        aria-label="닫기"
+                        aria-label={t("common.close")}
                         onClick={() => setIsFormOpen(false)}
                         className={`absolute inset-0 bg-black/30 transition-opacity duration-300 ease-out ${
                             isTransactionFormAnimating ? "opacity-100" : "opacity-0"
@@ -1501,10 +1509,10 @@ export default function LivingManagePage() {
                         <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-8 pt-2">
                             <div className="mb-6 flex items-center justify-between">
                                 <div>
-                                    <p className="text-xs text-gray-400">기록</p>
+                                    <p className="text-xs text-gray-400">{t("manage.sheet.label")}</p>
 
                                     <h2 className="mt-1 text-xl font-semibold text-gray-900">
-                                        {editingTransaction ? "기록 수정" : "기록 추가"}
+                                        {editingTransaction ? t("manage.sheet.edit") : t("manage.sheet.add")}
                                     </h2>
                                 </div>
 
@@ -1525,7 +1533,7 @@ export default function LivingManagePage() {
                                             form.type === "expense" ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500"
                                         }`}
                                     >
-                                        지출
+                                        {t("manage.type.expense")}
                                     </button>
 
                                     <button
@@ -1541,7 +1549,7 @@ export default function LivingManagePage() {
                                             form.type === "income" ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500"
                                         }`}
                                     >
-                                        수입
+                                        {t("manage.type.income")}
                                     </button>
 
                                     <button
@@ -1557,7 +1565,7 @@ export default function LivingManagePage() {
                                             form.type === "transfer" ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500"
                                         }`}
                                     >
-                                        이동
+                                        {t("manage.type.transfer")}
                                     </button>
                                 </div>
 
@@ -1577,7 +1585,7 @@ export default function LivingManagePage() {
                                                     : "bg-gray-100 text-gray-500"
                                             }`}
                                         >
-                                            생활 → 저축
+                                            {t("manage.transfer.toSavings")}
                                         </button>
 
                                         <button
@@ -1594,7 +1602,7 @@ export default function LivingManagePage() {
                                                     : "bg-gray-100 text-gray-500"
                                             }`}
                                         >
-                                            저축 → 생활
+                                            {t("manage.transfer.toLiving")}
                                         </button>
                                     </div>
                                 )}
@@ -1643,13 +1651,13 @@ export default function LivingManagePage() {
                                             }
                                             className="w-full rounded-2xl bg-gray-100 px-4 py-3.5 text-sm outline-none"
                                         >
-                                            <option value="">카테고리 선택</option>
+                                            <option value="">{t("manage.category.select")}</option>
 
                                             {categories
                                                 .filter((category) => category.kind === "variable")
                                                 .map((category) => (
                                                     <option key={category.id} value={category.id}>
-                                                        {category.name}
+                                                        {getCategoryLabel(category.name, t)}
                                                     </option>
                                                 ))}
                                         </select>
@@ -1664,7 +1672,7 @@ export default function LivingManagePage() {
                                             }`}
                                         >
                                             {isFree ? <Lock size={14} /> : <Plus size={15} />}
-                                            카테고리 추가하기
+                                            {t("manage.category.addButton")}
                                             {isFree && <ProBadge />}
                                         </button>
                                     </div>
@@ -1682,13 +1690,13 @@ export default function LivingManagePage() {
                                             }
                                             className="w-full rounded-2xl bg-gray-100 px-4 py-3.5 text-sm outline-none"
                                         >
-                                            <option value="">카테고리 선택</option>
+                                            <option value="">{t("manage.category.select")}</option>
 
                                             {categories
                                                 .filter((category) => category.kind === "income")
                                                 .map((category) => (
                                                     <option key={category.id} value={category.id}>
-                                                        {category.name}
+                                                        {getCategoryLabel(category.name, t)}
                                                     </option>
                                                 ))}
                                         </select>
@@ -1703,7 +1711,7 @@ export default function LivingManagePage() {
                                             }`}
                                         >
                                             {isFree ? <Lock size={14} /> : <Plus size={15} />}
-                                            카테고리 추가하기
+                                            {t("manage.category.addButton")}
                                             {isFree && <ProBadge />}
                                         </button>
                                     </div>
@@ -1711,7 +1719,7 @@ export default function LivingManagePage() {
 
                                 {form.type !== "transfer" && (
                                     <textarea
-                                        placeholder="메모"
+                                        placeholder={t("manage.memo")}
                                         value={form.memo}
                                         onChange={(event) =>
                                             setForm((prev) => ({
@@ -1730,7 +1738,7 @@ export default function LivingManagePage() {
                                         onClick={saveTransaction}
                                         className="flex-1 rounded-2xl bg-gray-900 py-3.5 text-sm font-medium text-white"
                                     >
-                                        {editingTransaction ? "수정하기" : "기록하기"}
+                                        {editingTransaction ? t("manage.btn.update") : t("manage.btn.record")}
                                     </button>
 
                                     {editingTransaction && (
@@ -1740,7 +1748,7 @@ export default function LivingManagePage() {
                                             className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-red-50 py-3.5 text-sm font-medium text-red-500"
                                         >
                                             <Trash2 size={16} />
-                                            삭제하기
+                                            {t("manage.btn.delete")}
                                         </button>
                                     )}
                                 </div>
@@ -1755,7 +1763,7 @@ export default function LivingManagePage() {
                 <div className="fixed inset-0 z-[150]">
                     <button
                         type="button"
-                        aria-label="닫기"
+                        aria-label={t("common.close")}
                         onClick={() => setIsFixedFormOpen(false)}
                         className={`absolute inset-0 bg-black/30 transition-opacity duration-300 ease-out ${
                             isFixedFormAnimating ? "opacity-100" : "opacity-0"
@@ -1774,10 +1782,10 @@ export default function LivingManagePage() {
                         <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-8 pt-2">
                             <div className="mb-6 flex items-center justify-between">
                                 <div>
-                                    <p className="text-xs text-gray-400">고정지출</p>
+                                    <p className="text-xs text-gray-400">{t("manage.fixed.title")}</p>
 
                                     <h2 className="mt-1 text-xl font-semibold text-gray-900">
-                                        {editingFixedExpense ? "고정지출 수정" : "고정지출 추가"}
+                                        {editingFixedExpense ? t("manage.fixed.edit") : t("manage.fixed.add")}
                                     </h2>
                                 </div>
                             </div>
@@ -1785,7 +1793,7 @@ export default function LivingManagePage() {
                             <div className="space-y-4">
                                 <input
                                     type="text"
-                                    placeholder="고정지출 이름"
+                                    placeholder={t("manage.fixed.namePlaceholder")}
                                     value={fixedForm.name}
                                     onChange={(event) =>
                                         setFixedForm((prev) => ({
@@ -1820,8 +1828,8 @@ export default function LivingManagePage() {
                                     <div className="grid grid-cols-2 gap-2">
                                         {(
                                             [
-                                                ["this-month", "이번 달부터"],
-                                                ["next-month", "다음 달부터"],
+                                                ["this-month", t("manage.start.thisMonth")],
+                                                ["next-month", t("manage.start.nextMonth")],
                                             ] as const
                                         ).map(([value, label]) => (
                                             <button
@@ -1850,13 +1858,13 @@ export default function LivingManagePage() {
                                             }
                                             className="rounded-2xl bg-gray-100 px-4 py-3.5 text-sm outline-none"
                                         >
-                                            <option value="">카테고리</option>
+                                            <option value="">{t("manage.category.label")}</option>
 
                                             {categories
                                                 .filter((category) => category.kind === "fixed")
                                                 .map((category) => (
                                                     <option key={category.id} value={category.id}>
-                                                        {category.name}
+                                                        {getCategoryLabel(category.name, t)}
                                                     </option>
                                                 ))}
                                         </select>
@@ -1873,7 +1881,7 @@ export default function LivingManagePage() {
                                         >
                                             {Array.from({ length: 31 }, (_, index) => index + 1).map((day) => (
                                                 <option key={day} value={day}>
-                                                    매월 {day}일
+                                                    {t("manage.fixed.monthlyDay", { day })}
                                                 </option>
                                             ))}
                                         </select>
@@ -1889,13 +1897,13 @@ export default function LivingManagePage() {
                                         }`}
                                     >
                                         {isFree ? <Lock size={14} /> : <Plus size={15} />}
-                                        카테고리 추가하기
+                                        {t("manage.category.addButton")}
                                         {isFree && <ProBadge />}
                                     </button>
                                 </div>
 
                                 <textarea
-                                    placeholder="메모"
+                                    placeholder={t("manage.memo")}
                                     value={fixedForm.memo}
                                     onChange={(event) =>
                                         setFixedForm((prev) => ({
@@ -1913,7 +1921,7 @@ export default function LivingManagePage() {
                                         onClick={saveFixedExpense}
                                         className="flex-1 rounded-2xl bg-gray-900 py-3.5 text-sm font-medium text-white"
                                     >
-                                        {editingFixedExpense ? "수정하기" : "추가하기"}
+                                        {editingFixedExpense ? t("manage.btn.update") : t("manage.btn.add")}
                                     </button>
 
                                     {editingFixedExpense && (
@@ -1923,7 +1931,7 @@ export default function LivingManagePage() {
                                             className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-red-50 py-3.5 text-sm font-medium text-red-500"
                                         >
                                             <Trash2 size={16} />
-                                            삭제하기
+                                            {t("manage.btn.delete")}
                                         </button>
                                     )}
                                 </div>
@@ -1938,21 +1946,21 @@ export default function LivingManagePage() {
                 {isFixedScopeSheetOpen && (
                     <>
                         <div className="mb-5">
-                            <p className="text-xs text-gray-400">고정지출</p>
+                            <p className="text-xs text-gray-400">{t("manage.fixed.title")}</p>
 
-                            <h3 className="mt-1 text-lg font-semibold tracking-[-0.03em] text-gray-900">언제부터 적용할까요?</h3>
+                            <h3 className="mt-1 text-lg font-semibold tracking-[-0.03em] text-gray-900">{t("manage.scope.title")}</h3>
 
                             <p className="mt-2 text-sm leading-6 text-gray-500">
-                                지난 달 기록은 그대로 두고, 고른 시점부터 바뀐 금액과 결제일이 적용돼요.
+                                {t("manage.scope.body")}
                             </p>
                         </div>
 
                         <div className="space-y-2">
                             {(
                                 [
-                                    ["this-month-only", "이번 달만", "다음 달부터는 원래 금액과 결제일로 돌아가요."],
-                                    ["from-this-month", "이번 달부터 계속", "이번 달부터 새 금액과 결제일이 적용돼요."],
-                                    ["from-next-month", "다음 달부터 계속", "이번 달은 그대로 두고, 다음 달부터 바뀌어요."],
+                                    ["this-month-only", t("manage.scope.onlyThis"), t("manage.scope.onlyThisBody")],
+                                    ["from-this-month", t("manage.scope.fromThis"), t("manage.scope.fromThisBody")],
+                                    ["from-next-month", t("manage.scope.fromNext"), t("manage.scope.fromNextBody")],
                                 ] as const
                             ).map(([scope, title, description]) => (
                                 <button
@@ -1976,10 +1984,10 @@ export default function LivingManagePage() {
                 {fixedDeleteTarget && (
                     <>
                         <div className="mb-5">
-                            <p className="text-xs text-gray-400">고정지출</p>
+                            <p className="text-xs text-gray-400">{t("manage.fixed.title")}</p>
 
                             <h3 className="mt-1 text-lg font-semibold tracking-[-0.03em] text-gray-900">
-                                &lsquo;{fixedDeleteTarget.name}&rsquo; 어떻게 할까요?
+                                {t("manage.delete.title", { name: fixedDeleteTarget.name })}
                             </h3>
                         </div>
 
@@ -1989,9 +1997,9 @@ export default function LivingManagePage() {
                                 onClick={() => void deleteFixedExpense(fixedDeleteTarget.id, "this-month-only")}
                                 className="w-full rounded-2xl bg-white px-4 py-4 text-left shadow-sm transition-colors active:bg-gray-50"
                             >
-                                <p className="text-sm font-semibold text-gray-900">이번 달만 종료</p>
+                                <p className="text-sm font-semibold text-gray-900">{t("manage.delete.onlyThis")}</p>
 
-                                <p className="mt-1 text-xs text-gray-400">이번 달에는 나가지 않고, 다음 달부터 다시 나가요.</p>
+                                <p className="mt-1 text-xs text-gray-400">{t("manage.delete.onlyThisBody")}</p>
                             </button>
 
                             <button
@@ -1999,9 +2007,9 @@ export default function LivingManagePage() {
                                 onClick={() => void deleteFixedExpense(fixedDeleteTarget.id, "from-this-month")}
                                 className="w-full rounded-2xl bg-white px-4 py-4 text-left shadow-sm transition-colors active:bg-gray-50"
                             >
-                                <p className="text-sm font-semibold text-gray-900">이번 달부터 종료</p>
+                                <p className="text-sm font-semibold text-gray-900">{t("manage.delete.fromThis")}</p>
 
-                                <p className="mt-1 text-xs text-gray-400">지난 달 기록은 그대로 남아요.</p>
+                                <p className="mt-1 text-xs text-gray-400">{t("manage.delete.fromThisBody")}</p>
                             </button>
 
                             <button
@@ -2009,9 +2017,9 @@ export default function LivingManagePage() {
                                 onClick={() => void deleteFixedExpense(fixedDeleteTarget.id, "all")}
                                 className="w-full rounded-2xl bg-red-50 px-4 py-4 text-left transition-colors active:bg-red-100"
                             >
-                                <p className="text-sm font-semibold text-red-500">전체 삭제</p>
+                                <p className="text-sm font-semibold text-red-500">{t("manage.delete.all")}</p>
 
-                                <p className="mt-1 text-xs text-red-400">지난 달 기록에서도 사라지고, 되돌릴 수 없어요.</p>
+                                <p className="mt-1 text-xs text-red-400">{t("manage.delete.allBody")}</p>
                             </button>
                         </div>
                     </>
@@ -2023,7 +2031,7 @@ export default function LivingManagePage() {
                 <div className="fixed inset-0 z-[160]">
                     <button
                         type="button"
-                        aria-label="닫기"
+                        aria-label={t("common.close")}
                         onClick={() => {
                             setIsCategoryFormOpen(false);
                             setEditingCategory(null);
@@ -2045,10 +2053,10 @@ export default function LivingManagePage() {
                         <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-8 pt-2">
                             <div className="mb-7 flex items-center justify-between">
                                 <div>
-                                    <p className="text-xs text-gray-400">카테고리</p>
+                                    <p className="text-xs text-gray-400">{t("manage.category.label")}</p>
 
                                     <h2 className="mt-1 text-2xl font-bold tracking-[-0.04em] text-gray-950">
-                                        {editingCategory ? "카테고리 수정" : "카테고리 추가"}
+                                        {editingCategory ? t("manage.category.edit") : t("manage.category.add")}
                                     </h2>
                                 </div>
 
@@ -2067,7 +2075,7 @@ export default function LivingManagePage() {
                             <div className="space-y-4">
                                 <input
                                     type="text"
-                                    placeholder="카테고리 이름"
+                                    placeholder={t("manage.category.namePlaceholder")}
                                     value={categoryForm.name}
                                     onChange={(event) =>
                                         setCategoryForm((prev) => ({
@@ -2084,13 +2092,13 @@ export default function LivingManagePage() {
                                     onClick={saveCategory}
                                     className="w-full rounded-2xl bg-gray-900 py-4 text-sm font-semibold text-white transition-colors hover:bg-gray-800"
                                 >
-                                    {editingCategory ? "수정하기" : "추가하기"}
+                                    {editingCategory ? t("manage.btn.update") : t("manage.btn.add")}
                                 </button>
 
                                 {categoryModalCategories.length > 0 && (
                                     <div>
                                         <div className="mb-3 flex items-center justify-between">
-                                            <p className="text-xs text-gray-400">현재 카테고리</p>
+                                            <p className="text-xs text-gray-400">{t("manage.category.current")}</p>
 
                                             {isFree && <ProBadge />}
                                         </div>
@@ -2102,7 +2110,7 @@ export default function LivingManagePage() {
                                                     className="flex items-center rounded-3xl bg-white px-5 py-3.5 shadow-sm"
                                                 >
                                                     <p className="min-w-0 flex-1 truncate text-sm font-medium text-gray-700">
-                                                        {category.name}
+                                                        {getCategoryLabel(category.name, t)}
                                                     </p>
 
                                                     <button

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Canvas } from "@react-three/fiber";
+import { useI18n } from "@/components/I18nProvider";
 import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import type ThreeGlobeType from "three-globe";
@@ -130,6 +131,7 @@ function Globe({ trips, geoData }: GlobeProps) {
 }
 
 export default function TravelGlobeClient({ trips }: TravelGlobeClientProps) {
+    const { t } = useI18n();
     const [geoData, setGeoData] = useState<GeoJsonData | null>(null);
 
     useEffect(() => {
@@ -190,9 +192,9 @@ export default function TravelGlobeClient({ trips }: TravelGlobeClientProps) {
 
         {/* 제목 */}
         <div className="pointer-events-none absolute left-5 top-5">
-            <p className="text-xs font-medium tracking-wide text-gray-400">나의 여행 지도</p>
+            <p className="text-xs font-medium tracking-wide text-gray-400">{t("tg.k001")}</p>
 
-            <p className="mt-1 text-lg font-semibold text-gray-800">내가 다녀온 곳</p>
+            <p className="mt-1 text-lg font-semibold text-gray-800">{t("tg.k002")}</p>
         </div>
 
         {/* 여행 기록 보기 */}
@@ -200,22 +202,22 @@ export default function TravelGlobeClient({ trips }: TravelGlobeClientProps) {
             href="/travel/list"
             className="absolute right-5 top-5 shrink-0 rounded-full bg-gray-100 px-3 py-2 text-xs font-medium text-gray-600"
         >
-            여행 기록 →
+            {t("tg.k003")}
         </Link>
 
         {/* 여행 통계 */}
         <div className="pointer-events-none absolute bottom-5 left-5">
             <p className="text-sm text-gray-500">
-                {visitedCountryCount}개국 · {visitedCityCount}개 도시
+                {t("tg.stats", { countries: visitedCountryCount, cities: visitedCityCount })}
             </p>
 
-            <p className="mt-1 text-xs text-gray-400">세계 여행 {worldProgress}% 완료</p>
+            <p className="mt-1 text-xs text-gray-400">{t("tg.progress", { percent: worldProgress })}</p>
         </div>
 
         {/* 로딩 */}
         {!geoData && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <p className="text-xs text-gray-400">세계 지도를 불러오는 중...</p>
+                <p className="text-xs text-gray-400">{t("tg.k004")}</p>
             </div>
         )}
     </div>

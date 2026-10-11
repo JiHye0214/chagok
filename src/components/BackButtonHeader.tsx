@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { useI18n } from "@/components/I18nProvider";
 
 type BackButtonHeaderProps = {
     href: string;
@@ -14,12 +15,14 @@ export default function BackButtonHeader({
     title,
     description,
 }: BackButtonHeaderProps) {
+    const { t } = useI18n();
+
     return (
         <header>
             <Link
                 href={href}
                 className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-gray-500 shadow-sm"
-                aria-label="뒤로 가기"
+                aria-label={t("common.goBack")}
             >
                 <ArrowLeft size={19} strokeWidth={1.8} />
             </Link>

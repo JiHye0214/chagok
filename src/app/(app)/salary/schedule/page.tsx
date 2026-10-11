@@ -17,13 +17,13 @@ import type { HolidayData, PeriodTipsData, WorkScheduleData } from "@/lib/salary
 import { parseDateOnly } from "@/lib/dateOnly";
 import BottomSheet from "@/components/BottomSheet";
 import { useDialog } from "@/components/DialogProvider";
+import { useI18n } from "@/components/I18nProvider";
+import { translateWarning } from "@/lib/i18n/warnings";
 import UsageMeter from "@/components/UsageMeter";
 import { FREE_PLAN_LIMITS } from "@/lib/plans";
 import { getHourlyWageOn } from "@/lib/salary/wage";
 
 type WorkSchedule = WorkScheduleData;
-
-const WEEK_DAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
 const calculateHours = (startTime: string, endTime: string, breakMinutes: number = 0) => {
     if (!startTime || !endTime) {
@@ -52,6 +52,10 @@ const formatDisplayDate = (value: string) => {
 };
 
 export default function SchedulePage() {
+    const { t, locale } = useI18n();
+    const weekDays = Array.from({ length: 7 }, (_, index) =>
+        new Date(2023, 0, 1 + index).toLocaleDateString(locale, { weekday: "short" }),
+    );
     const { alert: showAlert } = useDialog();
     const { openUpgrade } = useUpgrade();
     const [planCode, setPlanCode] = useState<"free" | "pro">("free");
@@ -465,8 +469,8 @@ export default function SchedulePage() {
 
                 if (delay > 0) {
                     setTimeout(() => {
-                        new Notification("차곡", {
-                            body: `오늘 ${startTime.slice(0, 5)}에 근무가 있어요.`,
+                        new Notification(t("common.appName"), {
+                            body: t("sched.notifyBody", { time: startTime.slice(0, 5) }),
                         });
                     }, delay);
                 }
@@ -509,7 +513,7 @@ export default function SchedulePage() {
         } catch (error) {
             console.error(error);
 
-            showAlert("근무 저장에 실패했어요.");
+            showAlert(t("sched.err.save"));
         }
     };
 
@@ -602,7 +606,7 @@ export default function SchedulePage() {
         } catch (error) {
             console.error(error);
 
-            showAlert("근무 삭제에 실패했어요.");
+            showAlert(t("sched.err.delete"));
         }
     };
 
@@ -654,7 +658,7 @@ export default function SchedulePage() {
         } catch (error) {
             console.error(error);
 
-            showAlert("팁 저장에 실패했어요.");
+            showAlert(t("sched.err.tips"));
         }
     };
 
@@ -692,11 +696,11 @@ export default function SchedulePage() {
         <div className="mx-auto max-w-md">
             {/* Header */}
             <header className="flex items-center justify-between">
-                <BackButtonHeader href="/salary" title="근무 관리" description="근무 일정을 등록하고 예상 급여를 확인해보세요." />
+                <BackButtonHeader href="/salary" title={t("sched.k001")} description={t("sched.k002")} />
             </header>
 
             <UsageMeter
-                label="근무 기록"
+                label={t("sched.k003")}
                 used={schedules.length}
                 limit={FREE_PLAN_LIMITS.workSchedules}
                 reason="schedule-limit"
@@ -708,7 +712,7 @@ export default function SchedulePage() {
                 <section className="mt-5 rounded-3xl bg-white p-5 shadow-sm">
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-xs text-gray-400">현재 급여 기간</p>
+                            <p className="text-xs text-gray-400">{t("sched.k004")}</p>
 
                             <p className="mt-1 text-sm font-semibold">
                                 {formatDisplayDate(currentPayPeriod.startDate)}
@@ -718,7 +722,7 @@ export default function SchedulePage() {
                         </div>
 
                         <div className="text-right">
-                            <p className="text-xs text-gray-400">급여일</p>
+                            <p className="text-xs text-gray-400">{t("sched.k005")}</p>
 
                             <p className="mt-1 text-sm font-semibold">{formatDisplayDate(currentPayPeriod.payDate)}</p>
                         </div>
@@ -732,9 +736,9 @@ export default function SchedulePage() {
                     </div>
 
                     <div>
-                        <p className="text-sm font-semibold text-gray-900">근무 기록 100개를 모두 사용했어요.</p>
+                        <p className="text-sm font-semibold text-gray-900">{t("sched.k006")}</p>
 
-                        <p className="mt-1 text-xs text-gray-500">기존 기록을 삭제하면 새로운 근무를 등록할 수 있어요.</p>
+                        <p className="mt-1 text-xs text-gray-500">{t("sched.k007")}</p>
                     </div>
 
                     <button
@@ -742,7 +746,7 @@ export default function SchedulePage() {
                         onClick={() => openUpgrade("schedule-limit")}
                         className="ml-auto shrink-0 rounded-full bg-gray-900 px-3 py-2 text-xs font-medium text-white"
                     >
-                        Pro 알아보기
+                        {t("sched.k008")}
                     </button>
                 </div>
             )}
@@ -758,7 +762,7 @@ export default function SchedulePage() {
                     </button>
 
                     <h2 className="text-lg font-semibold">
-                        {year}년 {month + 1}월
+                        {new Date(year, month, 1).toLocaleDateString(locale, { year: "numeric", month: "long" })}
                     </h2>
 
                     <button
@@ -770,7 +774,7 @@ export default function SchedulePage() {
                 </div>
 
                 <div className="mb-2 grid grid-cols-7 text-center text-xs text-gray-400">
-                    {WEEK_DAYS.map((day) => (
+                    {weekDays.map((day) => (
                         <div key={day}>{day}</div>
                     ))}
                 </div>
@@ -855,7 +859,7 @@ export default function SchedulePage() {
                                                 </span>
                                             ) : salarySettings?.payType === "salary" ? (
                                                 <span className="mt-1 text-[10px] font-medium leading-none text-gray-500">
-                                                    월급
+                                                    {t("sched.k009")}
                                                 </span>
                                             ) : null}
                                         </>
@@ -869,7 +873,7 @@ export default function SchedulePage() {
 
                                     {isPayDate && (
                                         <span className="absolute bottom-0 text-[8px] font-medium leading-none text-gray-400">
-                                            급여일
+                                            {t("sched.k005")}
                                         </span>
                                     )}
                                 </button>
@@ -882,17 +886,17 @@ export default function SchedulePage() {
                     <div className="flex items-center gap-4 text-xs text-gray-400">
                         <div className="flex items-center gap-2">
                             <span className="h-3 w-3 rounded bg-gray-100" />
-                            급여 기간
+                            {t("sched.k010")}
                         </div>
 
                         <div className="flex items-center gap-2">
                             <span className="h-3 w-3 rounded-full bg-black" />
-                            근무 등록
+                            {t("sched.k011")}
                         </div>
                     </div>
 
                     <span className="text-xs font-medium text-gray-400">
-                        {currentMonthSchedules.length}회 /{" "}
+                        {t("sched.monthCount", { count: currentMonthSchedules.length })} /{" "}
                         {currentMonthSchedules
                             .reduce(
                                 (total, schedule) =>
@@ -905,7 +909,7 @@ export default function SchedulePage() {
                                 0,
                             )
                             .toFixed(2)}
-                        시간
+                        {t("sched.k012")}
                     </span>
                 </div>
             </section>
@@ -917,7 +921,7 @@ export default function SchedulePage() {
 
                     <button
                         type="button"
-                        aria-label="닫기"
+                        aria-label={t("sched.k013")}
                         onClick={() => {
                             setIsAddModalOpen(false);
                             setEditingSchedule(null);
@@ -946,7 +950,7 @@ export default function SchedulePage() {
                             {/* Modal Header */}
 
                             <div>
-                                <h2 className="text-xl font-bold">{editingSchedule ? "근무 수정" : "근무 추가"}</h2>
+                                <h2 className="text-xl font-bold">{editingSchedule ? t("sched.edit") : t("sched.add")}</h2>
 
                                 <div className="mt-1 flex items-center gap-2">
                                     <p
@@ -981,7 +985,7 @@ export default function SchedulePage() {
 
                             <div className="mt-6 grid grid-cols-2 gap-3">
                                 <div>
-                                    <p className="mb-2 text-sm text-gray-500">시작</p>
+                                    <p className="mb-2 text-sm text-gray-500">{t("sched.k014")}</p>
 
                                     <input
                                         type="time"
@@ -992,7 +996,7 @@ export default function SchedulePage() {
                                 </div>
 
                                 <div>
-                                    <p className="mb-2 text-sm text-gray-500">종료</p>
+                                    <p className="mb-2 text-sm text-gray-500">{t("sched.k015")}</p>
 
                                     <input
                                         type="time"
@@ -1008,9 +1012,9 @@ export default function SchedulePage() {
                             <div className="mt-5 rounded-2xl bg-white p-4">
                                 <div className="flex items-center justify-between">
                                     <div>
-                                        <p className="font-medium">☕ 휴게시간</p>
+                                        <p className="font-medium">{t("sched.k016")}</p>
 
-                                        <p className="mt-1 text-xs text-gray-400">이번 근무에 휴게시간이 있었나요?</p>
+                                        <p className="mt-1 text-xs text-gray-400">{t("sched.k017")}</p>
                                     </div>
 
                                     <button
@@ -1040,7 +1044,7 @@ export default function SchedulePage() {
 
                                 {hasBreak && (
                                     <div className="mt-4">
-                                        <p className="mb-2 text-sm text-gray-500">휴게시간은 몇 분이었나요?</p>
+                                        <p className="mb-2 text-sm text-gray-500">{t("sched.k018")}</p>
 
                                         <div className="flex items-center rounded-2xl bg-gray-50 px-4">
                                             <input
@@ -1061,7 +1065,7 @@ export default function SchedulePage() {
                                                 placeholder="30"
                                             />
 
-                                            <span className="shrink-0 text-sm text-gray-400">분</span>
+                                            <span className="shrink-0 text-sm text-gray-400">{t("sched.k019")}</span>
                                         </div>
                                     </div>
                                 )}
@@ -1071,11 +1075,11 @@ export default function SchedulePage() {
 
                             <div className="mt-4 rounded-2xl bg-white p-4">
                                 <div className="flex items-center justify-between">
-                                    <span className="text-sm text-gray-500">실제 근무시간</span>
+                                    <span className="text-sm text-gray-500">{t("sched.k020")}</span>
 
                                     <span className="font-semibold">
                                         {calculateHours(startTime, endTime, hasBreak ? Number(breakMinutes) || 0 : 0).toFixed(2)}
-                                        시간
+                                        {t("sched.k012")}
                                     </span>
                                 </div>
                             </div>
@@ -1085,7 +1089,7 @@ export default function SchedulePage() {
                             {salarySettings?.payType === "hourly" && (
                                 <div className="mt-3 rounded-2xl bg-white p-4">
                                     <div className="flex items-center justify-between">
-                                        <span className="text-sm text-gray-500">예상 급여</span>
+                                        <span className="text-sm text-gray-500">{t("sched.k021")}</span>
 
                                         <span className="font-semibold">
                                             {formatMoney(
@@ -1112,9 +1116,9 @@ export default function SchedulePage() {
                             <div className="mt-5 rounded-2xl bg-white p-4">
                                 <div className="flex items-center justify-between">
                                     <div>
-                                        <p className="font-medium">🔔 근무 알림</p>
+                                        <p className="font-medium">{t("sched.k022")}</p>
 
-                                        <p className="mt-1 text-xs text-gray-400">근무 전에 미리 알려드려요.</p>
+                                        <p className="mt-1 text-xs text-gray-400">{t("sched.k023")}</p>
                                     </div>
 
                                     <button
@@ -1126,7 +1130,7 @@ export default function SchedulePage() {
                                                 } catch (error) {
                                                     console.error(error);
 
-                                                    showAlert(error instanceof Error ? error.message : "알림 설정에 실패했어요.");
+                                                    showAlert(error instanceof Error ? error.message : t("sched.err.notify"));
 
                                                     return;
                                                 }
@@ -1148,18 +1152,18 @@ export default function SchedulePage() {
 
                                 {alarmEnabled && (
                                     <div className="mt-4">
-                                        <p className="mb-2 text-sm text-gray-500">몇 분 전에 알려드릴까요?</p>
+                                        <p className="mb-2 text-sm text-gray-500">{t("sched.k024")}</p>
 
                                         <select
                                             value={alarmMinutesBefore}
                                             onChange={(e) => setAlarmMinutesBefore(Number(e.target.value))}
                                             className="w-full rounded-2xl bg-gray-50 px-4 py-4 outline-none"
                                         >
-                                            <option value={15}>15분 전</option>
-                                            <option value={30}>30분 전</option>
-                                            <option value={60}>1시간 전</option>
-                                            <option value={120}>2시간 전</option>
-                                            <option value={1440}>하루 전</option>
+                                            <option value={15}>{t("sched.k025")}</option>
+                                            <option value={30}>{t("sched.k026")}</option>
+                                            <option value={60}>{t("sched.k027")}</option>
+                                            <option value={120}>{t("sched.k028")}</option>
+                                            <option value={1440}>{t("sched.k029")}</option>
                                         </select>
                                     </div>
                                 )}
@@ -1172,7 +1176,7 @@ export default function SchedulePage() {
                                     onClick={handleSaveSchedule}
                                     className="flex-1 rounded-2xl bg-black py-4 font-semibold text-white"
                                 >
-                                    {editingSchedule ? "근무 수정" : "근무 등록"}
+                                    {editingSchedule ? t("sched.edit") : t("sched.register")}
                                 </button>
 
                                 {editingSchedule && (
@@ -1180,7 +1184,7 @@ export default function SchedulePage() {
                                         onClick={handleDeleteSchedule}
                                         className="flex-1 rounded-2xl bg-red-50 py-4 font-semibold text-red-500"
                                     >
-                                        근무 삭제
+                                        {t("sched.k030")}
                                     </button>
                                 )}
                             </div>
@@ -1193,10 +1197,10 @@ export default function SchedulePage() {
             <BottomSheet isOpen={Boolean(isDefaultBreakConfirmOpen)} onClose={() => setIsDefaultBreakConfirmOpen(false)}>
                 {isDefaultBreakConfirmOpen && (
                     <>
-                            <p className="text-lg font-bold">휴게시간 설정이 변경됐어요.</p>
+                            <p className="text-lg font-bold">{t("sched.k031")}</p>
 
                             <p className="mt-2 text-sm leading-6 text-gray-500">
-                                이번 근무에만 적용할까요, 아니면 앞으로 기본값으로 사용할까요?
+                                {t("sched.k032")}
                             </p>
 
                             <div className="mt-6 grid grid-cols-2 gap-3">
@@ -1205,7 +1209,7 @@ export default function SchedulePage() {
                                     onClick={useBreakOnce}
                                     className="rounded-2xl bg-gray-100 py-4 text-sm font-semibold"
                                 >
-                                    이번 근무만
+                                    {t("sched.k033")}
                                 </button>
 
                                 <button
@@ -1213,7 +1217,7 @@ export default function SchedulePage() {
                                     onClick={saveAsDefaultBreak}
                                     className="rounded-2xl bg-black py-4 text-sm font-semibold text-white"
                                 >
-                                    기본값으로 변경
+                                    {t("sched.k034")}
                                 </button>
                             </div>
                 
@@ -1227,7 +1231,7 @@ export default function SchedulePage() {
             {currentPayPeriod && salarySettings?.hasTips && (
                 <section className="mt-5 rounded-3xl bg-white p-5 shadow-sm">
                     <div>
-                        <h2 className="text-lg font-semibold">이번 급여 기간 팁</h2>
+                        <h2 className="text-lg font-semibold">{t("sched.k035")}</h2>
 
                         <p className="mt-1 text-sm text-gray-400">
                             {formatDisplayDate(currentPayPeriod.startDate)}
@@ -1238,7 +1242,7 @@ export default function SchedulePage() {
 
                     {salarySettings.tipType === "cash" && (
                         <div className="mt-4">
-                            <p className="mb-2 text-sm text-gray-500">현금으로 받은 팁</p>
+                            <p className="mb-2 text-sm text-gray-500">{t("sched.k036")}</p>
 
                             <div className="flex items-center rounded-2xl bg-gray-100 px-4">
                                 <span className="text-gray-500">{getCurrencySymbol(currency)}</span>
@@ -1268,7 +1272,7 @@ export default function SchedulePage() {
 
                     {salarySettings.tipType === "paycheque" && (
                         <div className="mt-4">
-                            <p className="mb-2 text-sm text-gray-500">급여에 포함되는 팁</p>
+                            <p className="mb-2 text-sm text-gray-500">{t("sched.k037")}</p>
 
                             <div className="flex items-center rounded-2xl bg-gray-100 px-4">
                                 <span className="text-gray-500">{getCurrencySymbol(currency)}</span>
@@ -1299,7 +1303,7 @@ export default function SchedulePage() {
                     {salarySettings.tipType === "both" && (
                         <div className="mt-4 space-y-4">
                             <div>
-                                <p className="mb-2 text-sm text-gray-500">급여에 포함되는 팁</p>
+                                <p className="mb-2 text-sm text-gray-500">{t("sched.k037")}</p>
 
                                 <div className="flex items-center rounded-2xl bg-gray-100 px-4">
                                     <span className="text-gray-500">{getCurrencySymbol(currency)}</span>
@@ -1327,7 +1331,7 @@ export default function SchedulePage() {
                             </div>
 
                             <div>
-                                <p className="mb-2 text-sm text-gray-500">현금으로 받은 팁</p>
+                                <p className="mb-2 text-sm text-gray-500">{t("sched.k036")}</p>
 
                                 <div className="flex items-center rounded-2xl bg-gray-100 px-4">
                                     <span className="text-gray-500">{getCurrencySymbol(currency)}</span>
@@ -1361,7 +1365,7 @@ export default function SchedulePage() {
                         onClick={handleSaveTips}
                         className="mt-4 w-full rounded-2xl bg-gray-900 py-4 text-sm font-semibold text-white"
                     >
-                        팁 저장
+                        {t("sched.k038")}
                     </button>
                 </section>
             )}
@@ -1370,25 +1374,25 @@ export default function SchedulePage() {
         -------------------------------------------------- */}
             {currentPayPeriod && !currentPeriodEstimate && (
                 <section className="mt-6 rounded-3xl bg-black p-6 text-white shadow-sm">
-                    <p className="text-sm text-gray-400">이번 예상 급여</p>
+                    <p className="text-sm text-gray-400">{t("sched.k039")}</p>
 
                     <p className="mt-3 text-sm text-gray-300">
                         {estimateOutcome?.status === "unsupported-country"
-                            ? "아직 이 나라의 급여 계산을 지원하지 않아요."
+                            ? t("sal.problem.unsupported")
                             : estimateOutcome?.status === "no-profile"
-                              ? "프로필에서 국가를 설정하면 예상 급여를 계산할 수 있어요."
-                              : "급여 설정을 먼저 해주세요."}
+                              ? t("sal.problem.noProfile")
+                              : t("sal.problem.noSettings")}
                     </p>
                 </section>
             )}
 
             {currentPayPeriod && !salarySettings?.payPeriodStartDate && salarySettings && (
-                <p className="mt-3 text-xs text-gray-400">급여 설정에서 급여 기간 시작일을 입력하면 더 정확해져요.</p>
+                <p className="mt-3 text-xs text-gray-400">{t("sched.k040")}</p>
             )}
 
             {currentPayPeriod && currentPeriodEstimate && (
                 <section className="mt-6 rounded-3xl bg-black p-6 text-white shadow-sm">
-                    <p className="text-sm text-gray-400">이번 예상 급여</p>
+                    <p className="text-sm text-gray-400">{t("sched.k039")}</p>
 
                     <div className="mt-2 flex items-start gap-2">
                         <p className="text-4xl font-bold tabular-nums">{formatMoney(animatedNetPay)}</p>
@@ -1399,23 +1403,23 @@ export default function SchedulePage() {
                     {planCode === "pro" ? (
                         <div className="mt-6 space-y-3 text-sm">
                             <div className="flex justify-between">
-                                <span className="text-gray-400">근무시간</span>
+                                <span className="text-gray-400">{t("sched.k041")}</span>
 
                                 <span>
                                     {currentPeriodEstimate.hours.toFixed(2)}
-                                    시간
+                                    {t("sched.k012")}
                                 </span>
                             </div>
 
                             <div className="flex justify-between">
-                                <span className="text-gray-400">기본 급여</span>
+                                <span className="text-gray-400">{t("sched.k042")}</span>
 
                                 <span>{formatMoney(currentPeriodEstimate.basePay)}</span>
                             </div>
 
                             {hasPaychequeTips && (
                                 <div className="flex justify-between">
-                                    <span className="text-gray-400">급여 포함 팁</span>
+                                    <span className="text-gray-400">{t("sched.k043")}</span>
 
                                     <span>{formatMoney(currentPeriodEstimate.paychequeTips)}</span>
                                 </div>
@@ -1423,7 +1427,7 @@ export default function SchedulePage() {
 
                             {currentPeriodHolidayPay > 0 && (
                                 <div className="flex justify-between">
-                                    <span className="text-gray-400">공휴일 수당</span>
+                                    <span className="text-gray-400">{t("sched.k044")}</span>
 
                                     <span>{formatMoney(currentPeriodHolidayPay)}</span>
                                 </div>
@@ -1432,7 +1436,7 @@ export default function SchedulePage() {
                             {currentPeriodEstimate.vacationPay > 0 && (
                                 <div className="flex justify-between">
                                     <span className="text-gray-400">
-                                        휴가 수당
+                                        {t("sched.k045")}
                                         {vacationPayRate !== undefined
                                             ? ` (${Math.round(vacationPayRate * 10000) / 100}%)`
                                             : ""}
@@ -1444,34 +1448,34 @@ export default function SchedulePage() {
 
                             <div className="mt-4 border-t border-gray-800 pt-4">
                                 <div className="flex justify-between">
-                                    <span className="text-gray-300">세전 급여</span>
+                                    <span className="text-gray-300">{t("sched.k046")}</span>
 
                                     <span className="font-semibold">{formatMoney(currentPeriodEstimate.grossPay)}</span>
                                 </div>
                             </div>
 
                             <div className="flex justify-between">
-                                <span className="text-gray-400">예상 공제</span>
+                                <span className="text-gray-400">{t("sched.k047")}</span>
 
                                 <span>- {formatMoney(currentPeriodEstimate.deductions)}</span>
                             </div>
 
                             <div className="flex justify-between">
-                                <span className="text-gray-300">실수령 급여</span>
+                                <span className="text-gray-300">{t("sched.k048")}</span>
 
                                 <span className="font-semibold">{formatMoney(currentPeriodEstimate.netPay)}</span>
                             </div>
 
                             {currentPeriodEstimate.warnings.map((warning) => (
                                 <p key={warning} className="pt-2 text-xs leading-5 text-amber-300">
-                                    {warning}
+                                    {translateWarning(warning, t)}
                                 </p>
                             ))}
 
                             {hasCashTips && (
                                 <div className="mt-4 border-t border-gray-800 pt-4">
                                     <div className="flex justify-between">
-                                        <span className="text-gray-400">현금 팁</span>
+                                        <span className="text-gray-400">{t("sched.k049")}</span>
 
                                         <span>{formatMoney(currentPeriodEstimate.cashTips)}</span>
                                     </div>
@@ -1485,12 +1489,12 @@ export default function SchedulePage() {
                             <div className="pointer-events-none select-none blur-[3px] opacity-40">
                                 <div className="space-y-3 text-sm">
                                     <div className="flex justify-between">
-                                        <span className="text-gray-400">근무시간</span>
-                                        <span>32.50시간</span>
+                                        <span className="text-gray-400">{t("sched.k041")}</span>
+                                        <span>{t("sched.k050")}</span>
                                     </div>
 
                                     <div className="flex justify-between">
-                                        <span className="text-gray-400">기본 급여</span>
+                                        <span className="text-gray-400">{t("sched.k042")}</span>
                                         <span>{formatMoney(currency === "KRW" ? Math.round(570.03 * 1000) : 570.03)}</span>
                                     </div>
 
@@ -1506,18 +1510,18 @@ export default function SchedulePage() {
 
                                     <div className="border-t border-gray-800 pt-4">
                                         <div className="flex justify-between">
-                                            <span className="text-gray-300">세전 급여</span>
+                                            <span className="text-gray-300">{t("sched.k046")}</span>
                                             <span>{formatMoney(currency === "KRW" ? Math.round(623.38 * 1000) : 623.38)}</span>
                                         </div>
                                     </div>
 
                                     <div className="flex justify-between">
-                                        <span className="text-gray-400">예상 공제</span>
+                                        <span className="text-gray-400">{t("sched.k047")}</span>
                                         <span>- {formatMoney(currency === "KRW" ? Math.round(123.42 * 1000) : 123.42)}</span>
                                     </div>
 
                                     <div className="flex justify-between">
-                                        <span className="text-gray-300">실수령 급여</span>
+                                        <span className="text-gray-300">{t("sched.k048")}</span>
                                         <span>{formatMoney(currency === "KRW" ? Math.round(499.96 * 1000) : 499.96)}</span>
                                     </div>
                                 </div>
@@ -1530,28 +1534,28 @@ export default function SchedulePage() {
                                     <Lock size={19} strokeWidth={2} className="text-gray-300" />
                                 </div>
 
-                                <p className="mt-3 text-sm font-semibold text-white">급여 계산 상세</p>
+                                <p className="mt-3 text-sm font-semibold text-white">{t("sched.k051")}</p>
 
-                                <p className="mt-1 text-xs text-gray-400">Pro에서 세부 계산 내역을 확인할 수 있어요.</p>
+                                <p className="mt-1 text-xs text-gray-400">{t("sched.k052")}</p>
 
                                 <button
                                     type="button"
                                     onClick={() => openUpgrade("general")}
                                     className="mt-4 rounded-full bg-white px-4 py-2 text-xs font-medium text-gray-900"
                                 >
-                                    Pro 알아보기
+                                    {t("sched.k008")}
                                 </button>
                             </div>
                         </div>
                     )}
 
                     {salarySettings?.payType === "hourly" && (
-                        <p className="mt-5 text-xs text-gray-400">{formatMoney(hourlyWage)} / 시간 기준</p>
+                        <p className="mt-5 text-xs text-gray-400">{t("sched.perHour", { amount: formatMoney(hourlyWage) })}</p>
                     )}
 
                     {salarySettings?.payType === "salary" && (
                         <p className="mt-5 text-xs text-gray-400">
-                            설정된 월급 {formatMoney(Number(salarySettings.monthlySalary ?? 0))}
+                            {t("sched.monthlySet", { amount: formatMoney(Number(salarySettings.monthlySalary ?? 0)) })}
                         </p>
                     )}
                 </section>

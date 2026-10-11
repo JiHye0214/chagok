@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
+import { toDateOnly } from "@/lib/dateOnly";
 import { getCurrentUser } from "@/lib/auth/user";
 import { getPlanCode } from "@/lib/api/plan";
+import { FREE_PLAN_LIMITS } from "@/lib/plans";
 
 type DestinationCity = {
     city: string;
@@ -120,10 +122,10 @@ export async function POST(request: Request) {
         WHERE user_id = ${user.id}
     `;
 
-            if (tripCount[0].count >= 3) {
+            if (tripCount[0].count >= FREE_PLAN_LIMITS.trips) {
                 return NextResponse.json(
                     {
-                        error: "무료 플랜에서는 여행을 최대 3개까지 저장할 수 있어요.",
+                        error: `무료 플랜에서는 여행을 최대 ${FREE_PLAN_LIMITS.trips}개까지 저장할 수 있어요.`,
                         code: "TRIP_LIMIT_REACHED",
                     },
                     { status: 403 },
@@ -157,7 +159,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "여행 일정을 입력해주세요." }, { status: 400 });
         }
 
-        if (new Date(endDate) < new Date(startDate)) {
+        if (toDateOnly(endDate) < toDateOnly(startDate)) {
             return NextResponse.json({ error: "여행 종료일은 시작일보다 빠를 수 없습니다." }, { status: 400 });
         }
 

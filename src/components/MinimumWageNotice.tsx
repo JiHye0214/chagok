@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useI18n } from "@/components/I18nProvider";
 import { todayDateString } from "@/lib/dateOnly";
 import { getMinimumWageAreaName, getMinimumWageNotice } from "@/lib/minimumWage";
 import type { WagePreset } from "@/lib/minimumWage";
@@ -19,6 +20,7 @@ type MinimumWageNoticeProps = {
 const getDismissKey = (area: string, effectiveDate: string) => `chagok:minwage-dismissed:${area}:${effectiveDate}`;
 
 export default function MinimumWageNotice({ profile, settings, onApply, className = "" }: MinimumWageNoticeProps) {
+    const { t } = useI18n();
     const [isDismissed, setIsDismissed] = useState(false);
 
     const notice =
@@ -51,15 +53,32 @@ export default function MinimumWageNotice({ profile, settings, onApply, classNam
         return null;
     }
 
-    const area = getMinimumWageAreaName(notice.rule);
+    const rule = notice.rule;
+    const area =
+        rule.region === "ON"
+            ? t("mwn.area.ON")
+            : rule.region === "BC"
+              ? t("mwn.area.BC")
+              : rule.region === null && rule.country === "KR"
+                ? t("mwn.area.KR")
+                : getMinimumWageAreaName(rule);
     const currency = notice.rule.currency;
 
-    const title = notice.kind === "below" ? `${area} 최저시급이 올랐어요` : `${area} 최저시급이 곧 올라요`;
+    const title = notice.kind === "below" ? t("mwn.titleBelow", { area }) : t("mwn.titleSoon", { area });
 
     const description =
         notice.kind === "below"
-            ? `${notice.rule.effectiveDate}부터 ${formatCurrency(notice.rule.hourlyWage, currency)}예요. 지금 시급은 ${formatCurrency(notice.currentWage, currency)}으로 되어 있어요.`
-            : `${notice.rule.effectiveDate}(${notice.daysUntil}일 뒤)부터 ${formatCurrency(notice.rule.hourlyWage, currency)}이 돼요. 지금 시급은 ${formatCurrency(notice.currentWage, currency)}으로 되어 있어요.`;
+            ? t("mwn.descBelow", {
+                  date: notice.rule.effectiveDate,
+                  wage: formatCurrency(notice.rule.hourlyWage, currency),
+                  current: formatCurrency(notice.currentWage, currency),
+              })
+            : t("mwn.descSoon", {
+                  date: notice.rule.effectiveDate,
+                  days: notice.daysUntil,
+                  wage: formatCurrency(notice.rule.hourlyWage, currency),
+                  current: formatCurrency(notice.currentWage, currency),
+              });
 
     const handleDismiss = () => {
         setIsDismissed(true);
@@ -73,14 +92,14 @@ export default function MinimumWageNotice({ profile, settings, onApply, classNam
 
     return (
         <section className={`rounded-3xl border border-amber-100 bg-amber-50 p-5 ${className}`}>
-            <p className="text-xs font-medium text-amber-600">시급 확인</p>
+            <p className="text-xs font-medium text-amber-600">{t("mwn.k001")}</p>
 
             <p className="mt-1 text-lg font-bold text-gray-900">{title}</p>
 
             <p className="mt-1 text-sm leading-6 text-gray-600">{description}</p>
 
             <p className="mt-1 text-xs leading-5 text-gray-400">
-                일반 근로자 기준이에요. 학생이나 특정 직종은 기준이 다를 수 있어서 해당될 때만 바꿔주세요.
+                {t("mwn.k002")}
             </p>
 
             <div className="mt-4 flex gap-2">
@@ -89,7 +108,7 @@ export default function MinimumWageNotice({ profile, settings, onApply, classNam
                     onClick={() => onApply({ hourlyWage: notice.rule.hourlyWage, effectiveDate: notice.rule.effectiveDate })}
                     className="flex-1 rounded-2xl bg-gray-900 py-3 text-sm font-semibold text-white transition-colors hover:bg-gray-800"
                 >
-                    {formatCurrency(notice.rule.hourlyWage, currency)}으로 바꾸기
+                    {t("mwn.apply", { wage: formatCurrency(notice.rule.hourlyWage, currency) })}
                 </button>
 
                 <button
@@ -97,7 +116,7 @@ export default function MinimumWageNotice({ profile, settings, onApply, classNam
                     onClick={handleDismiss}
                     className="rounded-2xl bg-white px-4 py-3 text-sm font-medium text-gray-500 transition-colors hover:bg-gray-100"
                 >
-                    괜찮아요
+                    {t("mwn.k003")}
                 </button>
             </div>
         </section>

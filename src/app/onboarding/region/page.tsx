@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useI18n } from "@/components/I18nProvider";
 import { getCountry } from "@/lib/countries";
 import type { CountryConfig } from "@/lib/countries";
 
 export default function RegionPage() {
     const router = useRouter();
+    const { t } = useI18n();
 
     // 앞 단계에서 고른 국가. 지역을 고르는 나라가 아니면 이 화면에 머물지 않는다.
     const [country, setCountry] = useState<CountryConfig | null>(null);
@@ -45,7 +47,7 @@ export default function RegionPage() {
             <div className="relative mx-auto h-full w-full max-w-md px-6">
                 {/* Brand */}
                 <p className="absolute left-6 top-8 text-2xl font-semibold tracking-[-0.05em] text-gray-900">
-                    차곡
+                    {t("common.appName")}
                 </p>
                 {/* Content */}
                 <main className="flex h-full w-full items-center justify-center">
@@ -54,9 +56,9 @@ export default function RegionPage() {
                         <div className="opacity-0 animate-[onboardingFadeUp_0.6s_ease-out_0.2s_forwards]">
                             <p className="text-xs text-gray-400">04</p>
 
-                            <h1 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-gray-900">지역을 선택해 주세요</h1>
+                            <h1 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-gray-900">{t("onboarding.region.title")}</h1>
 
-                            <p className="mt-2 text-sm text-gray-400">거주 지역과 시간대를 선택해 주세요.</p>
+                            <p className="mt-2 text-sm text-gray-400">{t("onboarding.region.description")}</p>
                         </div>
 
                         {/* Regions */}
@@ -76,7 +78,7 @@ export default function RegionPage() {
 
                                         <p className="mt-1 text-xs text-gray-400">
                                             {region.timezoneName} {region.timezoneOffset}
-                                            {!region.payrollSupported && " · 세금 계산 준비 중"}
+                                            {!region.payrollSupported && ` · ${t("settings.countryPage.taxPending")}`}
                                         </p>
                                     </div>
 
@@ -93,7 +95,7 @@ export default function RegionPage() {
                     onClick={() => router.push("/auth/login")}
                     className="absolute bottom-8 left-6 text-xs text-gray-400 transition hover:text-gray-900"
                 >
-                    ← 이전
+                    {t("onboarding.back")}
                 </button>
             </div>
         </div>

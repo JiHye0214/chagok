@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
+import { daysBetween } from "@/lib/dateOnly";
 import { getCurrentUser } from "@/lib/auth/user";
 import { getPlanCode } from "@/lib/api/plan";
 
@@ -127,11 +128,7 @@ export async function GET() {
         // --------------------------------------------------------
 
         const tripStats = trips.map((trip) => {
-            const startDate = new Date(trip.startDate);
-
-            const endDate = new Date(trip.endDate);
-
-            const nights = Math.max(1, Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
+            const nights = Math.max(1, daysBetween(trip.startDate, trip.endDate));
 
             const people = Math.max(1, Number(trip.people ?? 1));
 

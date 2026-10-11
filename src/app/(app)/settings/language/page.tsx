@@ -4,11 +4,14 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check } from "lucide-react";
 import BackButtonHeader from "@/components/BackButtonHeader";
+import { translateServerMessage } from "@/lib/i18n/serverMessages";
+import { useI18n } from "@/components/I18nProvider";
 import LoadingScreen from "@/components/LoadingScreen";
 import { LANGUAGES } from "@/lib/countries";
 
 export default function LanguageSettingsPage() {
     const router = useRouter();
+    const { t, setLanguage } = useI18n();
 
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
@@ -36,7 +39,7 @@ export default function LanguageSettingsPage() {
                 setSelectedLanguage(data.language ?? "");
             } catch (loadError) {
                 console.error("프로필을 불러오지 못했어요.", loadError);
-                setError("프로필을 불러오지 못했어요.");
+                setError(t("settings.profileLoadFailed"));
             } finally {
                 setIsLoading(false);
             }
@@ -67,14 +70,17 @@ export default function LanguageSettingsPage() {
             const data = await response.json();
 
             if (!response.ok) {
-                setError(data.error || "언어를 저장하지 못했어요.");
+                setError(translateServerMessage(data.error, t) || t("settingsLang.saveFailed"));
                 return;
             }
+
+            // 저장이 끝났으니 화면 언어를 바로 바꾼다
+            setLanguage(selectedLanguage);
 
             router.push("/settings");
         } catch (saveError) {
             console.error("언어 저장 실패:", saveError);
-            setError("언어를 저장하지 못했어요. 다시 시도해 주세요.");
+            setError(t("settingsLang.saveFailedRetry"));
         } finally {
             setIsSaving(false);
         }
@@ -86,7 +92,7 @@ export default function LanguageSettingsPage() {
 
     return (
         <div className="mx-auto w-full max-w-md">
-            <BackButtonHeader href="/settings" title="언어" description="차곡에서 사용할 언어를 바꿀 수 있어요." />
+            <BackButtonHeader href="/settings" title={t("settingsLang.title")} description={t("settingsLang.description")} />
 
             <section className="mt-8 rounded-3xl bg-white p-3 shadow-sm">
                 {LANGUAGES.map((language) => {
@@ -100,7 +106,7 @@ export default function LanguageSettingsPage() {
                                 setSelectedLanguage(language.code);
                                 setError("");
                             }}
-                            className={`flex w-full items-center justify-between rounded-2xl px-4 py-4 text-left transition-colors ${
+                            className={`flex w-full items-center justify-between rounded-2xl p-3 text-left transition-colors ${
                                 isSelected ? "bg-gray-50" : "active:bg-gray-50"
                             }`}
                         >
@@ -117,7 +123,7 @@ export default function LanguageSettingsPage() {
             </section>
 
             <p className="mt-4 px-1 text-xs leading-5 text-gray-400">
-                선택한 언어는 계정에 저장돼요. 직접 적어 둔 메모와 기록 내용은 언어를 바꿔도 그대로 유지돼요.
+                {t("settingsLang.note")}
             </p>
 
             {error && <p className="mt-3 px-1 text-xs text-red-500">{error}</p>}
@@ -128,7 +134,7 @@ export default function LanguageSettingsPage() {
                 disabled={!isChanged || isSaving}
                 className="mt-6 flex h-14 w-full items-center justify-center rounded-2xl bg-gray-900 text-sm font-medium text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400"
             >
-                {isSaving ? "저장 중..." : "저장하기"}
+                {isSaving ? t("common.saving") : t("settingsLang.save")}
             </button>
         </div>
     );

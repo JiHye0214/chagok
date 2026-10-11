@@ -3,10 +3,13 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import BackButtonHeader from "@/components/BackButtonHeader";
+import { translateServerMessage } from "@/lib/i18n/serverMessages";
+import { useI18n } from "@/components/I18nProvider";
 import { COUNTRIES, getCountry } from "@/lib/countries";
 
 export default function CountrySettingsPage() {
     const router = useRouter();
+    const { t, language } = useI18n();
 
     // 저장된 값
     const [savedCountryCode, setSavedCountryCode] = useState<string | null>(null);
@@ -43,7 +46,7 @@ export default function CountrySettingsPage() {
                 setRegionCode(data.provinceCode ?? null);
             } catch (loadError) {
                 console.error("프로필을 불러오지 못했어요.", loadError);
-                setError("프로필을 불러오지 못했어요.");
+                setError(t("settings.profileLoadFailed"));
             } finally {
                 setIsLoading(false);
             }
@@ -71,7 +74,7 @@ export default function CountrySettingsPage() {
 
     const handleSave = async () => {
         if (!selectedCountry || !isRegionValid) {
-            setError("지역을 선택해 주세요.");
+            setError(t("settings.countryPage.pickRegion"));
             return;
         }
 
@@ -94,14 +97,14 @@ export default function CountrySettingsPage() {
             const data = await response.json();
 
             if (!response.ok) {
-                setError(data.error || "국가와 지역을 저장하지 못했어요.");
+                setError(translateServerMessage(data.error, t) || t("settings.countryPage.saveFailed"));
                 return;
             }
 
             router.push("/settings");
         } catch (saveError) {
             console.error("국가·지역 저장 실패:", saveError);
-            setError("저장하지 못했어요. 다시 시도해 주세요.");
+            setError(t("settings.countryPage.saveFailedRetry"));
         } finally {
             setIsSaving(false);
         }
@@ -109,10 +112,10 @@ export default function CountrySettingsPage() {
 
     return (
         <div className="mx-auto w-full max-w-md">
-            <BackButtonHeader href="/settings" title="국가 · 지역" description="거주 국가와 지역을 바꿀 수 있어요." />
+            <BackButtonHeader href="/settings" title={t("settings.countryPage.title")} description={t("settings.countryPage.description")} />
 
             <section className="mt-8 rounded-3xl bg-white p-6 shadow-sm">
-                <h2 className="text-lg font-semibold">국가</h2>
+                <h2 className="text-lg font-semibold">{t("settings.country")}</h2>
 
                 <div className="mt-4 space-y-2">
                     {COUNTRIES.map((country) => (
@@ -125,9 +128,9 @@ export default function CountrySettingsPage() {
                                 countryCode === country.code ? "bg-black text-white" : "bg-gray-100"
                             }`}
                         >
-                            <span>{country.nameKo}</span>
+                            <span>{language === "en" ? country.nameEn : country.nameKo}</span>
 
-                            <span className="text-xs opacity-60">{country.nameEn}</span>
+                            <span className="text-xs opacity-60">{language === "en" ? country.nameKo : country.nameEn}</span>
                         </button>
                     ))}
                 </div>
@@ -135,7 +138,7 @@ export default function CountrySettingsPage() {
 
             {selectedCountry?.hasRegions && (
                 <section className="mt-5 rounded-3xl bg-white p-6 shadow-sm">
-                    <h2 className="text-lg font-semibold">지역</h2>
+                    <h2 className="text-lg font-semibold">{t("settings.region")}</h2>
 
                     <div className="mt-4 space-y-2">
                         {selectedCountry.regions.map((region) => (
@@ -154,7 +157,7 @@ export default function CountrySettingsPage() {
 
                                 <p className="mt-1 text-xs opacity-60">
                                     {region.timezoneName} {region.timezoneOffset}
-                                    {!region.payrollSupported && " · 세금 계산 준비 중"}
+                                    {!region.payrollSupported && ` · ${t("settings.countryPage.taxPending")}`}
                                 </p>
                             </button>
                         ))}
@@ -164,15 +167,15 @@ export default function CountrySettingsPage() {
 
             {hasCountryChanged && selectedCountry && (
                 <section className="mt-5 rounded-2xl bg-amber-50 px-4 py-4">
-                    <p className="text-sm font-semibold text-amber-800">국가를 바꾸기 전에 확인해 주세요</p>
+                    <p className="text-sm font-semibold text-amber-800">{t("settings.countryPage.warnTitle")}</p>
 
                     <ul className="mt-2 space-y-1.5 text-xs leading-5 text-amber-700">
                         <li>
-                            · 통화가 {savedCountry?.currency ?? "-"}에서 {selectedCountry.currency}(으)로 바뀌어요.
+                            · {t("settings.countryPage.warnCurrency", { from: savedCountry?.currency ?? "-", to: selectedCountry.currency })}
                         </li>
-                        <li>· 금액과 관련된 데이터가 모두 삭제되고, 되돌릴 수 없어요.</li>
-                        <li>· 삭제: 생활 내역, 고정지출, 저축 목표, 급여 설정, 근무 일정, 급여 기록, 여행 기록과 경비</li>
-                        <li>· 유지: 계정, 닉네임, 구독, 생활 카테고리</li>
+                        <li>· {t("settings.countryPage.warnWipe")}</li>
+                        <li>· {t("settings.countryPage.warnDeleted")}</li>
+                        <li>· {t("settings.countryPage.warnKept")}</li>
                     </ul>
 
                     <label className="mt-3 flex items-start gap-2 text-xs leading-5 text-amber-800">
@@ -182,7 +185,7 @@ export default function CountrySettingsPage() {
                             onChange={(event) => setIsResetConfirmed(event.target.checked)}
                             className="mt-0.5"
                         />
-                        <span>위 데이터가 모두 삭제되는 것을 이해했어요.</span>
+                        <span>{t("settings.countryPage.warnCheck")}</span>
                     </label>
                 </section>
             )}
@@ -195,7 +198,7 @@ export default function CountrySettingsPage() {
                 disabled={isLoading || !isChanged || !isRegionValid || isSaving || (hasCountryChanged && !isResetConfirmed)}
                 className="mt-6 flex h-14 w-full items-center justify-center rounded-2xl bg-gray-900 text-sm font-medium text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400"
             >
-                {isSaving ? "저장 중..." : hasCountryChanged ? "국가 변경하기" : "저장"}
+                {isSaving ? t("common.saving") : hasCountryChanged ? t("settings.countryPage.changeCountry") : t("common.save")}
             </button>
         </div>
     );

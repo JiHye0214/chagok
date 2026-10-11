@@ -1,8 +1,10 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import BottomSheet from "@/components/BottomSheet";
+import { translateServerMessage } from "@/lib/i18n/serverMessages";
+import { useI18n } from "@/components/I18nProvider";
 
 type ConfirmOptions = {
     title?: string;
@@ -41,6 +43,13 @@ export function useDialog() {
 }
 
 export default function DialogProvider({ children }: { children: ReactNode }) {
+    const { t } = useI18n();
+    // confirm/alert 함수가 언어가 바뀔 때마다 새로 만들어지면 이걸 의존하는 화면의 effect 가 다시 돌므로, 최신 t 는 ref 로 읽는다
+    const tRef = useRef(t);
+
+    useEffect(() => {
+        tRef.current = t;
+    }, [t]);
     const [dialog, setDialog] = useState<DialogState | null>(null);
     const [isOpen, setIsOpen] = useState(false);
     const resolverRef = useRef<((value: boolean) => void) | null>(null);
@@ -61,9 +70,9 @@ export default function DialogProvider({ children }: { children: ReactNode }) {
                 kind: "confirm",
                 message,
                 title: options.title,
-                confirmLabel: options.confirmLabel ?? "확인",
-                cancelLabel: options.cancelLabel ?? "취소",
-                danger: options.danger ?? /삭제|탈퇴/.test(message),
+                confirmLabel: options.confirmLabel ?? tRef.current("common.confirm"),
+                cancelLabel: options.cancelLabel ?? tRef.current("common.cancel"),
+                danger: options.danger ?? /삭제|탈퇴|delete/i.test(message),
             });
             setIsOpen(true);
         });
@@ -73,7 +82,7 @@ export default function DialogProvider({ children }: { children: ReactNode }) {
         resolverRef.current?.(false);
         resolverRef.current = null;
 
-        setDialog({ kind: "alert", message, title, confirmLabel: "확인", cancelLabel: "", danger: false });
+        setDialog({ kind: "alert", message, title, confirmLabel: tRef.current("common.confirm"), cancelLabel: "", danger: false });
         setIsOpen(true);
     }, []);
 
@@ -91,7 +100,7 @@ export default function DialogProvider({ children }: { children: ReactNode }) {
                             <h2 className="mb-2 text-xl font-bold tracking-[-0.04em] text-gray-950">{dialog.title}</h2>
                         )}
 
-                        <p className="whitespace-pre-line text-[15px] leading-6 text-gray-700">{dialog.message}</p>
+                        <p className="whitespace-pre-line text-[15px] leading-6 text-gray-700">{translateServerMessage(dialog.message, t)}</p>
 
                         <div className={`mt-6 ${dialog.kind === "confirm" ? "grid grid-cols-2 gap-3" : ""}`}>
                             {dialog.kind === "confirm" && (

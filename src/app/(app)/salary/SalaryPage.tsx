@@ -13,6 +13,9 @@ import { getPayPeriodStatus } from "@/lib/salary/status";
 import { formatCurrency as formatMoney } from "@/lib/salary/format";
 import type { PeriodEstimateOutcome } from "@/lib/salary/types";
 import BottomSheet from "@/components/BottomSheet";
+import { useI18n } from "@/components/I18nProvider";
+import { translateWarning } from "@/lib/i18n/warnings";
+import type { MessageKey } from "@/lib/i18n";
 import MinimumWageNotice from "@/components/MinimumWageNotice";
 import type { WagePreset } from "@/lib/minimumWage";
 
@@ -67,6 +70,8 @@ type GraphPoint = {
     history?: PayHistory;
 };
 
+type TFn = (key: MessageKey, params?: Record<string, string | number>) => string;
+
 const formatDisplayDate = (value: string) => {
     return formatDate(new Date(`${value}T00:00:00`));
 };
@@ -89,43 +94,43 @@ const getDaysDifference = (targetDate: string) => {
  * 2  → 모레
  * 3+ → 3일 뒤, 4일 뒤...
  */
-const getDdayLabel = (targetDate: string) => {
+const getDdayLabel = (targetDate: string, t: TFn) => {
     const days = getDaysDifference(targetDate);
 
     if (days === 0) {
-        return "오늘";
+        return t("sal.dday.today");
     }
 
     if (days === 1) {
-        return "내일";
+        return t("sal.dday.tomorrow");
     }
 
     if (days === 2) {
-        return "모레";
+        return t("sal.dday.dayAfter");
     }
 
     if (days > 2) {
-        return `${days}일 뒤`;
+        return t("sal.dday.inDays", { days });
     }
 
     if (days === -1) {
-        return "어제";
+        return t("sal.dday.yesterday");
     }
 
-    return `${Math.abs(days)}일 전`;
+    return t("sal.dday.daysAgo", { days: Math.abs(days) });
 };
 
 // 계산할 수 없을 때 카드에 보여줄 안내
-const getEstimateProblemMessage = (outcome: PeriodEstimateOutcome | null) => {
+const getEstimateProblemMessage = (outcome: PeriodEstimateOutcome | null, t: TFn) => {
     switch (outcome?.status) {
         case "unsupported-country":
-            return "아직 이 나라의 급여 계산을 지원하지 않아요.";
+            return t("sal.problem.unsupported");
 
         case "no-profile":
-            return "프로필에서 국가를 설정하면 예상 급여를 계산할 수 있어요.";
+            return t("sal.problem.noProfile");
 
         case "no-settings":
-            return "급여 설정을 먼저 해주세요.";
+            return t("sal.problem.noSettings");
 
         default:
             return null;
@@ -133,6 +138,7 @@ const getEstimateProblemMessage = (outcome: PeriodEstimateOutcome | null) => {
 };
 
 export default function SalaryPage() {
+    const { t } = useI18n();
     const salaryData = useSalaryData();
 
     const { profile, settings: salarySettings, schedules, isLoading, reloadSettings } = salaryData;
@@ -259,7 +265,7 @@ export default function SalaryPage() {
         [pendingResult.outcome],
     );
 
-    const currentEstimateProblem = getEstimateProblemMessage(currentResult.outcome);
+    const currentEstimateProblem = getEstimateProblemMessage(currentResult.outcome, t);
 
     const shouldShowPendingPay = Boolean(pendingPayPeriod && pendingPeriodEstimate);
 
@@ -352,16 +358,16 @@ export default function SalaryPage() {
     return (
         <div className="mx-auto max-w-md">
             <header className="mt-5 mb-10">
-                <p className="text-sm text-gray-500">차곡</p>
+                <p className="text-sm text-gray-500">{t("common.appName")}</p>
 
                 <div className="mt-2 flex items-center justify-between">
-                    <h1 className="text-3xl font-bold">급여</h1>
+                    <h1 className="text-3xl font-bold">{t("sal.k002")}</h1>
 
                     <div className="flex items-center gap-2">
                         <Link
                             href="/salary/pay-history"
                             className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-gray-500 shadow-sm transition hover:bg-gray-50"
-                            aria-label="급여 기록"
+                            aria-label={t("sal.k003")}
                         >
                             <ClipboardList size={18} strokeWidth={1.8} />
                         </Link>
@@ -370,23 +376,23 @@ export default function SalaryPage() {
                             type="button"
                             onClick={() => setIsSalarySettingsOpen(true)}
                             className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-gray-500 shadow-sm transition hover:bg-gray-50"
-                            aria-label="급여 설정"
+                            aria-label={t("sal.k004")}
                         >
                             <Settings size={18} strokeWidth={1.8} />
                         </button>
                     </div>
                 </div>
 
-                <p className="mt-2 text-sm text-gray-500">이번 급여는 얼마나 받을까요?</p>
+                <p className="mt-2 text-sm text-gray-500">{t("sal.k005")}</p>
             </header>
             {!salarySettings ? (
                 <section className="rounded-3xl bg-white p-6 shadow-sm">
-                    <p className="text-xs font-medium text-gray-400">급여 설정</p>
+                    <p className="text-xs font-medium text-gray-400">{t("sal.k004")}</p>
 
-                    <h2 className="mt-2 text-lg font-bold text-gray-900">급여 정보를 먼저 설정해주세요</h2>
+                    <h2 className="mt-2 text-lg font-bold text-gray-900">{t("sal.k006")}</h2>
 
                     <p className="mt-2 text-sm leading-6 text-gray-500">
-                        급여 방식과 급여 주기를 설정하면 예상 급여를 계산할 수 있어요.
+                        {t("sal.k007")}
                     </p>
 
                     <button
@@ -394,7 +400,7 @@ export default function SalaryPage() {
                         onClick={() => setIsSalarySettingsOpen(true)}
                         className="mt-5 w-full rounded-2xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-gray-800"
                     >
-                        급여 설정하기
+                        {t("sal.k008")}
                     </button>
                 </section>
             ) : (
@@ -418,11 +424,11 @@ export default function SalaryPage() {
                             href={`/salary/pay-history?startDate=${overduePayPeriod.startDate}&endDate=${overduePayPeriod.endDate}&payDate=${overduePayPeriod.payDate}`}
                             className="block w-full rounded-3xl bg-gray-900 p-5 text-left shadow-sm transition hover:shadow-md"
                         >
-                            <p className="text-xs text-gray-400">급여 기록</p>
+                            <p className="text-xs text-gray-400">{t("sal.k003")}</p>
 
-                            <p className="mt-1 text-lg font-bold text-white">지급일이 지났어요</p>
+                            <p className="mt-1 text-lg font-bold text-white">{t("sal.k009")}</p>
 
-                            <p className="mt-1 text-sm text-gray-500">아직 기록되지 않은 급여가 있어요.</p>
+                            <p className="mt-1 text-sm text-gray-500">{t("sal.k010")}</p>
 
                             <p className="mt-4 text-xs text-gray-400">
                                 {formatDisplayDate(overduePayPeriod.startDate)}
@@ -430,7 +436,7 @@ export default function SalaryPage() {
                                 {formatDisplayDate(overduePayPeriod.endDate)}
                             </p>
 
-                            <p className="mt-3 text-xs font-medium text-gray-500">급여 기록에서 확인하기 →</p>
+                            <p className="mt-3 text-xs font-medium text-gray-500">{t("sal.k011")}</p>
                         </Link>
                     )}
 
@@ -442,20 +448,20 @@ export default function SalaryPage() {
                         >
                             <div className="flex items-start justify-between gap-4">
                                 <div>
-                                    <p className="text-xs text-blue-500">급여 예정</p>
+                                    <p className="text-xs text-blue-500">{t("sal.k012")}</p>
 
                                     <p className="mt-2 text-lg font-semibold text-gray-900">
-                                        <span className="text-blue-600">{getDdayLabel(pendingPayPeriod.payDate)}</span>{" "}
-                                        {formatMoney(animatedPendingNetPay, currency)}를 받아요{" "}
+                                        <span className="text-blue-600">{getDdayLabel(pendingPayPeriod.payDate, t)}</span>{" "}
+                                        {t("sal.receive", { amount: formatMoney(animatedPendingNetPay, currency) })}{" "}
                                     </p>
 
                                     <p className="mt-1 text-sm text-gray-500">
-                                        지급일이 다가오고 있어요. 지출을 계획해 볼까요?
+                                        {t("sal.k013")}
                                     </p>
                                 </div>
 
                                 <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-blue-600 shadow-sm">
-                                    예상
+                                    {t("sal.k014")}
                                 </span>
                             </div>
                         </button>
@@ -463,12 +469,12 @@ export default function SalaryPage() {
 
                     {salarySettings && !currentPayPeriod && (
                         <section className="mt-6 rounded-3xl bg-white p-5 shadow-sm">
-                            <p className="text-xs font-medium text-blue-500">급여 기간</p>
+                            <p className="text-xs font-medium text-blue-500">{t("sal.k015")}</p>
 
-                            <p className="mt-2 text-lg font-bold text-gray-900">급여 기간을 알 수 없어요</p>
+                            <p className="mt-2 text-lg font-bold text-gray-900">{t("sal.k016")}</p>
 
                             <p className="mt-1 text-sm text-gray-500">
-                                급여 설정에서 급여 기간 시작일을 입력하면 예상 급여를 계산할 수 있어요.
+                                {t("sal.k017")}
                             </p>
 
                             <button
@@ -476,14 +482,14 @@ export default function SalaryPage() {
                                 onClick={() => setIsSalarySettingsOpen(true)}
                                 className="mt-4 w-full rounded-2xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-gray-800"
                             >
-                                급여 설정하기
+                                {t("sal.k008")}
                             </button>
                         </section>
                     )}
 
                     {currentPayPeriod && (
                         <div className="mt-6 rounded-3xl bg-white p-5 shadow-sm">
-                            <p className="text-xs font-medium text-blue-500">현재 급여 기간</p>
+                            <p className="text-xs font-medium text-blue-500">{t("sal.k018")}</p>
 
                             <p className="mt-1 text-sm font-semibold text-gray-900">
                                 {formatDisplayDate(currentPayPeriod.startDate)}
@@ -493,15 +499,15 @@ export default function SalaryPage() {
 
                             {currentPeriodSchedules.length === 0 ? (
                                 <div>
-                                    <p className="mt-5 text-lg font-bold text-gray-900">근무 기록을 입력해주세요</p>
+                                    <p className="mt-5 text-lg font-bold text-gray-900">{t("sal.k019")}</p>
 
-                                    <p className="mt-1 text-sm text-gray-500">근무 기록이 있어야 예상 급여를 계산할 수 있어요.</p>
+                                    <p className="mt-1 text-sm text-gray-500">{t("sal.k020")}</p>
                                 </div>
                             ) : currentEstimateProblem ? (
                                 <p className="mt-5 text-sm text-gray-500">{currentEstimateProblem}</p>
                             ) : currentPeriodEstimate ? (
                                 <>
-                                    <p className="mt-5 text-xs text-gray-400">예상 급여</p>
+                                    <p className="mt-5 text-xs text-gray-400">{t("sal.k021")}</p>
 
                                     <p className="mt-1 text-2xl font-bold text-gray-900">
                                         {formatMoney(currentPeriodEstimate.netPay, currency)}
@@ -510,17 +516,18 @@ export default function SalaryPage() {
                                     <div className="mt-3 flex items-center gap-3 text-sm text-gray-500">
                                         <span>
                                             {currentPeriodEstimate.hours.toFixed(2)}
-                                            시간
+                                            {t("sal.k022")}
                                         </span>
 
                                         <span>·</span>
 
                                         <span>
-                                            팁{" "}
-                                            {formatMoney(
-                                                currentPeriodEstimate.cashTips + currentPeriodEstimate.paychequeTips,
-                                                currency,
-                                            )}
+                                            {t("sal.tips", {
+                                                amount: formatMoney(
+                                                    currentPeriodEstimate.cashTips + currentPeriodEstimate.paychequeTips,
+                                                    currency,
+                                                ),
+                                            })}
                                         </span>
                                     </div>
                                 </>
@@ -530,7 +537,7 @@ export default function SalaryPage() {
                                 href="/salary/schedule"
                                 className="mt-5 block w-full rounded-2xl bg-gray-900 px-4 py-3 text-center text-sm font-semibold text-white transition hover:bg-gray-800"
                             >
-                                {currentPeriodSchedules.length === 0 ? "근무 기록 입력하기" : "근무 기록 추가하기"}
+                                {currentPeriodSchedules.length === 0 ? t("sal.addSchedule.first") : t("sal.addSchedule.more")}
                             </Link>
                         </div>
                     )}
@@ -544,16 +551,16 @@ export default function SalaryPage() {
                             <div className="rounded-3xl bg-white p-5 shadow-sm">
                                 <div className="flex items-start justify-between">
                                     <div>
-                                        <p className="text-xs text-gray-400">실수령액 통계</p>
+                                        <p className="text-xs text-gray-400">{t("sal.k023")}</p>
 
-                                        <h2 className="mt-1 text-lg font-bold">평균 실수령액</h2>
+                                        <h2 className="mt-1 text-lg font-bold">{t("sal.k024")}</h2>
                                     </div>
 
                                     <Link
                                         href="/salary/pay-history"
                                         className="rounded-full bg-gray-100 px-3 py-2 text-xs font-medium text-gray-600"
                                     >
-                                        기록하기 →
+                                        {t("sal.k025")}
                                     </Link>
                                 </div>
 
@@ -687,8 +694,7 @@ export default function SalaryPage() {
                                                                             <div className="flex justify-center">
                                                                                 <div className="rounded-lg bg-gray-900 px-2.5 py-2 text-center text-[10px] text-white shadow-md">
                                                                                     <div className="font-semibold">
-                                                                                        예상{" "}
-                                                                                        {formatMoney(point.value, currency)}{" "}
+                                                                                        {t("sal.graph.estimate", { amount: formatMoney(point.value, currency) })}{" "}
                                                                                     </div>
                                                                                 </div>
                                                                             </div>
@@ -707,21 +713,21 @@ export default function SalaryPage() {
                                                     key={`${point.startDate}-${point.endDate}`}
                                                     className={point.isEstimate ? "font-medium text-blue-500" : ""}
                                                 >
-                                                    {point.payDate ? formatDisplayDate(point.payDate) : "예정"}
+                                                    {point.payDate ? formatDisplayDate(point.payDate) : t("sal.graph.scheduled")}
                                                 </span>
                                             ))}
                                         </div>
 
                                         <div className="mt-4 flex items-center justify-end gap-2 text-xs text-gray-400">
                                             <span className="h-px w-5 border-t border-dashed border-gray-300" />
-                                            평균
+                                            {t("sal.k026")}
                                         </div>
                                     </div>
                                 ) : (
                                     <div className="mt-6 rounded-2xl bg-gray-100 p-4 text-sm text-gray-500">
-                                        아직 기록된 실수령액이 없어요.
+                                        {t("sal.k027")}
                                         <br />
-                                        급여 기록에서 실수령액을 기록하면 통계가 보여요.
+                                        {t("sal.k028")}
                                     </div>
                                 )}
                             </div>
@@ -732,9 +738,9 @@ export default function SalaryPage() {
                                     <div className="p-5">
                                         <div className="flex items-start justify-between">
                                             <div>
-                                                <p className="text-xs text-gray-400">실수령액 통계</p>
+                                                <p className="text-xs text-gray-400">{t("sal.k023")}</p>
 
-                                                <h2 className="mt-1 text-lg font-bold text-gray-900">평균 실수령액</h2>
+                                                <h2 className="mt-1 text-lg font-bold text-gray-900">{t("sal.k024")}</h2>
                                             </div>
 
                                             <span className="rounded-full bg-gray-100 px-3 py-2 text-xs font-medium text-gray-500">
@@ -792,7 +798,7 @@ export default function SalaryPage() {
 
                                             <div className="mt-4 flex items-center justify-end gap-2 text-xs text-gray-400">
                                                 <span className="h-px w-5 border-t border-dashed border-gray-300" />
-                                                평균
+                                                {t("sal.k026")}
                                             </div>
                                         </div>
                                     </div>
@@ -804,16 +810,16 @@ export default function SalaryPage() {
                                         <Lock size={20} strokeWidth={2} className="text-gray-500" />
                                     </div>
 
-                                    <p className="mt-4 text-sm font-semibold text-gray-900">실수령액 통계</p>
+                                    <p className="mt-4 text-sm font-semibold text-gray-900">{t("sal.k023")}</p>
 
-                                    <p className="mt-1 text-xs text-gray-500">Pro에서 실수령액 통계를 확인할 수 있어요.</p>
+                                    <p className="mt-1 text-xs text-gray-500">{t("sal.k029")}</p>
 
                                     <button
                                         type="button"
                                         onClick={() => openUpgrade("general")}
                                         className="mt-4 rounded-full bg-gray-900 px-4 py-2 text-xs font-medium text-white"
                                     >
-                                        Pro 알아보기
+                                        {t("sal.k030")}
                                     </button>
                                 </div>
                             </div>
@@ -832,15 +838,15 @@ export default function SalaryPage() {
                                         <div>
                                             <div className="flex items-center gap-2">
                                                 <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-600">
-                                                    예상
+                                                    {t("sal.k014")}
                                                 </span>
 
                                                 <span className="text-xs text-gray-400">
-                                                    {getDdayLabel(pendingPayPeriod.payDate)}
+                                                    {getDdayLabel(pendingPayPeriod.payDate, t)}
                                                 </span>
                                             </div>
 
-                                            <p className="mt-3 text-lg font-bold text-gray-900">지급 예정 급여</p>
+                                            <p className="mt-3 text-lg font-bold text-gray-900">{t("sal.k031")}</p>
 
                                             <p className="mt-1 text-sm text-gray-500">
                                                 {formatDisplayDate(pendingPayPeriod.startDate)}
@@ -853,14 +859,14 @@ export default function SalaryPage() {
 
                                     {/* Main Amount */}
                                     <div className="mt-6 rounded-3xl bg-blue-50 p-5">
-                                        <p className="text-xs font-medium text-blue-500">예상 실수령액</p>
+                                        <p className="text-xs font-medium text-blue-500">{t("sal.k032")}</p>
 
                                         <p className="mt-2 text-4xl font-bold tracking-tight text-gray-900">
                                             {formatMoney(pendingPeriodEstimate.netPay, currency)}
                                         </p>
 
                                         <div className="mt-4 flex items-center justify-between">
-                                            <span className="text-sm text-gray-500">지급일</span>
+                                            <span className="text-sm text-gray-500">{t("sal.k033")}</span>
 
                                             <span className="text-sm font-semibold text-gray-900">
                                                 {formatDisplayDate(pendingPayPeriod.payDate)}
@@ -870,21 +876,21 @@ export default function SalaryPage() {
 
                                     {/* Breakdown */}
                                     <div className="mt-6">
-                                        <p className="mb-3 text-xs font-semibold text-gray-400">예상 급여 내역</p>
+                                        <p className="mb-3 text-xs font-semibold text-gray-400">{t("sal.k034")}</p>
 
                                         <div className="rounded-3xl bg-gray-50 p-5">
                                             <div className="space-y-4 text-sm">
                                                 <div className="flex justify-between">
-                                                    <span className="text-gray-500">근무시간</span>
+                                                    <span className="text-gray-500">{t("sal.k035")}</span>
 
                                                     <span className="font-medium text-gray-900">
                                                         {pendingPeriodEstimate.hours.toFixed(2)}
-                                                        시간
+                                                        {t("sal.k022")}
                                                     </span>
                                                 </div>
 
                                                 <div className="flex justify-between">
-                                                    <span className="text-gray-500">기본 급여</span>
+                                                    <span className="text-gray-500">{t("sal.k036")}</span>
 
                                                     <span className="font-medium text-gray-900">
                                                         {formatMoney(pendingPeriodEstimate.basePay, currency)}
@@ -893,7 +899,7 @@ export default function SalaryPage() {
 
                                                 {pendingPeriodEstimate.paychequeTips > 0 && (
                                                     <div className="flex justify-between">
-                                                        <span className="text-gray-500">급여 포함 팁</span>
+                                                        <span className="text-gray-500">{t("sal.k037")}</span>
 
                                                         <span className="font-medium text-gray-900">
                                                             {formatMoney(pendingPeriodEstimate.paychequeTips, currency)}
@@ -903,7 +909,7 @@ export default function SalaryPage() {
 
                                                 {pendingPeriodEstimate.publicHolidayPay + pendingPeriodEstimate.premiumPay > 0 && (
                                                     <div className="flex justify-between">
-                                                        <span className="text-gray-500">공휴일 수당</span>
+                                                        <span className="text-gray-500">{t("sal.k038")}</span>
 
                                                         <span className="font-medium text-gray-900">
                                                             {formatMoney(
@@ -917,7 +923,7 @@ export default function SalaryPage() {
 
                                                 {pendingPeriodEstimate.vacationPay > 0 && (
                                                     <div className="flex justify-between">
-                                                        <span className="text-gray-500">휴가 수당</span>
+                                                        <span className="text-gray-500">{t("sal.k039")}</span>
 
                                                         <span className="font-medium text-gray-900">
                                                             {formatMoney(pendingPeriodEstimate.vacationPay, currency)}
@@ -928,7 +934,7 @@ export default function SalaryPage() {
                                                 <div className="my-1 border-t border-gray-200" />
 
                                                 <div className="flex justify-between">
-                                                    <span className="font-medium text-gray-600">세전 급여</span>
+                                                    <span className="font-medium text-gray-600">{t("sal.k040")}</span>
 
                                                     <span className="font-semibold text-gray-900">
                                                         {formatMoney(pendingPeriodEstimate.grossPay, currency)}
@@ -936,7 +942,7 @@ export default function SalaryPage() {
                                                 </div>
 
                                                 <div className="flex justify-between">
-                                                    <span className="text-gray-500">예상 공제</span>
+                                                    <span className="text-gray-500">{t("sal.k041")}</span>
 
                                                     <span className="text-gray-600">
                                                         - {formatMoney(pendingPeriodEstimate.deductions, currency)}
@@ -946,7 +952,7 @@ export default function SalaryPage() {
                                                 <div className="my-1 border-t border-gray-200" />
 
                                                 <div className="flex justify-between">
-                                                    <span className="font-semibold text-gray-900">실수령액</span>
+                                                    <span className="font-semibold text-gray-900">{t("sal.k042")}</span>
 
                                                     <span className="font-bold text-gray-900">
                                                         {formatMoney(pendingPeriodEstimate.netPay, currency)}
@@ -960,7 +966,7 @@ export default function SalaryPage() {
                                     {pendingPeriodEstimate.cashTips > 0 && (
                                         <div className="mt-4 rounded-3xl bg-gray-50 p-5">
                                             <div className="flex justify-between">
-                                                <span className="text-sm text-gray-500">현금 팁</span>
+                                                <span className="text-sm text-gray-500">{t("sal.k043")}</span>
 
                                                 <span className="text-sm font-semibold text-gray-900">
                                                     {formatMoney(pendingPeriodEstimate.cashTips, currency)}
@@ -968,7 +974,7 @@ export default function SalaryPage() {
                                             </div>
 
                                             <div className="mt-4 flex items-center justify-between rounded-2xl bg-white p-4 shadow-sm">
-                                                <span className="text-sm font-semibold text-gray-700">예상 총 수령액</span>
+                                                <span className="text-sm font-semibold text-gray-700">{t("sal.k044")}</span>
 
                                                 <span className="text-xl font-bold text-gray-900">
                                                     {formatMoney(pendingPeriodEstimate.totalIncome, currency)}
@@ -981,7 +987,7 @@ export default function SalaryPage() {
                                         <div className="mt-5 rounded-2xl bg-amber-50 px-4 py-3">
                                             {pendingPeriodEstimate.warnings.map((warning) => (
                                                 <p key={warning} className="text-xs leading-5 text-amber-700">
-                                                    {warning}
+                                                    {translateWarning(warning, t)}
                                                 </p>
                                             ))}
                                         </div>
@@ -990,7 +996,7 @@ export default function SalaryPage() {
                                     {/* Notice */}
                                     <div className="mt-5 rounded-2xl bg-amber-50 px-4 py-3">
                                         <p className="text-xs leading-5 text-amber-700">
-                                            실제 급여가 아직 기록되지 않아 이전 근무 기록과 팁을 기준으로 계산한 예상 금액이에요.
+                                            {t("sal.k045")}
                                         </p>
                                     </div>
 
@@ -999,7 +1005,7 @@ export default function SalaryPage() {
                                         href="/salary/schedule"
                                         className="mt-5 block w-full rounded-2xl bg-gray-900 py-4 text-center text-sm font-semibold text-white transition hover:bg-gray-800"
                                     >
-                                        근무 기록 보기
+                                        {t("sal.k046")}
                                     </Link>
                         
                         
@@ -1017,7 +1023,7 @@ export default function SalaryPage() {
                                     <div className="rounded-3xl bg-white p-6 text-gray-950 shadow-sm">
                                         <div className="flex items-start justify-between">
                                             <div>
-                                                <p className="text-xs text-gray-500">실수령액 기록</p>
+                                                <p className="text-xs text-gray-500">{t("sal.k047")}</p>
 
                                                 <p className="mt-1 text-sm font-semibold">
                                                     {formatDisplayDate(selectedPayHistory.startDate)}
@@ -1027,7 +1033,7 @@ export default function SalaryPage() {
 
                                                 {selectedPayHistory.payDate && (
                                                     <p className="mt-1 text-xs text-gray-500">
-                                                        지급일 {formatDisplayDate(selectedPayHistory.payDate)}
+                                                        {t("sal.payDate", { date: formatDisplayDate(selectedPayHistory.payDate) })}
                                                     </p>
                                                 )}
                                             </div>
@@ -1038,14 +1044,14 @@ export default function SalaryPage() {
                                             {formatMoney(Number(selectedPayHistory.actualNetPay ?? 0), currency)}
                                         </p>
 
-                                        <p className="mt-2 text-sm text-gray-400">실제 실수령액</p>
+                                        <p className="mt-2 text-sm text-gray-400">{t("sal.k048")}</p>
 
                                         {selectedPayDifference !== null && selectedPayChangePercent !== null && (
                                             <div className="mt-5 rounded-2xl bg-gray-50 p-4">
-                                                <p className="text-xs text-gray-500">평균과 비교</p>
+                                                <p className="text-xs text-gray-500">{t("sal.k049")}</p>
 
                                                 <p className="mt-2 text-sm">
-                                                    평균보다{" "}
+                                                    {t("sal.vsAverage")}{" "}
                                                     <span
                                                         className={
                                                             selectedPayDifference >= 0
@@ -1054,30 +1060,31 @@ export default function SalaryPage() {
                                                         }
                                                     >
                                                         {selectedPayDifference >= 0
-                                                            ? `${formatMoney(Math.abs(selectedPayDifference), currency)} 많아요`
-                                                            : `${formatMoney(Math.abs(selectedPayDifference), currency)} 적어요`}
+                                                            ? t("sal.more", { amount: formatMoney(Math.abs(selectedPayDifference), currency) })
+                                                            : t("sal.less", { amount: formatMoney(Math.abs(selectedPayDifference), currency) })}
                                                     </span>
                                                 </p>
 
                                                 <p className="mt-1 text-xs text-gray-500">
-                                                    평균 대비 {Math.abs(selectedPayChangePercent).toFixed(1)}%
-                                                    {selectedPayDifference >= 0 ? " 높아요" : " 낮아요"}
+                                                    {selectedPayDifference >= 0
+                                                        ? t("sal.higher", { percent: Math.abs(selectedPayChangePercent).toFixed(1) })
+                                                        : t("sal.lower", { percent: Math.abs(selectedPayChangePercent).toFixed(1) })}
                                                 </p>
                                             </div>
                                         )}
 
                                         <div className="mt-6 space-y-3 text-sm">
                                             <div className="flex justify-between">
-                                                <span className="text-gray-400">근무시간</span>
+                                                <span className="text-gray-400">{t("sal.k035")}</span>
 
                                                 <span>
                                                     {Number(selectedPayHistory.hours ?? 0).toFixed(2)}
-                                                    시간
+                                                    {t("sal.k022")}
                                                 </span>
                                             </div>
 
                                             <div className="flex justify-between">
-                                                <span className="text-gray-400">실제 급여</span>
+                                                <span className="text-gray-400">{t("sal.k050")}</span>
 
                                                 <span>
                                                     {formatMoney(
@@ -1089,7 +1096,7 @@ export default function SalaryPage() {
 
                                             {selectedPayHistory.actualTips > 0 && (
                                                 <div className="flex justify-between">
-                                                    <span className="text-gray-400">실제 팁</span>
+                                                    <span className="text-gray-400">{t("sal.k051")}</span>
 
                                                     <span>{formatMoney(Number(selectedPayHistory.actualTips ?? 0), currency)}</span>
                                                 </div>
@@ -1097,7 +1104,7 @@ export default function SalaryPage() {
 
                                             {selectedPayHistory.cashTips > 0 && (
                                                 <div className="flex justify-between">
-                                                    <span className="text-gray-400">현금 팁</span>
+                                                    <span className="text-gray-400">{t("sal.k043")}</span>
 
                                                     <span>{formatMoney(Number(selectedPayHistory.cashTips ?? 0), currency)}</span>
                                                 </div>
@@ -1107,7 +1114,7 @@ export default function SalaryPage() {
                                                 0 && (
                                                 <div className="mt-4 border-t border-gray-100 pt-4">
                                                     <div className="flex justify-between">
-                                                        <span className="text-gray-600">실제 세전 금액</span>
+                                                        <span className="text-gray-600">{t("sal.k052")}</span>
 
                                                         <span className="font-semibold">
                                                             {formatMoney(
@@ -1122,7 +1129,7 @@ export default function SalaryPage() {
 
                                             {selectedPayHistory.actualDeductions > 0 && (
                                                 <div className="flex justify-between">
-                                                    <span className="text-gray-400">실제 공제</span>
+                                                    <span className="text-gray-400">{t("sal.k053")}</span>
 
                                                     <span>
                                                         - {formatMoney(Number(selectedPayHistory.actualDeductions ?? 0), currency)}
@@ -1132,7 +1139,7 @@ export default function SalaryPage() {
 
                                             {selectedPayHistory.adjustments.length > 0 && (
                                                 <div className="mt-4 border-t border-gray-100 pt-4">
-                                                    <p className="mb-3 text-xs text-gray-500">조정 내역</p>
+                                                    <p className="mb-3 text-xs text-gray-500">{t("sal.k054")}</p>
 
                                                     <div className="space-y-2">
                                                         {selectedPayHistory.adjustments.map((adjustment, index) => (
@@ -1155,7 +1162,7 @@ export default function SalaryPage() {
 
                                             <div className="mt-4 border-t border-gray-100 pt-4">
                                                 <div className="flex justify-between">
-                                                    <span className="text-gray-600">실제 실수령액</span>
+                                                    <span className="text-gray-600">{t("sal.k048")}</span>
 
                                                     <span className="font-semibold">
                                                         {formatMoney(Number(selectedPayHistory.actualNetPay ?? 0), currency)}
@@ -1166,7 +1173,7 @@ export default function SalaryPage() {
                                             {selectedPayHistory.cashTips > 0 && (
                                                 <div className="mt-4">
                                                     <div className="flex justify-between rounded-2xl bg-gray-50 p-3 text-gray-950">
-                                                        <span className="text-sm font-medium">총 수령액</span>
+                                                        <span className="text-sm font-medium">{t("sal.k055")}</span>
 
                                                         <span className="text-lg font-bold">
                                                             {formatMoney(
@@ -1184,7 +1191,7 @@ export default function SalaryPage() {
                                             href="/salary/pay-history"
                                             className="mt-6 block w-full rounded-2xl bg-gray-900 py-4 text-center text-sm font-semibold text-white"
                                         >
-                                            급여 기록 보기
+                                            {t("sal.k056")}
                                         </Link>
                             
                                     </div>

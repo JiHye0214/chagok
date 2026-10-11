@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useI18n } from "@/components/I18nProvider";
 import { ArrowDownRight, ArrowUpRight, Plane, Wallet } from "lucide-react";
 
 type StartupSplashProps = {
@@ -8,6 +9,7 @@ type StartupSplashProps = {
 };
 
 export default function StartupSplash({ children }: StartupSplashProps) {
+    const { t, language } = useI18n();
     const [showSplash, setShowSplash] = useState(true);
     const [isLeaving, setIsLeaving] = useState(false);
 
@@ -37,29 +39,33 @@ export default function StartupSplash({ children }: StartupSplashProps) {
                 >
                     <div className="mx-auto flex min-h-[100dvh] max-w-md flex-col px-5">
                         <header className="pt-8 opacity-0 animate-[splashFadeIn_0.7s_ease-out_forwards]">
-                            <p className="text-sm text-gray-500">나를 위한 돈 관리 생활 어플</p>
+                            <p className="text-sm text-gray-500">{t("splash.tagline")}</p>
                         </header>
 
                         <section className="relative flex flex-1 flex-col justify-center">
                             <div className="opacity-0 animate-[splashBrand_0.9s_ease-out_0.15s_forwards]">
-                                <p className="text-[2rem] font-medium tracking-[-0.05em] text-gray-900">차곡차곡,</p>
+                                <p className="text-[2rem] font-medium tracking-[-0.05em] text-gray-900">{t("splash.headline")}</p>
 
-                                <h1 className="mt-1 text-[6.5rem] font-bold leading-[0.8] tracking-[-0.1em] text-gray-900">
-                                    차곡
+                                <h1
+                                    className={`mt-1 font-bold leading-[0.8] tracking-[-0.1em] text-gray-900 ${
+                                        language === "ko" ? "text-[6.5rem]" : "text-[5.5rem]"
+                                    }`}
+                                >
+                                    {t("common.appName")}
                                 </h1>
                             </div>
 
                             <div className="absolute right-0 top-[18%] flex translate-x-5 items-center gap-2 rounded-full bg-white px-3 py-2 opacity-0 shadow-sm animate-[splashFromRight_0.7s_ease-out_0.5s_forwards]">
                                 <Wallet size={14} strokeWidth={1.8} className="text-gray-400" />
 
-                                <span className="text-xs text-gray-500">돈을 기록하고</span>
+                                <span className="text-xs text-gray-500">{t("splash.chipMoney")}</span>
                             </div>
 
                             <div className="absolute left-0 top-[58%] -translate-x-5 rounded-full bg-white px-3 py-2 opacity-0 shadow-sm animate-[splashFromLeft_0.7s_ease-out_0.7s_forwards]">
                                 <div className="flex items-center gap-2">
                                     <Plane size={14} strokeWidth={1.8} className="text-gray-400" />
 
-                                    <span className="text-xs text-gray-500">여행을 남기고</span>
+                                    <span className="text-xs text-gray-500">{t("splash.chipTrip")}</span>
                                 </div>
                             </div>
 

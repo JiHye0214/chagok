@@ -1,5 +1,6 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import ServiceWorkerRegister from "./ServiceWorkerRegister";
+import I18nProvider from "@/components/I18nProvider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -13,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-    title: "차곡",
-    description: "생활비와 급여, 스케줄 관리 앱",
+    title: "Chagok",
+    description: "Track your living costs, pay and trips in one app.",
     manifest: "/manifest.json",
 };
 
@@ -22,7 +23,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     return (
         <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
             <body className="min-h-full flex flex-col">
-                {children}
+                <I18nProvider>{children}</I18nProvider>
                 <ServiceWorkerRegister />
             </body>
         </html>

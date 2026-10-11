@@ -1,10 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useI18n } from "@/components/I18nProvider";
 import { COUNTRIES, getCountry } from "@/lib/countries";
 
 export default function CountryPage() {
     const router = useRouter();
+    const { t, language } = useI18n();
 
     const handleCountrySelect = (countryCode: string) => {
         const country = getCountry(countryCode);
@@ -30,7 +32,7 @@ export default function CountryPage() {
         <div className="h-full w-full">
             <div className="relative mx-auto h-full w-full max-w-md px-6">
                 {/* Brand */}
-                <p className="absolute left-6 top-8 text-2xl font-semibold tracking-[-0.05em] text-gray-900">차곡</p>
+                <p className="absolute left-6 top-8 text-2xl font-semibold tracking-[-0.05em] text-gray-900">{t("common.appName")}</p>
 
                 {/* Content */}
                 <main className="flex h-full w-full items-center justify-center">
@@ -39,9 +41,9 @@ export default function CountryPage() {
                         <div className="opacity-0 animate-[onboardingFadeUp_0.6s_ease-out_0.2s_forwards]">
                             <p className="text-xs text-gray-400">02</p>
 
-                            <h1 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-gray-900">국가를 선택해 주세요</h1>
+                            <h1 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-gray-900">{t("onboarding.country.title")}</h1>
 
-                            <p className="mt-2 text-sm text-gray-400">거주 국가를 선택해 주세요.</p>
+                            <p className="mt-2 text-sm text-gray-400">{t("onboarding.country.description")}</p>
                         </div>
 
                         {/* Countries */}
@@ -56,9 +58,9 @@ export default function CountryPage() {
                                         animationDelay: `${0.35 + index * 0.1}s`,
                                     }}
                                 >
-                                    <span className="text-sm font-medium text-gray-900">{country.nameKo}</span>
+                                    <span className="text-sm font-medium text-gray-900">{language === "ko" ? country.nameKo : country.nameEn}</span>
 
-                                    <span className="text-xs text-gray-400">{country.nameEn}</span>
+                                    <span className="text-xs text-gray-400">{language === "ko" ? country.nameEn : country.nameKo}</span>
                                 </button>
                             ))}
                         </div>
@@ -71,7 +73,7 @@ export default function CountryPage() {
                     onClick={() => router.push("/onboarding/language")}
                     className="absolute bottom-8 left-6 text-xs text-gray-400 transition hover:text-gray-900"
                 >
-                    ← 이전
+                    {t("onboarding.back")}
                 </button>
             </div>
         </div>

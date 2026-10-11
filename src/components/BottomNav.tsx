@@ -2,10 +2,12 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { Wallet, BriefcaseBusiness, Plane, Settings } from "lucide-react";
+import { useI18n } from "@/components/I18nProvider";
 
 export default function BottomNav() {
     const router = useRouter();
     const pathname = usePathname();
+    const { t } = useI18n();
 
     if (pathname.startsWith("/onboarding")) {
         return null;
@@ -21,7 +23,7 @@ export default function BottomNav() {
                     }`}
                 >
                     <Wallet size={20} strokeWidth={1.8} />
-                    <span className="text-[11px]">생활</span>
+                    <span className="text-[11px]">{t("nav.living")}</span>
                 </button>
 
                 <button
@@ -31,7 +33,7 @@ export default function BottomNav() {
                     }`}
                 >
                     <BriefcaseBusiness size={20} strokeWidth={1.8} />
-                    <span className="text-[11px]">급여</span>
+                    <span className="text-[11px]">{t("nav.salary")}</span>
                 </button>
 
                 <button
@@ -41,7 +43,7 @@ export default function BottomNav() {
                     }`}
                 >
                     <Plane size={20} strokeWidth={1.8} />
-                    <span className="text-[11px]">여행</span>
+                    <span className="text-[11px]">{t("nav.travel")}</span>
                 </button>
 
                 <button
@@ -51,7 +53,7 @@ export default function BottomNav() {
                     }`}
                 >
                     <Settings size={20} strokeWidth={1.8} />
-                    <span className="text-[11px]">설정</span>
+                    <span className="text-[11px]">{t("nav.settings")}</span>
                 </button>
             </div>
         </nav>

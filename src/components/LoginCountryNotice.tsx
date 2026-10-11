@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useDialog } from "@/components/DialogProvider";
+import { useI18n } from "@/components/I18nProvider";
 import { getCountry, getCountryLabel, getRegionLabel } from "@/lib/countries";
 
 /*
@@ -11,6 +12,13 @@ import { getCountry, getCountryLabel, getRegionLabel } from "@/lib/countries";
  */
 export default function LoginCountryNotice() {
     const { alert: showAlert } = useDialog();
+    const { t, language } = useI18n();
+    // 로그인 직후 한 번만 도는 effect 라, 언어가 바뀌어도 다시 실행되지 않도록 최신 값만 ref 로 읽는다
+    const textRef = useRef({ t, language });
+
+    useEffect(() => {
+        textRef.current = { t, language };
+    }, [t, language]);
 
     useEffect(() => {
         let shouldCheck = false;
@@ -46,12 +54,11 @@ export default function LoginCountryNotice() {
                 if (chosenCountry && savedCountry && chosenCountry !== savedCountry.code) {
                     const regionLabel = savedCountry.hasRegions ? getRegionLabel(savedCountry.code, profile.provinceCode) : "";
 
-                    const savedLabel = [getCountryLabel(savedCountry.code), regionLabel].filter(Boolean).join(" · ");
+                    const { t: translate, language: currentLanguage } = textRef.current;
 
-                    await showAlert(
-                        `저장된 설정(${savedLabel})으로 들어왔어요.\n국가나 지역을 바꾸고 싶다면 설정에서 바꿀 수 있어요.`,
-                        "저장된 설정으로 시작해요",
-                    );
+                    const savedLabel = [getCountryLabel(savedCountry.code, { language: currentLanguage }), regionLabel].filter(Boolean).join(" · ");
+
+                    await showAlert(translate("alert.loginCountry.body", { label: savedLabel }), translate("alert.loginCountry.title"));
                 }
 
                 ["chagok_country", "chagok_region", "chagok_timezone", "chagok_language"].forEach((key) =>

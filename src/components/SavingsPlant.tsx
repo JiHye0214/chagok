@@ -1,5 +1,8 @@
 // 저축 진행도에 따라 자라는 화분. 숫자가 아니라 그림이라 통화(원/달러)와 상관없이 쓸 수 있다.
 // 색은 여행 지구본에서 쓰는 초록·산호색과 맞췄다.
+"use client";
+
+import { useI18n } from "@/components/I18nProvider";
 
 type SavingsPlantProps = {
     // 0~100
@@ -28,6 +31,7 @@ const LEAVES = [
 ] as const;
 
 export default function SavingsPlant({ progress, className = "" }: SavingsPlantProps) {
+    const { t } = useI18n();
     const p = clamp01(progress / 100);
 
     // 줄기 높이: 처음엔 작은 싹, 목표를 채우면 가장 높게
@@ -49,7 +53,7 @@ export default function SavingsPlant({ progress, className = "" }: SavingsPlantP
             viewBox="0 0 120 120"
             className={className}
             role="img"
-            aria-label={`저축 목표 ${Math.round(p * 100)}% 달성`}
+            aria-label={t("savingsPlant.aria", { percent: Math.round(p * 100) })}
         >
             {/* 화분 뒤 줄기 */}
             <path d={stemPath} fill="none" stroke={STEM} strokeWidth={3} strokeLinecap="round" />

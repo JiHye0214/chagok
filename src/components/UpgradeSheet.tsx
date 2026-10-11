@@ -3,12 +3,13 @@
 import { useState } from "react";
 import { Check } from "lucide-react";
 import BottomSheet from "@/components/BottomSheet";
+import { useI18n } from "@/components/I18nProvider";
 import { formatCurrency } from "@/lib/salary/format";
 import {
     BILLING_ENABLED,
     PLAN_COMPARISON,
-    UPGRADE_MESSAGES,
     getPlanPrice,
+    getUpgradeMessage,
     getYearlyDiscountPercent,
 } from "@/lib/plans";
 import type { UpgradeReason } from "@/lib/plans";
@@ -24,6 +25,7 @@ type UpgradeSheetProps = {
 };
 
 export default function UpgradeSheet({ isOpen, onClose, reason = "general", isPro, currency, onSubscribe }: UpgradeSheetProps) {
+    const { t } = useI18n();
     const [billingInterval, setBillingInterval] = useState<"monthly" | "yearly">("yearly");
 
     const price = getPlanPrice(currency);
@@ -33,13 +35,13 @@ export default function UpgradeSheet({ isOpen, onClose, reason = "general", isPr
     const selectedPrice = billingInterval === "yearly" ? price.yearly : price.monthly;
 
     return (
-        <BottomSheet isOpen={isOpen} onClose={onClose} title="차곡의 Pro 요금제">
-            <p className="text-sm leading-6 text-gray-600">{UPGRADE_MESSAGES[reason]}</p>
+        <BottomSheet isOpen={isOpen} onClose={onClose} title={t("plan.title")}>
+            <p className="text-sm leading-6 text-gray-600">{getUpgradeMessage(reason, t)}</p>
 
             {isPro ? (
                 <div className="mt-5 rounded-3xl bg-white p-5 text-center shadow-sm">
-                    <p className="text-sm font-semibold text-gray-900">이미 Pro를 사용 중이에요</p>
-                    <p className="mt-1 text-xs text-gray-500">모든 기능을 제한 없이 쓸 수 있어요.</p>
+                    <p className="text-sm font-semibold text-gray-900">{t("plan.alreadyPro")}</p>
+                    <p className="mt-1 text-xs text-gray-500">{t("plan.alreadyProBody")}</p>
                 </div>
             ) : (
                 <>
@@ -51,7 +53,7 @@ export default function UpgradeSheet({ isOpen, onClose, reason = "general", isPr
                                 billingInterval === "monthly" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"
                             }`}
                         >
-                            월간
+                            {t("plan.monthly")}
                         </button>
 
                         <button
@@ -61,18 +63,21 @@ export default function UpgradeSheet({ isOpen, onClose, reason = "general", isPr
                                 billingInterval === "yearly" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"
                             }`}
                         >
-                            연간{discount > 0 && <span className="ml-1 text-xs text-emerald-600">{discount}% 할인</span>}
+                            {t("plan.yearly")}
+                            {discount > 0 && (
+                                <span className="ml-1 text-xs text-emerald-600">{t("plan.discount", { percent: discount })}</span>
+                            )}
                         </button>
                     </div>
 
                     <div className="mt-4 rounded-3xl bg-white p-5 shadow-sm">
                         <p className="text-3xl font-bold tracking-tight text-gray-950">
                             {formatCurrency(selectedPrice, priceCurrency)}
-                            <span className="ml-1 text-sm font-normal text-gray-400">/ {billingInterval === "yearly" ? "년" : "월"}</span>
+                            <span className="ml-1 text-sm font-normal text-gray-400">{billingInterval === "yearly" ? t("plan.perYear") : t("plan.perMonth")}</span>
                         </p>
 
                         {billingInterval === "yearly" && (
-                            <p className="mt-1 text-xs text-gray-400">월 {formatCurrency(price.yearly / 12, priceCurrency)} 꼴이에요.</p>
+                            <p className="mt-1 text-xs text-gray-400">{t("plan.monthlyEquivalent", { price: formatCurrency(price.yearly / 12, priceCurrency) })}</p>
                         )}
                     </div>
                 </>
@@ -81,20 +86,22 @@ export default function UpgradeSheet({ isOpen, onClose, reason = "general", isPr
             <div className="mt-5 overflow-hidden rounded-3xl bg-white shadow-sm">
                 <div className="grid grid-cols-[1fr_72px_72px] gap-2 border-b border-gray-100 px-4 py-3 text-xs text-gray-400">
                     <span />
-                    <span className="text-center">무료</span>
+                    <span className="text-center">{t("plan.colFree")}</span>
                     <span className="text-center font-semibold text-gray-900">Pro</span>
                 </div>
 
                 {PLAN_COMPARISON.map((row) => (
                     <div
-                        key={row.label}
+                        key={row.labelKey}
                         className="grid grid-cols-[1fr_72px_72px] items-center gap-2 border-b border-gray-50 px-4 py-3 text-sm last:border-b-0"
                     >
-                        <span className="text-gray-700">{row.label}</span>
-                        <span className="text-center text-xs text-gray-400">{row.free}</span>
+                        <span className="text-gray-700">{t(row.labelKey)}</span>
+                        <span className="text-center text-xs text-gray-400">
+                            {row.free === null ? t("plan.none") : t("plan.countUnit", { count: row.free })}
+                        </span>
                         <span className="flex items-center justify-center gap-1 text-center text-xs font-medium text-gray-900">
-                            {row.pro === "가능" && <Check size={12} strokeWidth={2.5} />}
-                            {row.pro}
+                            {row.pro === "available" && <Check size={12} strokeWidth={2.5} />}
+                            {row.pro === "available" ? t("plan.available") : t("plan.unlimited")}
                         </span>
                     </div>
                 ))}
@@ -107,12 +114,12 @@ export default function UpgradeSheet({ isOpen, onClose, reason = "general", isPr
                         onClick={() => onSubscribe?.(billingInterval)}
                         className="mt-5 w-full rounded-2xl bg-gray-900 py-4 text-sm font-semibold text-white transition-colors hover:bg-gray-800"
                     >
-                        Pro 시작하기
+                        {t("plan.start")}
                     </button>
                 ) : (
                     <div className="mt-5 rounded-2xl bg-gray-100 px-4 py-4 text-center">
-                        <p className="text-sm font-medium text-gray-500">결제 기능을 준비 중이에요</p>
-                        <p className="mt-1 text-xs text-gray-400">곧 만나요. 조금만 기다려 주세요.</p>
+                        <p className="text-sm font-medium text-gray-500">{t("plan.billingSoon")}</p>
+                        <p className="mt-1 text-xs text-gray-400">{t("plan.billingSoonBody")}</p>
                     </div>
                 ))}
         </BottomSheet>

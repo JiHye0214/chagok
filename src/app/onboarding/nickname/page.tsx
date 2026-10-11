@@ -2,10 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getCountry, getOnboardingStepNumber } from "@/lib/countries";
+import { translateServerMessage } from "@/lib/i18n/serverMessages";
+import { useI18n } from "@/components/I18nProvider";
+import { DEFAULT_LANGUAGE, getCountry, getOnboardingStepNumber } from "@/lib/countries";
 
 export default function NicknamePage() {
     const router = useRouter();
+    const { t } = useI18n();
 
     const [country, setCountry] = useState<string | null>(null);
     const [nickname, setNickname] = useState("");
@@ -67,11 +70,11 @@ export default function NicknamePage() {
         const trimmedNickname = nickname.trim();
 
         if (!/^[가-힣a-z0-9._]{3,20}$/.test(trimmedNickname)) {
-            setError("3~20자의 한글, 영문 소문자, 숫자, ., _만 사용할 수 있어요.");
+            setError(t("settings.nicknamePage.rule"));
             return;
         }
 
-        const language = localStorage.getItem("chagok_language") || "ko";
+        const language = localStorage.getItem("chagok_language") || DEFAULT_LANGUAGE;
 
         const countryCode = localStorage.getItem("chagok_country");
 
@@ -80,7 +83,7 @@ export default function NicknamePage() {
         const selectedCountry = getCountry(countryCode);
 
         if (!selectedCountry) {
-            setError("사용자 정보를 확인할 수 없어요. 처음부터 다시 진행해 주세요.");
+            setError(t("onboarding.nickname.noInfo"));
             return;
         }
 
@@ -111,7 +114,7 @@ export default function NicknamePage() {
             const data = await response.json();
 
             if (!response.ok) {
-                setError(data.error || "프로필을 저장하지 못했어요.");
+                setError(translateServerMessage(data.error, t) || t("onboarding.nickname.saveFailed"));
                 return;
             }
 
@@ -122,7 +125,7 @@ export default function NicknamePage() {
             router.push("/");
         } catch (error) {
             console.error("프로필 저장 실패:", error);
-            setError("프로필을 저장하지 못했어요. 다시 시도해 주세요.");
+            setError(t("onboarding.nickname.saveFailedRetry"));
         } finally {
             setIsSaving(false);
         }
@@ -135,16 +138,16 @@ export default function NicknamePage() {
     return (
         <div className="h-full w-full">
             <div className="relative mx-auto h-full w-full max-w-md px-6">
-                <p className="absolute left-6 top-8 text-2xl font-semibold tracking-[-0.05em] text-gray-900">차곡</p>
+                <p className="absolute left-6 top-8 text-2xl font-semibold tracking-[-0.05em] text-gray-900">{t("common.appName")}</p>
 
                 <main className="flex h-full w-full items-center justify-center">
                     <div className="w-full">
                         <div className="opacity-0 animate-[onboardingFadeUp_0.6s_ease-out_0.2s_forwards]">
                             <p className="text-xs text-gray-400">{stepNumber}</p>
 
-                            <h1 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-gray-900">닉네임을 정해 주세요</h1>
+                            <h1 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-gray-900">{t("onboarding.nickname.title")}</h1>
 
-                            <p className="mt-2 text-sm text-gray-400">차곡에서 사용할 이름을 정해 주세요.</p>
+                            <p className="mt-2 text-sm text-gray-400">{t("onboarding.nickname.description")}</p>
                         </div>
 
                         <div
@@ -163,7 +166,7 @@ export default function NicknamePage() {
                                         handleNext();
                                     }
                                 }}
-                                placeholder="닉네임을 입력해 주세요"
+                                placeholder={t("settings.nicknamePage.placeholder")}
                                 maxLength={20}
                                 className={`h-14 w-full rounded-2xl border bg-white px-5 text-sm text-gray-900 outline-none transition placeholder:text-gray-300 ${
                                     error ? "border-red-300 focus:border-red-400" : "border-gray-200 focus:border-gray-400"
@@ -175,7 +178,7 @@ export default function NicknamePage() {
                                 <p className="mt-2 text-xs text-red-400">{error}</p>
                             ) : (
                                 <p className="mt-2 text-xs text-gray-400">
-                                    3~20자의 한글, 영문 소문자, 숫자, ., _를 사용할 수 있어요.
+                                    {t("settings.nicknamePage.rule")}
                                 </p>
                             )}
                         </div>
@@ -187,7 +190,7 @@ export default function NicknamePage() {
                             className="mt-6 flex h-14 w-full items-center justify-center rounded-2xl bg-gray-900 text-sm font-medium text-white opacity-0 animate-[onboardingFadeUp_0.6s_ease-out_forwards] transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400"
                             style={{ animationDelay: "0.45s" }}
                         >
-                            {isSaving ? "저장 중..." : "차곡 시작하기"}
+                            {isSaving ? t("common.saving") : t("onboarding.nickname.start")}
                         </button>
                     </div>
                 </main>
@@ -197,7 +200,7 @@ export default function NicknamePage() {
                     onClick={() => router.push(getCountry(country)?.hasRegions ? "/onboarding/region" : "/onboarding/country")}
                     className="absolute bottom-8 left-6 text-xs text-gray-400 transition hover:text-gray-900"
                 >
-                    ← 이전
+                    {t("onboarding.back")}
                 </button>
             </div>
         </div>

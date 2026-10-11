@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { createAuthClient } from "better-auth/react";
+import { useI18n } from "@/components/I18nProvider";
 import { getCountry, getOnboardingStepNumber } from "@/lib/countries";
 
 const authClient = createAuthClient();
 
 export default function LoginPage() {
+    const { t } = useI18n();
     const [country, setCountry] = useState<string | null>(null);
 
     useEffect(() => {
@@ -41,7 +43,7 @@ export default function LoginPage() {
         <main className="h-[100dvh] w-full overflow-hidden bg-gray-50">
             <div className="relative mx-auto h-full w-full max-w-md px-6">
                 {/* Brand */}
-                <p className="absolute left-6 top-8 text-2xl font-semibold tracking-[-0.05em] text-gray-900">차곡</p>
+                <p className="absolute left-6 top-8 text-2xl font-semibold tracking-[-0.05em] text-gray-900">{t("common.appName")}</p>
 
                 {/* Content */}
                 <main className="flex h-full w-full items-center justify-center">
@@ -50,9 +52,9 @@ export default function LoginPage() {
                         <div className="opacity-0 animate-[onboardingFadeUp_0.6s_ease-out_0.2s_forwards]">
                             <p className="text-xs text-gray-400">{stepNumber}</p>
 
-                            <h1 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-gray-900">로그인해 주세요</h1>
+                            <h1 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-gray-900">{t("onboarding.login.title")}</h1>
 
-                            <p className="mt-2 text-sm text-gray-400">차곡을 시작하려면 로그인이 필요해요.</p>
+                            <p className="mt-2 text-sm text-gray-400">{t("onboarding.login.description")}</p>
                         </div>
 
                         {/* Login Buttons */}
@@ -84,7 +86,7 @@ export default function LoginPage() {
                                         d="M12 6.14c1.43 0 2.71.49 3.72 1.45l2.79-2.79C16.84 3.14 14.63 2.25 12 2.25a9.75 9.75 0 0 0-8.7 5.39l3.24 2.53C7.31 7.86 9.46 6.14 12 6.14Z"
                                     />
                                 </svg>
-                                Google로 계속하기
+                                {t("onboarding.login.google")}
                             </button>
 
                             {/* Kakao - Korea only */}
@@ -98,7 +100,7 @@ export default function LoginPage() {
                                     }}
                                 >
                                     <img src="/icons/kakao.png" alt="" className="h-5 w-5" />
-                                    카카오로 계속하기
+                                    {t("onboarding.login.kakao")}
                                 </button>
                             )}
                         </div>
@@ -113,7 +115,7 @@ export default function LoginPage() {
                     }}
                     className="absolute bottom-8 left-6 text-xs text-gray-400 transition hover:text-gray-900"
                 >
-                    ← 이전
+                    {t("onboarding.back")}
                 </button>
             </div>
         </main>

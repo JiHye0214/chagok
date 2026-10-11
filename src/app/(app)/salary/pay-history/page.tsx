@@ -14,6 +14,9 @@ import { formatCurrency, getCurrencySymbol } from "@/lib/salary/format";
 import type { PayPeriodData } from "@/lib/salary/types";
 import BottomSheet from "@/components/BottomSheet";
 import { useDialog } from "@/components/DialogProvider";
+import { useI18n } from "@/components/I18nProvider";
+import { translateWarning } from "@/lib/i18n/warnings";
+import type { MessageKey } from "@/lib/i18n";
 import UsageMeter from "@/components/UsageMeter";
 import { FREE_PLAN_LIMITS } from "@/lib/plans";
 import { calculateHourlyBasePay, getHourlyWageOn } from "@/lib/salary/wage";
@@ -80,6 +83,8 @@ const emptyForm: FormState = {
     netPay: "",
 };
 
+type TFn = (key: MessageKey, params?: Record<string, string | number>) => string;
+
 const formatDisplayDate = (value: string) => {
     return formatDate(new Date(`${value}T00:00:00`));
 };
@@ -113,30 +118,30 @@ const getDaysDifference = (targetDate: string) => {
     return Math.round((target.getTime() - todayOnly.getTime()) / (1000 * 60 * 60 * 24));
 };
 
-const getDdayLabel = (targetDate: string) => {
+const getDdayLabel = (targetDate: string, t: TFn) => {
     const days = getDaysDifference(targetDate);
 
     if (days === 0) {
-        return "오늘";
+        return t("sal.dday.today");
     }
 
     if (days === 1) {
-        return "내일";
+        return t("sal.dday.tomorrow");
     }
 
     if (days === 2) {
-        return "모레";
+        return t("sal.dday.dayAfter");
     }
 
     if (days > 2) {
-        return `${days}일 뒤`;
+        return t("sal.dday.inDays", { days });
     }
 
     if (days === -1) {
-        return "어제";
+        return t("sal.dday.yesterday");
     }
 
-    return `${Math.abs(days)}일 전`;
+    return t("sal.dday.daysAgo", { days: Math.abs(days) });
 };
 
 const calculateHours = (startTime: string, endTime: string, breakMinutes: number = 0) => {
@@ -223,6 +228,7 @@ const getPresetDateRange = (filter: Exclude<HistoryFilter, "custom" | "all">) =>
 };
 
 export default function PayHistoryPage() {
+    const { t } = useI18n();
     const { confirm, alert: showAlert } = useDialog();
     const { openUpgrade } = useUpgrade();
     const [planCode, setPlanCode] = useState<"free" | "pro">("free");
@@ -830,35 +836,35 @@ export default function PayHistoryPage() {
         const netPay = Number(form.netPay);
 
         if (!form.startDate || !form.endDate) {
-            return "급여 기간을 입력해주세요.";
+            return t("payh.err.period");
         }
 
         if (form.endDate < form.startDate) {
-            return "급여 기간의 종료일이 시작일보다 빠를 수 없어요.";
+            return t("payh.err.periodOrder");
         }
 
         if (!form.payDate) {
-            return "지급일을 입력해주세요.";
+            return t("payh.err.payDate");
         }
 
         if (form.hours === "" || !Number.isFinite(hours) || hours < 0) {
-            return "근무시간을 입력해주세요.";
+            return t("payh.err.hours");
         }
 
         if (form.pay === "" || !Number.isFinite(pay) || pay < 0) {
-            return "급여를 입력해주세요.";
+            return t("payh.err.pay");
         }
 
         if (!Number.isFinite(tips) || tips < 0) {
-            return "팁을 확인해주세요.";
+            return t("payh.err.tips");
         }
 
         if (!Number.isFinite(deductions) || deductions < 0) {
-            return "공제액을 확인해주세요.";
+            return t("payh.err.deductions");
         }
 
         if (form.netPay === "" || !Number.isFinite(netPay) || netPay <= 0) {
-            return "실수령액을 입력해주세요.";
+            return t("payh.err.netPay");
         }
 
         return null;
@@ -950,7 +956,7 @@ export default function PayHistoryPage() {
         } catch (error) {
             console.error(error);
 
-            showAlert("급여 기록을 저장하지 못했습니다.");
+            showAlert(t("payh.err.saveFailed"));
         } finally {
             setIsSaving(false);
         }
@@ -961,7 +967,7 @@ export default function PayHistoryPage() {
      */
     const deletePayHistory = async (history: PayHistory) => {
         const confirmed = await confirm(
-            `${formatDisplayDate(history.startDate)} ~ ${formatDisplayDate(history.endDate)} 급여 기록을 삭제할까요?`,
+            t("payh.confirmDelete", { start: formatDisplayDate(history.startDate), end: formatDisplayDate(history.endDate) }),
         );
 
         if (!confirmed) {
@@ -993,7 +999,7 @@ export default function PayHistoryPage() {
         } catch (error) {
             console.error(error);
 
-            showAlert("급여 기록을 삭제하지 못했습니다.");
+            showAlert(t("payh.err.deleteFailed"));
         }
     };
 
@@ -1006,12 +1012,12 @@ export default function PayHistoryPage() {
             <div className="mx-auto max-w-md">
                 <BackButtonHeader
                     href="/salary"
-                    title="급여 기록"
-                    description="지난 급여 기간과 실제 수령 금액을 확인해보세요."
+                    title={t("payh.k001")}
+                    description={t("payh.k002")}
                 />
 
                 <UsageMeter
-                    label="급여 기록"
+                    label={t("payh.k001")}
                     used={payHistory.length}
                     limit={FREE_PLAN_LIMITS.payHistory}
                     reason="pay-history-limit"
@@ -1029,9 +1035,9 @@ export default function PayHistoryPage() {
                             </div>
 
                             <div>
-                                <p className="text-sm font-semibold text-gray-900">급여 기록 5개를 모두 사용했어요.</p>
+                                <p className="text-sm font-semibold text-gray-900">{t("payh.k003")}</p>
 
-                                <p className="mt-1 text-xs text-gray-500">기존 기록을 삭제하면 새로운 급여를 등록할 수 있어요.</p>
+                                <p className="mt-1 text-xs text-gray-500">{t("payh.k004")}</p>
                             </div>
 
                             <button
@@ -1039,7 +1045,7 @@ export default function PayHistoryPage() {
                                 onClick={() => openUpgrade("pay-history-limit")}
                                 className="ml-auto shrink-0 rounded-full bg-gray-900 px-3 py-2 text-xs font-medium text-white"
                             >
-                                Pro 알아보기
+                                {t("payh.k005")}
                             </button>
                         </div>
                     ) : (
@@ -1048,11 +1054,11 @@ export default function PayHistoryPage() {
                             onClick={() => openFormForPeriod(overduePayPeriod)}
                             className="mt-5 block w-full rounded-3xl bg-gray-900 p-5 text-left shadow-sm transition hover:shadow-md"
                         >
-                            <p className="text-xs text-gray-400">급여 기록</p>
+                            <p className="text-xs text-gray-400">{t("payh.k001")}</p>
 
-                            <p className="mt-1 text-lg font-bold text-white">지급일이 지났어요</p>
+                            <p className="mt-1 text-lg font-bold text-white">{t("payh.k006")}</p>
 
-                            <p className="mt-1 text-sm text-gray-500">아직 기록되지 않은 급여가 있어요.</p>
+                            <p className="mt-1 text-sm text-gray-500">{t("payh.k007")}</p>
 
                             <p className="mt-4 text-xs text-gray-400">
                                 {formatDisplayDate(overduePayPeriod.startDate)}
@@ -1060,7 +1066,7 @@ export default function PayHistoryPage() {
                                 {formatDisplayDate(overduePayPeriod.endDate)}
                             </p>
 
-                            <p className="mt-3 text-xs font-medium text-gray-500">지금 기록하기 →</p>
+                            <p className="mt-3 text-xs font-medium text-gray-500">{t("payh.k008")}</p>
                         </button>
                     ))}
 
@@ -1073,7 +1079,7 @@ export default function PayHistoryPage() {
                     >
                         <div className="flex items-start justify-between gap-4">
                             <div>
-                                <p className="text-xs text-blue-500">급여 예정</p>
+                                <p className="text-xs text-blue-500">{t("payh.k009")}</p>
 
                                 <p className="mt-1 text-sm font-semibold text-gray-700">
                                     {formatDisplayDate(pendingPayPeriod.startDate)}
@@ -1082,15 +1088,15 @@ export default function PayHistoryPage() {
                                 </p>
 
                                 <p className="mt-3 text-lg font-semibold text-gray-900">
-                                    <span className="text-blue-600">{getDdayLabel(pendingPayPeriod.payDate)}</span>{" "}
-                                    {formatMoney(animatedPendingNetPay)}를 받아요
+                                    <span className="text-blue-600">{getDdayLabel(pendingPayPeriod.payDate, t)}</span>{" "}
+                                    {t("sal.receive", { amount: formatMoney(animatedPendingNetPay) })}
                                 </p>
 
-                                <p className="mt-1 text-sm text-gray-500">지급일 {formatDisplayDate(pendingPayPeriod.payDate)}</p>
+                                <p className="mt-1 text-sm text-gray-500">{t("sal.payDate", { date: formatDisplayDate(pendingPayPeriod.payDate) })}</p>
                             </div>
 
                             <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-blue-600 shadow-sm">
-                                예상
+                                {t("payh.k010")}
                             </span>
                         </div>
                     </button>
@@ -1106,9 +1112,9 @@ export default function PayHistoryPage() {
                             </div>
 
                             <div>
-                                <p className="text-sm font-semibold text-gray-900">급여 기록 5개를 모두 사용했어요.</p>
+                                <p className="text-sm font-semibold text-gray-900">{t("payh.k003")}</p>
 
-                                <p className="mt-1 text-xs text-gray-500">기존 기록을 삭제하면 새로운 급여를 등록할 수 있어요.</p>
+                                <p className="mt-1 text-xs text-gray-500">{t("payh.k004")}</p>
                             </div>
 
                             <button
@@ -1116,7 +1122,7 @@ export default function PayHistoryPage() {
                                 onClick={() => openUpgrade("pay-history-limit")}
                                 className="ml-auto shrink-0 rounded-full bg-gray-900 px-3 py-2 text-xs font-medium text-white"
                             >
-                                Pro 알아보기
+                                {t("payh.k005")}
                             </button>
                         </div>
                     )
@@ -1127,9 +1133,9 @@ export default function PayHistoryPage() {
                         className="mt-6 flex w-full items-center justify-between rounded-3xl bg-white p-5 text-left shadow-sm transition hover:shadow-md"
                     >
                         <div>
-                            <p className="font-semibold">급여 기록 추가</p>
+                            <p className="font-semibold">{t("payh.k011")}</p>
 
-                            <p className="mt-1 text-sm text-gray-400">지난 급여를 직접 기록할 수 있어요.</p>
+                            <p className="mt-1 text-sm text-gray-400">{t("payh.k012")}</p>
                         </div>
 
                         <span className="text-xl">+</span>
@@ -1137,7 +1143,7 @@ export default function PayHistoryPage() {
                 )}
 
                 {/* --------------------------------------------------
-                    급여 기록 기간 필터
+                    {t("payh.k013")}
                 -------------------------------------------------- */}
                 <section className="mt-10">
                     <div className="flex items-center justify-end gap-2">
@@ -1149,11 +1155,11 @@ export default function PayHistoryPage() {
                         >
                             <div className="flex items-center justify-end gap-1.5 overflow-x-auto scrollbar-hide whitespace-nowrap">
                                 {[
-                                    { value: "month" as const, label: "이번 달" },
-                                    { value: "3months" as const, label: "3개월" },
-                                    { value: "6months" as const, label: "6개월" },
-                                    { value: "year" as const, label: "1년" },
-                                    { value: "custom" as const, label: "사용자화" },
+                                    { value: "month" as const, label: t("payh.filter.month") },
+                                    { value: "3months" as const, label: t("payh.filter.3months") },
+                                    { value: "6months" as const, label: t("payh.filter.6months") },
+                                    { value: "year" as const, label: t("payh.filter.year") },
+                                    { value: "custom" as const, label: t("payh.filter.custom") },
                                 ].map((option) => {
                                     const isActive = historyFilter === option.value;
 
@@ -1187,7 +1193,7 @@ export default function PayHistoryPage() {
                                     }}
                                     className="shrink-0 rounded-full bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-500 transition hover:bg-gray-200"
                                 >
-                                    전체
+                                    {t("payh.k014")}
                                 </button>
                             </div>
                         </div>
@@ -1195,7 +1201,7 @@ export default function PayHistoryPage() {
                         {/* 필터 버튼 / 닫기 버튼 */}
                         <button
                             type="button"
-                            aria-label={isHistoryFilterOpen ? "필터 닫기" : "급여 기록 필터 열기"}
+                            aria-label={isHistoryFilterOpen ? t("payh.filter.close") : t("payh.filter.open")}
                             onClick={() => setIsHistoryFilterOpen((current) => !current)}
                             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-gray-500 shadow-sm transition-all duration-300 hover:bg-gray-50"
                         >
@@ -1235,7 +1241,7 @@ export default function PayHistoryPage() {
                         <div className="mt-3 rounded-3xl bg-white p-4 shadow-sm">
                             <div className="grid grid-cols-2 gap-2">
                                 <div>
-                                    <p className="mb-2 text-xs text-gray-400">시작일</p>
+                                    <p className="mb-2 text-xs text-gray-400">{t("payh.k015")}</p>
 
                                     <input
                                         type="date"
@@ -1249,7 +1255,7 @@ export default function PayHistoryPage() {
                                 </div>
 
                                 <div>
-                                    <p className="mb-2 text-xs text-gray-400">종료일</p>
+                                    <p className="mb-2 text-xs text-gray-400">{t("payh.k016")}</p>
 
                                     <input
                                         type="date"
@@ -1264,7 +1270,7 @@ export default function PayHistoryPage() {
                             </div>
 
                             {customStartDate && customEndDate && customStartDate > customEndDate && (
-                                <p className="mt-3 text-xs text-red-500">시작일은 종료일보다 빠르거나 같아야 해요.</p>
+                                <p className="mt-3 text-xs text-red-500">{t("payh.k017")}</p>
                             )}
                         </div>
                     )}
@@ -1274,13 +1280,13 @@ export default function PayHistoryPage() {
                     <section className="mt-3 rounded-3xl bg-white p-6 shadow-sm">
                         <p className="text-sm text-gray-400">
                             {customStartDate && customEndDate && customStartDate > customEndDate
-                                ? "조회 기간을 다시 선택해주세요."
-                                : "조회할 기간을 선택해주세요."}
+                                ? t("payh.range.reselect")
+                                : t("payh.range.select")}
                         </p>
                     </section>
                 ) : filteredPayHistory.length === 0 ? (
                     <section className="mt-3 rounded-3xl bg-white p-6 shadow-sm">
-                        <p className="text-sm text-gray-400">해당 기간에 급여 기록이 없어요.</p>
+                        <p className="text-sm text-gray-400">{t("payh.k018")}</p>
                     </section>
                 ) : (
                     <>
@@ -1294,7 +1300,7 @@ export default function PayHistoryPage() {
                                 >
                                     <div className="flex items-start justify-between">
                                         <div>
-                                            {index === 0 && <p className="text-xs text-gray-400">최근 급여</p>}
+                                            {index === 0 && <p className="text-xs text-gray-400">{t("payh.k019")}</p>}
 
                                             <p className="mt-1 font-semibold">
                                                 {formatDisplayDate(history.startDate)}
@@ -1304,7 +1310,7 @@ export default function PayHistoryPage() {
 
                                             {history.payDate && (
                                                 <p className="mt-1 text-xs text-gray-400">
-                                                    지급일 {formatDisplayDate(history.payDate)}
+                                                    {t("sal.payDate", { date: formatDisplayDate(history.payDate) })}
                                                 </p>
                                             )}
                                         </div>
@@ -1314,28 +1320,28 @@ export default function PayHistoryPage() {
 
                                     <div className="mt-5 grid grid-cols-2 gap-y-4 text-sm">
                                         <div>
-                                            <p className="text-xs text-gray-400">일한 시간</p>
+                                            <p className="text-xs text-gray-400">{t("payh.k020")}</p>
 
                                             <p className="mt-1 font-medium">
                                                 {history.hours.toFixed(2)}
-                                                시간
+                                                {t("payh.k021")}
                                             </p>
                                         </div>
 
                                         <div>
-                                            <p className="text-xs text-gray-400">급여</p>
+                                            <p className="text-xs text-gray-400">{t("payh.k022")}</p>
 
                                             <p className="mt-1 font-medium">{formatMoneyFor(history)(history.pay)}</p>
                                         </div>
 
                                         <div>
-                                            <p className="text-xs text-gray-400">팁</p>
+                                            <p className="text-xs text-gray-400">{t("payh.k023")}</p>
 
                                             <p className="mt-1 font-medium">{formatMoneyFor(history)(history.tips)}</p>
                                         </div>
 
                                         <div>
-                                            <p className="text-xs text-gray-400">실수령액</p>
+                                            <p className="text-xs text-gray-400">{t("payh.k024")}</p>
 
                                             <p className="mt-1 text-lg font-bold">{formatMoneyFor(history)(history.netPay)}</p>
                                         </div>
@@ -1351,8 +1357,8 @@ export default function PayHistoryPage() {
                                 className="mt-3 w-full rounded-2xl bg-white py-3 text-sm font-medium text-gray-500 shadow-sm transition hover:bg-gray-50"
                             >
                                 {isHistoryExpanded
-                                    ? "접기"
-                                    : `더 보기 · ${filteredPayHistory.length - displayedPayHistory.length}개`}
+                                    ? t("payh.collapse")
+                                    : t("payh.more", { count: filteredPayHistory.length - displayedPayHistory.length })}
                             </button>
                         )}
                     </>
@@ -1374,7 +1380,7 @@ export default function PayHistoryPage() {
 
                                         {selectedHistory.payDate && (
                                             <p className="mt-1 text-xs text-gray-500">
-                                                지급일 {formatDisplayDate(selectedHistory.payDate)}
+                                                {t("sal.payDate", { date: formatDisplayDate(selectedHistory.payDate) })}
                                             </p>
                                         )}
                                     </div>
@@ -1385,29 +1391,29 @@ export default function PayHistoryPage() {
 
                                 <div className="mt-6 space-y-3 text-sm">
                                     <div className="flex justify-between">
-                                        <span className="text-gray-400">근무시간</span>
+                                        <span className="text-gray-400">{t("payh.k025")}</span>
 
                                         <span>
                                             {selectedHistory.hours.toFixed(2)}
-                                            시간
+                                            {t("payh.k021")}
                                         </span>
                                     </div>
 
                                     <div className="flex justify-between">
-                                        <span className="text-gray-400">급여</span>
+                                        <span className="text-gray-400">{t("payh.k022")}</span>
 
                                         <span>{formatMoneyFor(selectedHistory)(selectedHistory.pay)}</span>
                                     </div>
 
                                     <div className="flex justify-between">
-                                        <span className="text-gray-400">팁</span>
+                                        <span className="text-gray-400">{t("payh.k023")}</span>
 
                                         <span>{formatMoneyFor(selectedHistory)(selectedHistory.tips)}</span>
                                     </div>
 
                                     {selectedHistory.deductions > 0 && (
                                         <div className="flex justify-between">
-                                            <span className="text-gray-400">공제</span>
+                                            <span className="text-gray-400">{t("payh.k026")}</span>
 
                                             <span>-{formatMoneyFor(selectedHistory)(selectedHistory.deductions)}</span>
                                         </div>
@@ -1415,7 +1421,7 @@ export default function PayHistoryPage() {
 
                                     {selectedHistory.adjustments.length > 0 && (
                                         <div className="border-t border-gray-100 pt-4">
-                                            <p className="mb-3 text-xs text-gray-500">추가 / 차감</p>
+                                            <p className="mb-3 text-xs text-gray-500">{t("payh.k027")}</p>
 
                                             <div className="space-y-2">
                                                 {selectedHistory.adjustments.map((adjustment, index) => (
@@ -1435,7 +1441,7 @@ export default function PayHistoryPage() {
 
                                 <div className="mt-6 rounded-2xl bg-gray-50 p-4 text-gray-950">
                                     <div className="flex items-center justify-between">
-                                        <span className="text-sm font-medium">실제 수령액</span>
+                                        <span className="text-sm font-medium">{t("payh.k028")}</span>
 
                                         <span className="text-xl font-bold">{formatMoneyFor(selectedHistory)(selectedHistory.netPay)}</span>
                                     </div>
@@ -1447,7 +1453,7 @@ export default function PayHistoryPage() {
                                         onClick={() => openEditForm(selectedHistory)}
                                         className="flex-1 rounded-2xl border border-gray-200 py-3 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
                                     >
-                                        수정
+                                        {t("payh.k029")}
                                     </button>
 
                                     <button
@@ -1455,7 +1461,7 @@ export default function PayHistoryPage() {
                                         onClick={() => void deletePayHistory(selectedHistory)}
                                         className="flex-1 rounded-2xl border border-red-200 py-3 text-sm font-medium text-red-500 transition hover:bg-red-50"
                                     >
-                                        삭제
+                                        {t("payh.k030")}
                                     </button>
                                 </div>
                             </section>
@@ -1473,13 +1479,13 @@ export default function PayHistoryPage() {
                                 <div>
                                     <div className="flex items-center gap-2">
                                         <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-600">
-                                            예상
+                                            {t("payh.k010")}
                                         </span>
 
-                                        <span className="text-xs text-gray-400">{getDdayLabel(pendingPayPeriod.payDate)}</span>
+                                        <span className="text-xs text-gray-400">{getDdayLabel(pendingPayPeriod.payDate, t)}</span>
                                     </div>
 
-                                    <p className="mt-3 text-lg font-bold text-gray-900">지급 예정 급여</p>
+                                    <p className="mt-3 text-lg font-bold text-gray-900">{t("payh.k031")}</p>
 
                                     <p className="mt-1 text-sm text-gray-500">
                                         {formatDisplayDate(pendingPayPeriod.startDate)}
@@ -1491,14 +1497,14 @@ export default function PayHistoryPage() {
                             </div>
 
                             <div className="mt-6 rounded-3xl bg-blue-50 p-5">
-                                <p className="text-xs font-medium text-blue-500">예상 실수령액</p>
+                                <p className="text-xs font-medium text-blue-500">{t("payh.k032")}</p>
 
                                 <p className="mt-2 text-4xl font-bold tracking-tight text-gray-900">
                                     {formatMoney(pendingPeriodEstimate.netPay)}
                                 </p>
 
                                 <div className="mt-4 flex items-center justify-between">
-                                    <span className="text-sm text-gray-500">지급일</span>
+                                    <span className="text-sm text-gray-500">{t("payh.k033")}</span>
 
                                     <span className="text-sm font-semibold text-gray-900">
                                         {formatDisplayDate(pendingPayPeriod.payDate)}
@@ -1507,21 +1513,21 @@ export default function PayHistoryPage() {
                             </div>
 
                             <div className="mt-6">
-                                <p className="mb-3 text-xs font-semibold text-gray-400">예상 급여 내역</p>
+                                <p className="mb-3 text-xs font-semibold text-gray-400">{t("payh.k034")}</p>
 
                                 <div className="rounded-3xl bg-gray-50 p-5">
                                     <div className="space-y-4 text-sm">
                                         <div className="flex justify-between">
-                                            <span className="text-gray-500">근무시간</span>
+                                            <span className="text-gray-500">{t("payh.k025")}</span>
 
                                             <span className="font-medium text-gray-900">
                                                 {pendingPeriodEstimate.hours.toFixed(2)}
-                                                시간
+                                                {t("payh.k021")}
                                             </span>
                                         </div>
 
                                         <div className="flex justify-between">
-                                            <span className="text-gray-500">기본 급여</span>
+                                            <span className="text-gray-500">{t("payh.k035")}</span>
 
                                             <span className="font-medium text-gray-900">
                                                 {formatMoney(pendingPeriodEstimate.basePay)}
@@ -1530,7 +1536,7 @@ export default function PayHistoryPage() {
 
                                         {pendingPeriodEstimate.paychequeTips > 0 && (
                                             <div className="flex justify-between">
-                                                <span className="text-gray-500">급여 포함 팁</span>
+                                                <span className="text-gray-500">{t("payh.k036")}</span>
 
                                                 <span className="font-medium text-gray-900">
                                                     {formatMoney(pendingPeriodEstimate.paychequeTips)}
@@ -1540,7 +1546,7 @@ export default function PayHistoryPage() {
 
                                         {pendingPeriodEstimate.publicHolidayPay + pendingPeriodEstimate.premiumPay > 0 && (
                                             <div className="flex justify-between">
-                                                <span className="text-gray-500">공휴일 수당</span>
+                                                <span className="text-gray-500">{t("payh.k037")}</span>
 
                                                 <span className="font-medium text-gray-900">
                                                     {formatMoney(
@@ -1552,7 +1558,7 @@ export default function PayHistoryPage() {
 
                                         {pendingPeriodEstimate.vacationPay > 0 && (
                                             <div className="flex justify-between">
-                                                <span className="text-gray-500">휴가 수당</span>
+                                                <span className="text-gray-500">{t("payh.k038")}</span>
 
                                                 <span className="font-medium text-gray-900">
                                                     {formatMoney(pendingPeriodEstimate.vacationPay)}
@@ -1563,7 +1569,7 @@ export default function PayHistoryPage() {
                                         <div className="my-1 border-t border-gray-200" />
 
                                         <div className="flex justify-between">
-                                            <span className="font-medium text-gray-600">세전 급여</span>
+                                            <span className="font-medium text-gray-600">{t("payh.k039")}</span>
 
                                             <span className="font-semibold text-gray-900">
                                                 {formatMoney(pendingPeriodEstimate.grossPay)}
@@ -1571,7 +1577,7 @@ export default function PayHistoryPage() {
                                         </div>
 
                                         <div className="flex justify-between">
-                                            <span className="text-gray-500">예상 공제</span>
+                                            <span className="text-gray-500">{t("payh.k040")}</span>
 
                                             <span className="text-gray-600">- {formatMoney(pendingPeriodEstimate.deductions)}</span>
                                         </div>
@@ -1579,7 +1585,7 @@ export default function PayHistoryPage() {
                                         <div className="my-1 border-t border-gray-200" />
 
                                         <div className="flex justify-between">
-                                            <span className="font-semibold text-gray-900">실수령액</span>
+                                            <span className="font-semibold text-gray-900">{t("payh.k024")}</span>
 
                                             <span className="font-bold text-gray-900">
                                                 {formatMoney(pendingPeriodEstimate.netPay)}
@@ -1592,7 +1598,7 @@ export default function PayHistoryPage() {
                             {pendingPeriodEstimate.cashTips > 0 && (
                                 <div className="mt-4 rounded-3xl bg-gray-50 p-5">
                                     <div className="flex justify-between">
-                                        <span className="text-sm text-gray-500">현금 팁</span>
+                                        <span className="text-sm text-gray-500">{t("payh.k041")}</span>
 
                                         <span className="text-sm font-semibold text-gray-900">
                                             {formatMoney(pendingPeriodEstimate.cashTips)}
@@ -1600,7 +1606,7 @@ export default function PayHistoryPage() {
                                     </div>
 
                                     <div className="mt-4 flex items-center justify-between rounded-2xl bg-white p-4 shadow-sm">
-                                        <span className="text-sm font-semibold text-gray-700">예상 총 수령액</span>
+                                        <span className="text-sm font-semibold text-gray-700">{t("payh.k042")}</span>
 
                                         <span className="text-xl font-bold text-gray-900">
                                             {formatMoney(pendingPeriodEstimate.totalIncome)}
@@ -1613,7 +1619,7 @@ export default function PayHistoryPage() {
                                 <div className="mt-5 rounded-2xl bg-amber-50 px-4 py-3">
                                     {pendingPeriodEstimate.warnings.map((warning) => (
                                         <p key={warning} className="text-xs leading-5 text-amber-700">
-                                            {warning}
+                                            {translateWarning(warning, t)}
                                         </p>
                                     ))}
                                 </div>
@@ -1621,7 +1627,7 @@ export default function PayHistoryPage() {
 
                             <div className="mt-5 rounded-2xl bg-amber-50 px-4 py-3">
                                 <p className="text-xs leading-5 text-amber-700">
-                                    실제 급여가 아직 기록되지 않아 이전 근무 기록과 팁을 기준으로 계산한 예상 금액이에요.
+                                    {t("payh.k043")}
                                 </p>
                             </div>
 
@@ -1630,7 +1636,7 @@ export default function PayHistoryPage() {
                                 onClick={() => setIsPendingExpectedOpen(false)}
                                 className="mt-5 block w-full rounded-2xl bg-gray-900 py-4 text-center text-sm font-semibold text-white transition hover:bg-gray-800"
                             >
-                                근무 기록 보기
+                                {t("payh.k044")}
                             </Link>
                 
                 
@@ -1646,7 +1652,7 @@ export default function PayHistoryPage() {
 
                     <button
                         type="button"
-                        aria-label="닫기"
+                        aria-label={t("payh.k045")}
                         onClick={closeForm}
                         className={`absolute inset-0 bg-black/30 transition-opacity duration-300 ease-out ${
                             isFormAnimating ? "opacity-100" : "opacity-0"
@@ -1672,16 +1678,16 @@ export default function PayHistoryPage() {
                             {/* Header */}
 
                             <div>
-                                <h2 className="text-xl font-bold">{selectedHistory ? "급여 기록 수정" : "실제 급여 기록"}</h2>
+                                <h2 className="text-xl font-bold">{selectedHistory ? t("payh.form.edit") : t("payh.form.new")}</h2>
 
-                                <p className="mt-1 text-sm text-gray-400">실제로 받은 급여를 기록해주세요.</p>
+                                <p className="mt-1 text-sm text-gray-400">{t("payh.k046")}</p>
                             </div>
 
                             <div className="mt-6 space-y-5">
                                 {/* 급여 기간 */}
 
                                 <div>
-                                    <label className="text-sm font-medium">급여 기간</label>
+                                    <label className="text-sm font-medium">{t("payh.k047")}</label>
 
                                     <div className="mt-2 grid grid-cols-2 gap-2">
                                         <input
@@ -1703,7 +1709,7 @@ export default function PayHistoryPage() {
                                 {/* 지급일 */}
 
                                 <div>
-                                    <label className="text-sm font-medium">지급일</label>
+                                    <label className="text-sm font-medium">{t("payh.k033")}</label>
 
                                     <input
                                         type="date"
@@ -1716,7 +1722,7 @@ export default function PayHistoryPage() {
                                 {/* 근무시간 */}
 
                                 <div>
-                                    <label className="text-sm font-medium">총 근무시간</label>
+                                    <label className="text-sm font-medium">{t("payh.k048")}</label>
 
                                     <div className="mt-2 flex items-center gap-2">
                                         <input
@@ -1750,14 +1756,14 @@ export default function PayHistoryPage() {
                                             className="w-full rounded-2xl border border-gray-200 px-4 py-3 outline-none"
                                         />
 
-                                        <span className="text-sm text-gray-400">시간</span>
+                                        <span className="text-sm text-gray-400">{t("payh.k021")}</span>
                                     </div>
                                 </div>
 
                                 {/* 급여 */}
 
                                 <div>
-                                    <label className="text-sm font-medium">급여</label>
+                                    <label className="text-sm font-medium">{t("payh.k022")}</label>
 
                                     <div className="mt-2 flex items-center gap-2">
                                         <span className="text-gray-400">{getCurrencySymbol(formCurrency)}</span>
@@ -1776,7 +1782,7 @@ export default function PayHistoryPage() {
                                 {/* 팁 */}
 
                                 <div>
-                                    <label className="text-sm font-medium">팁</label>
+                                    <label className="text-sm font-medium">{t("payh.k023")}</label>
 
                                     <div className="mt-2 flex items-center gap-2">
                                         <span className="text-gray-400">{getCurrencySymbol(formCurrency)}</span>
@@ -1795,7 +1801,7 @@ export default function PayHistoryPage() {
                                 {/* 공제 */}
 
                                 <div>
-                                    <label className="text-sm font-medium">공제</label>
+                                    <label className="text-sm font-medium">{t("payh.k026")}</label>
 
                                     <div className="mt-2 flex items-center gap-2">
                                         <span className="text-gray-400">{getCurrencySymbol(formCurrency)}</span>
@@ -1817,10 +1823,10 @@ export default function PayHistoryPage() {
 
                                 <div>
                                     <div>
-                                        <label className="text-sm font-medium">추가 / 차감</label>
+                                        <label className="text-sm font-medium">{t("payh.k027")}</label>
 
                                         <p className="mt-1 text-xs text-gray-400">
-                                            Holiday Pay 등의 금액을 추가하거나 차감할 수 있어요.
+                                            {t("payh.k049")}
                                         </p>
                                     </div>
 
@@ -1840,8 +1846,8 @@ export default function PayHistoryPage() {
                                                             }
                                                             className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none"
                                                         >
-                                                            <option value="add">+ 추가</option>
-                                                            <option value="subtract">− 차감</option>
+                                                            <option value="add">{t("payh.k050")}</option>
+                                                            <option value="subtract">{t("payh.k051")}</option>
                                                         </select>
 
                                                         <input
@@ -1850,7 +1856,7 @@ export default function PayHistoryPage() {
                                                             onChange={(event) =>
                                                                 updateAdjustment(index, "name", event.target.value)
                                                             }
-                                                            placeholder="예: Holiday Pay"
+                                                            placeholder={t("payh.k052")}
                                                             className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none"
                                                         />
 
@@ -1889,7 +1895,7 @@ export default function PayHistoryPage() {
                                             onClick={() => addAdjustment("add")}
                                             className="rounded-2xl border border-gray-200 py-3 text-sm font-medium"
                                         >
-                                            + 금액 추가
+                                            {t("payh.addAmount")}
                                         </button>
 
                                         <button
@@ -1897,7 +1903,7 @@ export default function PayHistoryPage() {
                                             onClick={() => addAdjustment("subtract")}
                                             className="rounded-2xl border border-gray-200 py-3 text-sm font-medium"
                                         >
-                                            − 금액 차감
+                                            {t("payh.subAmount")}
                                         </button>
                                     </div>
                                 </div>
@@ -1905,7 +1911,7 @@ export default function PayHistoryPage() {
                                 {/* 계산된 실수령액 */}
 
                                 <div className="rounded-3xl bg-gray-50 p-5">
-                                    <p className="text-xs text-gray-400">계산된 실수령액</p>
+                                    <p className="text-xs text-gray-400">{t("payh.k053")}</p>
 
                                     <p className="mt-1 text-2xl font-bold">{formatCurrency(Number(calculatedNetPay), formCurrency)}</p>
 
@@ -1914,14 +1920,14 @@ export default function PayHistoryPage() {
                                         onClick={useCalculatedNetPay}
                                         className="mt-4 w-full rounded-2xl bg-white px-4 py-3 text-sm font-medium shadow-sm"
                                     >
-                                        이 금액이 맞나요?
+                                        {t("payh.k054")}
                                     </button>
                                 </div>
 
                                 {/* 실제 실수령액 */}
 
                                 <div>
-                                    <label className="text-sm font-medium">실제 실수령액</label>
+                                    <label className="text-sm font-medium">{t("payh.k055")}</label>
 
                                     <div className="mt-2 flex items-center gap-2">
                                         <span className="text-gray-400">{getCurrencySymbol(formCurrency)}</span>
@@ -1938,7 +1944,7 @@ export default function PayHistoryPage() {
                                     </div>
 
                                     <p className="mt-2 text-xs text-gray-400">
-                                        실제 급여명세서나 통장에 입금된 금액을 입력해주세요.
+                                        {t("payh.k056")}
                                     </p>
                                 </div>
                             </div>
@@ -1951,7 +1957,7 @@ export default function PayHistoryPage() {
                                 disabled={isSaving || formError !== null}
                                 className="mt-6 w-full rounded-2xl bg-gray-900 py-4 text-sm font-semibold text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 disabled:hover:bg-gray-200"
                             >
-                                {isSaving ? "저장 중..." : "저장하기"}
+                                {isSaving ? t("common.saving") : t("payh.saveBtn")}
                             </button>
 
                             {formError && !isSaving && <p className="mt-3 text-center text-xs text-gray-400">{formError}</p>}

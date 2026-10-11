@@ -4,12 +4,35 @@ import { useEffect, useState } from "react";
 import { Check, ChevronRight, LogOut, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth/auth-client";
+import { useI18n } from "@/components/I18nProvider";
 import { useUpgrade } from "@/components/UpgradeProvider";
 import { LANGUAGES, getCountry, getCountryLabel, getRegionLabel } from "@/lib/countries";
 import BottomSheet from "@/components/BottomSheet";
 import { useDialog } from "@/components/DialogProvider";
 import { BILLING_ENABLED, getPlanPrice, getYearlyDiscountPercent } from "@/lib/plans";
 import { formatCurrency } from "@/lib/salary/format";
+
+type DowngradeItem = {
+    key: string;
+    label: string;
+    limit: number | null;
+    used: number;
+    toDelete: number;
+};
+
+type DowngradeInfo = {
+    expiresAt: string | null;
+    cancelRequestedAt: string | null;
+    preview?: { items: DowngradeItem[]; customCategoryCount: number };
+};
+
+const formatLongDate = (value: string | null | undefined, locale: string) => {
+    if (!value) {
+        return "";
+    }
+
+    return new Date(value).toLocaleDateString(locale, { year: "numeric", month: "long", day: "numeric" });
+};
 
 type Profile = {
     nickname: string | null;
@@ -19,12 +42,23 @@ type Profile = {
     currency: string | null;
 };
 
-const PRO_BENEFITS = ["급여·생활·여행 기록 무제한", "고정지출과 카테고리 관리", "여행 통계와 소비 분석"];
+const PRO_BENEFIT_KEYS = ["settings.plan.benefit1", "settings.plan.benefit2", "settings.plan.benefit3"] as const;
+
+// 해지 시트의 항목 이름 (서버가 주는 key 로 찾는다)
+const DOWNGRADE_ITEM_KEYS = {
+    payHistory: "settings.downgrade.item.payHistory",
+    workSchedules: "settings.downgrade.item.workSchedules",
+    livingTransactions: "settings.downgrade.item.livingTransactions",
+    fixedExpenses: "settings.downgrade.item.fixedExpenses",
+    trips: "settings.downgrade.item.trips",
+    tripExpenses: "settings.downgrade.item.tripExpenses",
+} as const;
 
 export default function SettingsPage() {
     const { confirm, alert: showAlert } = useDialog();
     const router = useRouter();
-    const { isPro, openUpgrade } = useUpgrade();
+    const { isPro, openUpgrade, refreshPlan } = useUpgrade();
+    const { t, language, locale } = useI18n();
 
     const [profile, setProfile] = useState<Profile | null>(null);
     const [loading, setLoading] = useState(true);
@@ -32,6 +66,12 @@ export default function SettingsPage() {
     const [isDeleting, setIsDeleting] = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [deleteConfirmation, setDeleteConfirmation] = useState("");
+
+    // Pro 해지: 0 = 닫힘, 1 = 한도 안내, 2 = 문구 입력
+    const [downgradeInfo, setDowngradeInfo] = useState<DowngradeInfo | null>(null);
+    const [downgradeStep, setDowngradeStep] = useState<0 | 1 | 2>(0);
+    const [downgradeConfirmation, setDowngradeConfirmation] = useState("");
+    const [isDowngradeBusy, setIsDowngradeBusy] = useState(false);
 
     useEffect(() => {
         const loadProfile = async () => {
@@ -61,8 +101,130 @@ export default function SettingsPage() {
         loadProfile();
     }, []);
 
+    const loadDowngradeInfo = async (withPreview: boolean) => {
+        try {
+            const response = await fetch(`/api/subscription/downgrade${withPreview ? "?preview=1" : ""}`);
+            const data = await response.json().catch(() => null);
+
+            if (!response.ok || !data?.isPro) {
+                setDowngradeInfo(null);
+                return null;
+            }
+
+            const info: DowngradeInfo = {
+                expiresAt: data.expiresAt ?? null,
+                cancelRequestedAt: data.cancelRequestedAt ?? null,
+                preview: data.preview,
+            };
+
+            setDowngradeInfo(info);
+
+            return info;
+        } catch (error) {
+            console.error("해지 정보를 불러오지 못했어요.", error);
+            return null;
+        }
+    };
+
+    useEffect(() => {
+        if (isPro) {
+            void loadDowngradeInfo(false);
+        }
+    }, [isPro]);
+
+    const closeDowngrade = () => {
+        setDowngradeStep(0);
+        setDowngradeConfirmation("");
+    };
+
+    const openDowngrade = async () => {
+        setIsDowngradeBusy(true);
+
+        const info = await loadDowngradeInfo(true);
+
+        setIsDowngradeBusy(false);
+
+        if (!info?.preview) {
+            showAlert(t("settings.downgrade.loadFailed"));
+            return;
+        }
+
+        setDowngradeConfirmation("");
+        setDowngradeStep(1);
+    };
+
+    const confirmDowngrade = async () => {
+        if (downgradeConfirmation !== t("settings.downgrade.phrase")) {
+            return;
+        }
+
+        setIsDowngradeBusy(true);
+
+        try {
+            const response = await fetch("/api/subscription/downgrade", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ confirmation: downgradeConfirmation }),
+            });
+
+            const data = await response.json().catch(() => null);
+
+            if (!response.ok) {
+                showAlert(data?.error || t("settings.downgrade.failed"));
+                return;
+            }
+
+            const endDate = formatLongDate(downgradeInfo?.expiresAt, locale);
+
+            closeDowngrade();
+
+            if (data?.result === "done") {
+                await showAlert(t("settings.downgrade.doneNow"));
+                window.location.reload();
+                return;
+            }
+
+            await loadDowngradeInfo(false);
+
+            showAlert(t("settings.downgrade.scheduled", { date: endDate }));
+        } catch (error) {
+            console.error("Pro 해지에 실패했어요.", error);
+            showAlert(t("settings.downgrade.failed"));
+        } finally {
+            setIsDowngradeBusy(false);
+        }
+    };
+
+    const cancelDowngrade = async () => {
+        const confirmed = await confirm(t("settings.downgrade.undoConfirm"));
+
+        if (!confirmed) {
+            return;
+        }
+
+        setIsDowngradeBusy(true);
+
+        try {
+            const response = await fetch("/api/subscription/downgrade", { method: "DELETE" });
+            const data = await response.json().catch(() => null);
+
+            if (!response.ok) {
+                showAlert(data?.error || t("settings.downgrade.undoFailed"));
+                return;
+            }
+
+            await loadDowngradeInfo(false);
+            void refreshPlan();
+        } catch (error) {
+            console.error("해지 취소에 실패했어요.", error);
+            showAlert(t("settings.downgrade.undoFailed"));
+        } finally {
+            setIsDowngradeBusy(false);
+        }
+    };
+
     const handleLogout = async () => {
-        const confirmed = await confirm("로그아웃하시겠어요?");
+        const confirmed = await confirm(t("settings.logoutConfirm"));
 
         if (!confirmed) {
             return;
@@ -75,14 +237,12 @@ export default function SettingsPage() {
             router.refresh();
         } catch (error) {
             console.error("로그아웃에 실패했어요.", error);
-            showAlert("로그아웃에 실패했어요.");
+            showAlert(t("settings.logoutFailed"));
         }
     };
 
     const handleDeleteAccount = async () => {
-        const confirmed = await confirm(
-            "정말 회원탈퇴하시겠어요?\n\n모든 급여, 근무 기록, 생활비, 여행 및 설정 데이터가 삭제되며 복구할 수 없습니다.",
-        );
+        const confirmed = await confirm(t("settings.withdrawConfirm"));
 
         if (!confirmed) {
             return;
@@ -93,7 +253,7 @@ export default function SettingsPage() {
     };
 
     const confirmDeleteAccount = async () => {
-        if (deleteConfirmation !== "차곡차곡 부자가 되자") {
+        if (deleteConfirmation !== t("settings.withdrawPhrase")) {
             return;
         }
 
@@ -108,7 +268,7 @@ export default function SettingsPage() {
             const data = await response.json().catch(() => null);
 
             if (!response.ok) {
-                showAlert(data?.error || "회원탈퇴에 실패했어요.");
+                showAlert(data?.error || t("settings.withdrawFailed"));
                 return;
             }
 
@@ -122,7 +282,7 @@ export default function SettingsPage() {
             window.location.href = "/";
         } catch (error) {
             console.error("회원탈퇴에 실패했어요.", error);
-            showAlert("회원탈퇴에 실패했어요.");
+            showAlert(t("settings.withdrawFailed"));
         } finally {
             setIsDeleting(false);
         }
@@ -135,13 +295,13 @@ export default function SettingsPage() {
     return (
         <div className="mx-auto w-full max-w-md">
             <header className="mt-5 mb-8">
-                <p className="text-sm text-gray-500">차곡</p>
+                <p className="text-sm text-gray-500">{t("common.appName")}</p>
 
-                <h1 className="mt-2 text-3xl font-bold text-gray-900">설정</h1>
+                <h1 className="mt-2 text-3xl font-bold text-gray-900">{t("settings.title")}</h1>
             </header>
 
             <section>
-                <h2 className="mb-3 px-1 text-xs font-medium text-gray-400">프로필</h2>
+                <h2 className="mb-3 px-1 text-xs font-medium text-gray-400">{t("settings.section.profile")}</h2>
 
                 <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
                     <button
@@ -150,8 +310,8 @@ export default function SettingsPage() {
                         className="flex w-full items-center justify-between px-5 py-4 text-left transition-colors active:bg-gray-50"
                     >
                         <div>
-                            <p className="text-sm text-gray-900">닉네임</p>
-                            <p className="mt-1 text-xs text-gray-400">{loading ? "불러오는 중..." : profile?.nickname || "-"}</p>
+                            <p className="text-sm text-gray-900">{t("settings.nickname")}</p>
+                            <p className="mt-1 text-xs text-gray-400">{loading ? t("common.loadingEllipsis") : profile?.nickname || "-"}</p>
                         </div>
 
                         <ChevronRight size={18} strokeWidth={1.7} className="text-gray-300" />
@@ -160,15 +320,55 @@ export default function SettingsPage() {
             </section>
 
             <section className="mt-8">
-                <h2 className="mb-3 px-1 text-xs font-medium text-gray-400">요금제</h2>
+                <h2 className="mb-3 px-1 text-xs font-medium text-gray-400">{t("settings.section.plan")}</h2>
 
                 {isPro ? (
                     <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
                         <div className="flex items-center justify-between px-5 py-4">
-                            <span className="text-sm text-gray-900">내 요금제</span>
+                            <span className="text-sm text-gray-900">{t("settings.plan.mine")}</span>
 
                             <span className="text-sm text-gray-400">Pro</span>
                         </div>
+
+                        {downgradeInfo && (
+                            <>
+                                <div className="mx-5 border-t border-gray-100" />
+
+                                {downgradeInfo.cancelRequestedAt ? (
+                                    <div className="px-5 py-4">
+                                        <p className="text-sm text-gray-900">
+                                            {downgradeInfo.expiresAt
+                                                ? t("settings.plan.cancelScheduled", { date: formatLongDate(downgradeInfo.expiresAt, locale) })
+                                                : t("settings.plan.cancelScheduledNoDate")}
+                                        </p>
+
+                                        <p className="mt-1 text-xs leading-5 text-gray-400">
+                                            {t("settings.plan.cancelScheduledNote")}
+                                        </p>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => void cancelDowngrade()}
+                                            disabled={isDowngradeBusy}
+                                            className="mt-3 rounded-xl bg-gray-100 px-4 py-2.5 text-sm font-medium text-gray-700 disabled:opacity-50"
+                                        >
+                                            {t("settings.plan.undoCancel")}
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        onClick={() => void openDowngrade()}
+                                        disabled={isDowngradeBusy}
+                                        className="flex w-full items-center justify-between px-5 py-4 text-left transition-colors active:bg-gray-50 disabled:opacity-50"
+                                    >
+                                        <span className="text-sm text-gray-500">{t("settings.plan.cancelPro")}</span>
+
+                                        <ChevronRight size={16} strokeWidth={1.7} className="text-gray-300" />
+                                    </button>
+                                )}
+                            </>
+                        )}
                     </div>
                 ) : (
                 <div className="relative overflow-hidden rounded-3xl bg-gray-900 p-6 shadow-sm">
@@ -182,23 +382,13 @@ export default function SettingsPage() {
                                 PRO
                             </span>
 
-                            <span className="text-xs font-medium text-gray-400">현재 플랜 · {isPro ? "Pro" : "무료"}</span>
+                            <span className="text-xs font-medium text-gray-400">{t("settings.plan.currentFree")}</span>
                         </div>
 
                         <p className="mt-6 text-2xl font-bold leading-snug tracking-tight text-white">
-                            {isPro ? (
-                                <>
-                                    Pro를 이용 중이에요
-                                    <br />
-                                    제한 없이 기록하세요
-                                </>
-                            ) : (
-                                <>
-                                    제한 없이,
-                                    <br />
-                                    더 자유롭게 기록하세요
-                                </>
-                            )}
+                            {t("settings.plan.headline1")}
+                            <br />
+                            {t("settings.plan.headline2")}
                         </p>
 
                         {!isPro && (
@@ -206,18 +396,18 @@ export default function SettingsPage() {
                                 <span className="text-lg font-bold text-white">
                                     {formatCurrency(planPrice.monthly, planPrice.currency)}
                                 </span>{" "}
-                                / 월 · 연간 결제 시 {planDiscount}% 할인
+                                {t("settings.plan.priceSuffix", { percent: planDiscount })}
                             </p>
                         )}
 
                         <ul className="mt-7 space-y-4">
-                            {PRO_BENEFITS.map((benefit) => (
-                                <li key={benefit} className="flex items-center gap-3">
+                            {PRO_BENEFIT_KEYS.map((benefitKey) => (
+                                <li key={benefitKey} className="flex items-center gap-3">
                                     <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white">
                                         <Check size={14} strokeWidth={3} className="text-gray-900" />
                                     </span>
 
-                                    <span className="text-[15px] text-gray-100">{benefit}</span>
+                                    <span className="text-[15px] text-gray-100">{t(benefitKey)}</span>
                                 </li>
                             ))}
                         </ul>
@@ -228,7 +418,7 @@ export default function SettingsPage() {
                                 onClick={() => openUpgrade("general")}
                                 className="mt-8 flex w-full items-center justify-center gap-1.5 rounded-2xl bg-white py-4 text-sm font-semibold text-gray-900 transition-colors active:bg-gray-200"
                             >
-                                {BILLING_ENABLED ? "Pro로 전환하기" : "Pro 혜택 확인하기"}
+                                {BILLING_ENABLED ? t("settings.plan.ctaUpgrade") : t("settings.plan.ctaView")}
                                 <ChevronRight size={16} strokeWidth={2} />
                             </button>
                         )}
@@ -238,7 +428,7 @@ export default function SettingsPage() {
             </section>
 
             <section className="mt-8">
-                <h2 className="mb-3 px-1 text-xs font-medium text-gray-400">기본 설정</h2>
+                <h2 className="mb-3 px-1 text-xs font-medium text-gray-400">{t("settings.section.basic")}</h2>
 
                 <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
                     <button
@@ -246,7 +436,7 @@ export default function SettingsPage() {
                         onClick={() => router.push("/settings/language")}
                         className="flex w-full items-center justify-between px-5 py-4 text-left transition-colors active:bg-gray-50"
                     >
-                        <span className="text-sm text-gray-900">언어</span>
+                        <span className="text-sm text-gray-900">{t("settings.language")}</span>
                         <span className="flex items-center gap-1 text-sm text-gray-400">
                             {loading ? "-" : LANGUAGES.find((language) => language.code === profile?.language)?.label || "-"}
                             <ChevronRight size={16} strokeWidth={1.7} className="text-gray-300" />
@@ -260,9 +450,9 @@ export default function SettingsPage() {
                         onClick={() => router.push("/settings/country")}
                         className="flex w-full items-center justify-between px-5 py-4 text-left transition-colors active:bg-gray-50"
                     >
-                        <span className="text-sm text-gray-900">국가</span>
+                        <span className="text-sm text-gray-900">{t("settings.country")}</span>
                         <span className="flex items-center gap-1 text-sm text-gray-400">
-                            {loading ? "-" : getCountryLabel(profile?.countryCode, { short: true }) || "-"}
+                            {loading ? "-" : getCountryLabel(profile?.countryCode, { short: true, language }) || "-"}
                             <ChevronRight size={16} strokeWidth={1.7} className="text-gray-300" />
                         </span>
                     </button>
@@ -276,7 +466,7 @@ export default function SettingsPage() {
                                 onClick={() => router.push("/settings/country")}
                                 className="flex w-full items-center justify-between px-5 py-4 text-left transition-colors active:bg-gray-50"
                             >
-                                <span className="text-sm text-gray-900">지역</span>
+                                <span className="text-sm text-gray-900">{t("settings.region")}</span>
                                 <span className="flex items-center gap-1 text-sm text-gray-400">
                                     {getRegionLabel(profile?.countryCode, profile?.provinceCode) || "-"}
                                     <ChevronRight size={16} strokeWidth={1.7} className="text-gray-300" />
@@ -288,19 +478,19 @@ export default function SettingsPage() {
                     <div className="mx-5 border-t border-gray-100" />
 
                     <div className="flex items-center justify-between px-5 py-4">
-                        <span className="text-sm text-gray-900">통화</span>
+                        <span className="text-sm text-gray-900">{t("settings.currency")}</span>
                         <span className="text-sm text-gray-400">{loading ? "-" : profile?.currency || "-"}</span>
                     </div>
                 </div>
             </section>
 
             <section className="mt-8">
-                <h2 className="mb-3 px-1 text-xs font-medium text-gray-400">계정</h2>
+                <h2 className="mb-3 px-1 text-xs font-medium text-gray-400">{t("settings.section.account")}</h2>
 
                 <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
                     <button type="button" onClick={handleLogout} className="flex w-full items-center gap-3 px-5 py-4 text-left transition-colors active:bg-gray-50">
                         <LogOut size={18} strokeWidth={1.7} className="text-gray-400" />
-                        <span className="text-sm text-gray-900">로그아웃</span>
+                        <span className="text-sm text-gray-900">{t("settings.logout")}</span>
                     </button>
 
                     <div className="mx-5 border-t border-gray-100" />
@@ -312,10 +502,146 @@ export default function SettingsPage() {
                         className="flex w-full items-center gap-3 px-5 py-4 text-left disabled:opacity-50"
                     >
                         <Trash2 size={18} strokeWidth={1.7} className="text-red-500" />
-                        <span className="text-sm text-red-500">{isDeleting ? "탈퇴 처리 중..." : "회원탈퇴"}</span>
+                        <span className="text-sm text-red-500">{isDeleting ? t("settings.withdrawing") : t("settings.withdraw")}</span>
                     </button>
                 </div>
             </section>
+
+            <BottomSheet isOpen={downgradeStep > 0} onClose={isDowngradeBusy ? () => undefined : closeDowngrade}>
+                {downgradeStep === 1 && downgradeInfo?.preview && (
+                    <>
+                        <div>
+                            <h2 className="text-lg font-semibold text-gray-900">{t("settings.downgrade.title")}</h2>
+
+                            <p className="mt-3 text-sm leading-6 text-gray-500">
+                                {t("settings.downgrade.intro")}
+                            </p>
+                        </div>
+
+                        <div className="mt-5 overflow-hidden rounded-2xl bg-gray-50">
+                            <div className="flex items-center px-4 py-2.5 text-xs text-gray-400">
+                                <span className="min-w-0 flex-1">{t("settings.downgrade.colItem")}</span>
+                                <span style={{ width: 72, flexShrink: 0 }} className="whitespace-nowrap text-right">
+                                    {t("settings.downgrade.colLimit")}
+                                </span>
+                                <span style={{ width: 72, flexShrink: 0 }} className="whitespace-nowrap text-right">
+                                    {t("settings.downgrade.colUsed")}
+                                </span>
+                                <span style={{ width: 44, flexShrink: 0 }} className="whitespace-nowrap text-right">
+                                    {t("settings.downgrade.colDelete")}
+                                </span>
+                            </div>
+
+                            {downgradeInfo.preview.items.map((item) => (
+                                <div key={item.key} className="flex items-center border-t border-gray-100 px-4 py-3 text-sm">
+                                    <span className="min-w-0 flex-1 pr-2 text-gray-900">
+                                        {item.key in DOWNGRADE_ITEM_KEYS
+                                            ? t(DOWNGRADE_ITEM_KEYS[item.key as keyof typeof DOWNGRADE_ITEM_KEYS], { count: item.limit ?? 0 })
+                                            : item.label}
+                                    </span>
+                                    <span style={{ width: 72, flexShrink: 0 }} className="whitespace-nowrap text-right text-gray-500">
+                                        {item.limit === null ? t("settings.downgrade.unavailable") : item.limit}
+                                    </span>
+                                    <span style={{ width: 72, flexShrink: 0 }} className="whitespace-nowrap text-right text-gray-500">
+                                        {item.used}
+                                    </span>
+                                    <span
+                                        style={{ width: 44, flexShrink: 0 }}
+                                        className={`whitespace-nowrap text-right font-medium ${
+                                            item.toDelete > 0 ? "text-red-500" : "text-gray-300"
+                                        }`}
+                                    >
+                                        {item.toDelete > 0 ? item.toDelete : "-"}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+
+                        {downgradeInfo.preview.customCategoryCount > 0 && (
+                            <p className="mt-3 text-xs leading-5 text-gray-500">
+                                {t("settings.downgrade.categoryNote", { count: downgradeInfo.preview.customCategoryCount })}
+                            </p>
+                        )}
+
+                        <p className="mt-3 text-xs leading-5 text-gray-400">
+                            {downgradeInfo.expiresAt
+                                ? t("settings.downgrade.dateNote", { date: formatLongDate(downgradeInfo.expiresAt, locale) })
+                                : t("settings.downgrade.noDateNote")}
+                        </p>
+
+                        <div className="mt-6 flex gap-3">
+                            <button
+                                type="button"
+                                onClick={closeDowngrade}
+                                className="flex-1 rounded-2xl bg-gray-100 py-3.5 text-sm font-semibold text-gray-700"
+                            >
+                                {t("settings.downgrade.keep")}
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => setDowngradeStep(2)}
+                                className="flex-1 rounded-2xl bg-red-500 py-3.5 text-sm font-semibold text-white"
+                            >
+                                {t("settings.downgrade.continue")}
+                            </button>
+                        </div>
+                    </>
+                )}
+
+                {downgradeStep === 2 && downgradeInfo && (
+                    <>
+                        <div>
+                            <h2 className="text-lg font-semibold text-gray-900">{t("settings.downgrade.confirmTitle")}</h2>
+
+                            <p className="mt-3 text-sm leading-6 text-gray-500">
+                                {downgradeInfo.expiresAt
+                                    ? t("settings.downgrade.confirmBodyDate", { date: formatLongDate(downgradeInfo.expiresAt, locale) })
+                                    : t("settings.downgrade.confirmBodyNow")}
+                                <br />
+                                {t("settings.downgrade.irreversible")}
+                            </p>
+                        </div>
+
+                        <div className="mt-6">
+                            <p className="text-sm font-medium text-gray-700">{t("settings.typePrompt")}</p>
+
+                            <p className="mt-2 rounded-xl bg-gray-50 px-3 py-3 text-sm font-medium text-gray-900">
+                                {t("settings.downgrade.phrase")}
+                            </p>
+
+                            <input
+                                type="text"
+                                value={downgradeConfirmation}
+                                onChange={(e) => setDowngradeConfirmation(e.target.value)}
+                                placeholder={t("settings.typePlaceholder")}
+                                disabled={isDowngradeBusy}
+                                className="mt-3 w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-gray-400 disabled:bg-gray-50"
+                            />
+                        </div>
+
+                        <div className="mt-6 flex gap-3">
+                            <button
+                                type="button"
+                                onClick={closeDowngrade}
+                                disabled={isDowngradeBusy}
+                                className="flex-1 rounded-2xl bg-gray-100 py-3.5 text-sm font-semibold text-gray-700 disabled:opacity-50"
+                            >
+                                {t("settings.downgrade.keep")}
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => void confirmDowngrade()}
+                                disabled={downgradeConfirmation !== t("settings.downgrade.phrase") || isDowngradeBusy}
+                                className="flex-1 rounded-2xl bg-red-500 py-3.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400"
+                            >
+                                {isDowngradeBusy ? t("common.processing") : t("settings.downgrade.submit")}
+                            </button>
+                        </div>
+                    </>
+                )}
+            </BottomSheet>
 
             <BottomSheet
                     isOpen={Boolean(showDeleteModal)}
@@ -327,27 +653,27 @@ export default function SettingsPage() {
                 {showDeleteModal && (
                     <>
                             <div>
-                                <h2 className="text-lg font-semibold text-gray-900">회원탈퇴</h2>
+                                <h2 className="text-lg font-semibold text-gray-900">{t("settings.withdraw")}</h2>
 
                                 <p className="mt-3 text-sm leading-6 text-gray-500">
-                                    회원탈퇴를 진행하면 계정과 함께 저장된 모든 데이터가 삭제됩니다.
+                                    {t("settings.withdrawBody1")}
                                     <br />
-                                    삭제된 데이터는 복구할 수 없습니다.
+                                    {t("settings.withdrawBody2")}
                                 </p>
                             </div>
 
                             <div className="mt-6">
-                                <p className="text-sm font-medium text-gray-700">확인하려면 아래 문구를 그대로 입력해주세요.</p>
+                                <p className="text-sm font-medium text-gray-700">{t("settings.typePrompt")}</p>
 
                                 <p className="mt-2 rounded-xl bg-gray-50 px-3 py-3 text-sm font-medium text-gray-900">
-                                    차곡차곡 부자가 되자
+                                    {t("settings.withdrawPhrase")}
                                 </p>
 
                                 <input
                                     type="text"
                                     value={deleteConfirmation}
                                     onChange={(e) => setDeleteConfirmation(e.target.value)}
-                                    placeholder="문구를 입력해주세요"
+                                    placeholder={t("settings.typePlaceholder")}
                                     disabled={isDeleting}
                                     className="mt-3 w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-gray-400 disabled:bg-gray-50"
                                 />
@@ -363,16 +689,16 @@ export default function SettingsPage() {
                                     disabled={isDeleting}
                                     className="flex-1 rounded-2xl bg-gray-100 py-3.5 text-sm font-semibold text-gray-700 disabled:opacity-50"
                                 >
-                                    취소
+                                    {t("common.cancel")}
                                 </button>
 
                                 <button
                                     type="button"
                                     onClick={() => void confirmDeleteAccount()}
-                                    disabled={deleteConfirmation !== "차곡차곡 부자가 되자" || isDeleting}
+                                    disabled={deleteConfirmation !== t("settings.withdrawPhrase") || isDeleting}
                                     className="flex-1 rounded-2xl bg-red-500 py-3.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400"
                                 >
-                                    {isDeleting ? "탈퇴 처리 중..." : "회원탈퇴"}
+                                    {isDeleting ? t("settings.withdrawing") : t("settings.withdraw")}
                                 </button>
                             </div>
                 

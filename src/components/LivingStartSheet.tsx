@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { formatCurrency, getCurrencySymbol } from "@/lib/salary/format";
 import { useDialog } from "@/components/DialogProvider";
+import { useI18n } from "@/components/I18nProvider";
 
 type LivingStartSheetProps = {
     isOpen: boolean;
@@ -12,6 +13,7 @@ type LivingStartSheetProps = {
 
 export default function LivingStartSheet({ isOpen, onClose, onSaved }: LivingStartSheetProps) {
     const { alert: showAlert } = useDialog();
+    const { t } = useI18n();
     const [isMounted, setIsMounted] = useState(false);
     const [isAnimating, setIsAnimating] = useState(false);
 
@@ -128,7 +130,7 @@ export default function LivingStartSheet({ isOpen, onClose, onSaved }: LivingSta
             onClose();
         } catch (error) {
             console.error(error);
-            showAlert(error instanceof Error ? error.message : "생활 설정을 저장하지 못했어요.");
+            showAlert(error instanceof Error ? error.message : t("livingStart.saveFailed"));
         } finally {
             setIsSaving(false);
         }
@@ -138,7 +140,7 @@ export default function LivingStartSheet({ isOpen, onClose, onSaved }: LivingSta
         <div className="fixed inset-0 z-[10000]">
             <button
                 type="button"
-                aria-label="닫기"
+                aria-label={t("common.close")}
                 onClick={onClose}
                 className={`absolute inset-0 bg-black/30 transition-opacity duration-300 ease-out ${
                     isAnimating ? "opacity-100" : "opacity-0"
@@ -156,9 +158,9 @@ export default function LivingStartSheet({ isOpen, onClose, onSaved }: LivingSta
 
                 <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-8 pt-2">
                     <div className="mb-7">
-                        <p className="text-xs text-gray-400">생활</p>
-                        <h2 className="mt-1 text-2xl font-bold tracking-[-0.04em] text-gray-950">생활을 시작해볼까요?</h2>
-                        <p className="mt-2 text-sm leading-6 text-gray-500">지금 가지고 있는 돈과 저축해둔 금액을 알려주세요.</p>
+                        <p className="text-xs text-gray-400">{t("livingStart.label")}</p>
+                        <h2 className="mt-1 text-2xl font-bold tracking-[-0.04em] text-gray-950">{t("livingStart.title")}</h2>
+                        <p className="mt-2 text-sm leading-6 text-gray-500">{t("livingStart.description")}</p>
                     </div>
 
                     {isLoading ? (
@@ -170,7 +172,7 @@ export default function LivingStartSheet({ isOpen, onClose, onSaved }: LivingSta
                         <>
                             <div className="space-y-4">
                                 <div className="rounded-3xl bg-white p-5 shadow-sm">
-                                    <label className="block text-xs font-medium text-gray-400">현재 가지고 있는 돈</label>
+                                    <label className="block text-xs font-medium text-gray-400">{t("livingStart.cash")}</label>
 
                                     <div className="mt-3 flex items-center gap-2">
                                         <span className="text-xl font-semibold text-gray-400">{getCurrencySymbol(currency)}</span>
@@ -187,7 +189,7 @@ export default function LivingStartSheet({ isOpen, onClose, onSaved }: LivingSta
                                 </div>
 
                                 <div className="rounded-3xl bg-white p-5 shadow-sm">
-                                    <label className="block text-xs font-medium text-gray-400">저축한 돈</label>
+                                    <label className="block text-xs font-medium text-gray-400">{t("livingStart.savings")}</label>
 
                                     <div className="mt-3 flex items-center gap-2">
                                         <span className="text-xl font-semibold text-gray-400">{getCurrencySymbol(currency)}</span>
@@ -207,7 +209,7 @@ export default function LivingStartSheet({ isOpen, onClose, onSaved }: LivingSta
 
                             <div className="mt-5 rounded-3xl border border-gray-200 bg-white p-5">
                                 <div className="flex items-center justify-between">
-                                    <span className="text-sm text-gray-500">총 자산</span>
+                                    <span className="text-sm text-gray-500">{t("livingStart.total")}</span>
                                     <span className="text-xl font-bold text-gray-950">
                                         {formatCurrency(totalMoney, currency)}
                                     </span>
@@ -220,7 +222,7 @@ export default function LivingStartSheet({ isOpen, onClose, onSaved }: LivingSta
                                 onClick={() => void handleSave()}
                                 className="mt-5 w-full rounded-2xl bg-gray-900 py-4 text-sm font-semibold text-white transition-colors hover:bg-gray-800 disabled:opacity-50"
                             >
-                                {isSaving ? "저장 중..." : "생활 시작하기"}
+                                {isSaving ? t("common.saving") : t("livingStart.start")}
                             </button>
                         </>
                     )}

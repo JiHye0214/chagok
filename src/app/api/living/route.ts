@@ -1,4 +1,5 @@
 import { getFixedExpenseTotalForMonth } from "@/lib/api/fixedExpenses";
+import { getPlanCode } from "@/lib/api/plan";
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/user";
@@ -99,7 +100,13 @@ export async function GET(request: Request) {
             `,
 
             // 그 달에 적용되는 고정지출 합계 (달마다 금액이 다를 수 있다)
-            getFixedExpenseTotalForMonth(user.id, currentMonth.start.slice(0, 7)),
+            // 고정지출은 Pro 전용이라, 무료 플랜이면 보이지도 수정할 수도 없으므로 계산에서 뺀다.
+            // (데이터는 그대로 두므로 다시 Pro가 되면 돌아온다)
+            getPlanCode(user.id).then((planCode) =>
+                planCode === "free"
+                    ? [{ total: 0 }]
+                    : getFixedExpenseTotalForMonth(user.id, currentMonth.start.slice(0, 7)),
+            ),
 
             sql`
                 SELECT

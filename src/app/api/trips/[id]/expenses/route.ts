@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/user";
 import { getPlanCode } from "@/lib/api/plan";
+import { FREE_PLAN_LIMITS } from "@/lib/plans";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
@@ -169,10 +170,10 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
                 const currentCount = Number(expenseCount?.count ?? 0);
 
-                if (currentCount >= 30) {
+                if (currentCount >= FREE_PLAN_LIMITS.tripExpensesPerTrip) {
                     return NextResponse.json(
                         {
-                            error: "무료 플랜에서는 여행 하나당 지출을 최대 30개까지 저장할 수 있어요.",
+                            error: `무료 플랜에서는 여행 하나당 지출을 최대 ${FREE_PLAN_LIMITS.tripExpensesPerTrip}개까지 저장할 수 있어요.`,
                             code: "TRIP_EXPENSE_LIMIT_REACHED",
                         },
                         { status: 403 },

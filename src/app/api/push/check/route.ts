@@ -1,5 +1,7 @@
 import { sql } from "@/lib/db";
 import webpush from "web-push";
+import { translate } from "@/lib/i18n";
+import { DEFAULT_LANGUAGE } from "@/lib/countries";
 
 webpush.setVapidDetails(
     "mailto:qkrwlgp1526@gmail.com",
@@ -29,6 +31,7 @@ export async function GET(request: Request) {
                 ws.id,
                 ws.user_id,
                 ws.start_time,
+                up.language AS language,
                 (
                     (ws.work_date + ws.start_time) AT TIME ZONE COALESCE(up.timezone, 'UTC')
                     - make_interval(mins => COALESCE(ws.alarm_minutes_before, 60))
@@ -53,6 +56,9 @@ export async function GET(request: Request) {
         for (const schedule of schedules) {
             const startTime = String(schedule.start_time).slice(0, 5);
 
+            // 알림은 근무 주인이 앱에서 고른 언어로 보낸다. (설정이 없으면 기본 언어)
+            const language = (schedule.language as string | null) ?? DEFAULT_LANGUAGE;
+
             const notificationTime = new Date(schedule.notify_at as string | Date);
 
             // 알림 시간이 됐는지 확인
@@ -76,8 +82,8 @@ export async function GET(request: Request) {
                     await webpush.sendNotification(
                         pushSubscription,
                         JSON.stringify({
-                            title: "차곡 🔔",
-                            body: `${startTime}에 근무가 시작돼요!`,
+                            title: `${translate(language, "common.appName")} 🔔`,
+                            body: translate(language, "push.shiftStarts", { time: startTime }),
                         }),
                     );
 

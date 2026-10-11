@@ -1,5 +1,6 @@
 "use client";
 
+import { useI18n } from "@/components/I18nProvider";
 import { useUpgrade } from "@/components/UpgradeProvider";
 import type { UpgradeReason } from "@/lib/plans";
 
@@ -16,6 +17,7 @@ type UsageMeterProps = {
 // 카드 어디를 눌러도 Pro 안내 시트가 열린다. Pro 이거나 요금제를 아직 모를 땐 아무것도 그리지 않는다.
 export default function UsageMeter({ label, used, limit, reason, className = "" }: UsageMeterProps) {
     const { isPro, isPlanLoaded, openUpgrade } = useUpgrade();
+    const { t } = useI18n();
 
     if (!isPlanLoaded || isPro) {
         return null;
@@ -25,7 +27,8 @@ export default function UsageMeter({ label, used, limit, reason, className = "" 
     const remaining = Math.max(0, limit - safeUsed);
     const ratio = Math.min(100, Math.round((safeUsed / limit) * 100));
     const isFull = remaining === 0;
-    const isAlmostFull = !isFull && remaining <= Math.max(1, Math.ceil(limit * 0.1));
+    // 한도가 작을 때(여행 3개 등)는 하나만 써도 "거의 참"이 되어 버리므로, 한도가 10개 이상일 때만 노란색 경고를 쓴다
+    const isAlmostFull = !isFull && limit >= 10 && remaining <= Math.ceil(limit * 0.1);
 
     // 어두운 카드 위에서 잘 보이도록 밝은 색을 쓴다: 평소 흰색, 거의 참 노란색, 가득 참 빨간색
     const tone = isFull ? "text-red-400" : isAlmostFull ? "text-amber-300" : "text-white";
@@ -35,12 +38,13 @@ export default function UsageMeter({ label, used, limit, reason, className = "" 
         <button
             type="button"
             onClick={() => openUpgrade(reason)}
-            className={`block w-full rounded-3xl bg-gray-900 p-5 text-left shadow-sm transition hover:bg-gray-800 active:scale-[0.99] ${className}`}
+            className={`block w-full rounded-3xl bg-gray-900 p-4 text-left shadow-sm transition hover:bg-gray-800 active:scale-[0.99] ${className}`}
         >
             <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                     <p className="text-[11px] font-medium text-gray-400">
-                        현재 플랜 <span className="ml-1 rounded-full bg-white/10 px-2 py-0.5 text-gray-200">무료</span>
+                        {t("usage.currentPlan")}{" "}
+                        <span className="ml-1 rounded-full bg-white/10 px-2 py-0.5 text-gray-200">{t("common.free")}</span>
                     </p>
 
                     <p className="mt-2 text-sm font-semibold text-gray-100">
@@ -50,7 +54,7 @@ export default function UsageMeter({ label, used, limit, reason, className = "" 
                 </div>
 
                 <span className="shrink-0 rounded-full bg-white px-3 py-1.5 text-[11px] font-semibold text-gray-900">
-                    Pro 알아보기
+                    {t("usage.explorePro")}
                 </span>
             </div>
 
@@ -59,9 +63,7 @@ export default function UsageMeter({ label, used, limit, reason, className = "" 
             </div>
 
             <p className="mt-2 text-xs leading-5 text-gray-400">
-                {isFull
-                    ? "무료 한도를 모두 썼어요. Pro로 업그레이드하면 제한 없이 기록할 수 있어요."
-                    : `무료 플랜이라 ${remaining}개 더 추가할 수 있어요. Pro는 제한이 없어요.`}
+                {isFull ? t("usage.full") : t("usage.remaining", { remaining })}
             </p>
         </button>
     );

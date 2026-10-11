@@ -6,6 +6,8 @@
 //   고정지출·여행·여행 경비: api 라우트와 화면의 상수
 // 숫자를 바꿀 때는 위 파일들도 같이 바꿔야 한다.
 
+import type { MessageKey } from "@/lib/i18n";
+
 export type PlanCode = "free" | "pro";
 
 export type UpgradeReason =
@@ -48,26 +50,48 @@ export const getPlanPrice = (currency: string | null | undefined): PlanPrice =>
 export const getYearlyDiscountPercent = (price: PlanPrice) =>
     Math.round((1 - price.yearly / (price.monthly * 12)) * 100);
 
-export const UPGRADE_MESSAGES: Record<UpgradeReason, string> = {
-    general: "Pro로 더 편하게 기록해 보세요.",
-    "living-category": "생활 카테고리 관리는 Pro에서 사용할 수 있어요.",
-    "living-limit": `무료 플랜에서는 생활 기록을 최대 ${FREE_PLAN_LIMITS.livingTransactions}개까지 저장할 수 있어요.`,
-    "fixed-expense": "고정지출은 Pro에서 사용할 수 있어요.",
-    "trip-limit": `무료 플랜에서는 여행을 최대 ${FREE_PLAN_LIMITS.trips}개까지 저장할 수 있어요.`,
-    "trip-expense-limit": `무료 플랜에서는 여행당 경비를 최대 ${FREE_PLAN_LIMITS.tripExpensesPerTrip}개까지 입력할 수 있어요.`,
-    "trip-category": "여행 경비 카테고리 관리는 Pro에서 사용할 수 있어요.",
-    "trip-stats": "여행 통계와 소비 분석은 Pro에서 확인할 수 있어요.",
-    "pay-history-limit": `무료 플랜에서는 급여 기록을 최대 ${FREE_PLAN_LIMITS.payHistory}개까지 저장할 수 있어요.`,
-    "schedule-limit": `무료 플랜에서는 근무 기록을 최대 ${FREE_PLAN_LIMITS.workSchedules}개까지 저장할 수 있어요.`,
+// 요금제 안내 문구의 키와, 문구 안의 {count} 에 들어갈 한도 값.
+// 실제 문장은 lib/i18n/messages 에 있고, 화면에서는 getUpgradeMessage 로 만든다.
+const UPGRADE_MESSAGE_KEYS: Record<UpgradeReason, MessageKey> = {
+    general: "plan.reason.general",
+    "living-category": "plan.reason.livingCategory",
+    "living-limit": "plan.reason.livingLimit",
+    "fixed-expense": "plan.reason.fixedExpense",
+    "trip-limit": "plan.reason.tripLimit",
+    "trip-expense-limit": "plan.reason.tripExpenseLimit",
+    "trip-category": "plan.reason.tripCategory",
+    "trip-stats": "plan.reason.tripStats",
+    "pay-history-limit": "plan.reason.payHistoryLimit",
+    "schedule-limit": "plan.reason.scheduleLimit",
 };
 
-// 요금제 비교표 (free / pro 값)
-export const PLAN_COMPARISON: { label: string; free: string; pro: string }[] = [
-    { label: "급여 기록", free: `${FREE_PLAN_LIMITS.payHistory}개`, pro: "무제한" },
-    { label: "근무 기록", free: `${FREE_PLAN_LIMITS.workSchedules}개`, pro: "무제한" },
-    { label: "생활 기록", free: `${FREE_PLAN_LIMITS.livingTransactions}개`, pro: "무제한" },
-    { label: "고정지출", free: "—", pro: "무제한" },
-    { label: "여행", free: `${FREE_PLAN_LIMITS.trips}개`, pro: "무제한" },
-    { label: "생활·여행 카테고리 관리", free: "—", pro: "가능" },
-    { label: "여행 통계·소비 분석", free: "—", pro: "가능" },
+const UPGRADE_MESSAGE_COUNTS: Partial<Record<UpgradeReason, number>> = {
+    "living-limit": FREE_PLAN_LIMITS.livingTransactions,
+    "trip-limit": FREE_PLAN_LIMITS.trips,
+    "trip-expense-limit": FREE_PLAN_LIMITS.tripExpensesPerTrip,
+    "pay-history-limit": FREE_PLAN_LIMITS.payHistory,
+    "schedule-limit": FREE_PLAN_LIMITS.workSchedules,
+};
+
+type Translate = (key: MessageKey, params?: Record<string, string | number>) => string;
+
+export const getUpgradeMessage = (reason: UpgradeReason, t: Translate) => {
+    const count = UPGRADE_MESSAGE_COUNTS[reason];
+
+    return t(UPGRADE_MESSAGE_KEYS[reason], count === undefined ? undefined : { count });
+};
+
+// 요금제 비교표. free: 숫자면 "N개", null 이면 사용 불가. pro: 무제한 또는 가능
+export const PLAN_COMPARISON: {
+    labelKey: MessageKey;
+    free: number | null;
+    pro: "unlimited" | "available";
+}[] = [
+    { labelKey: "plan.row.payHistory", free: FREE_PLAN_LIMITS.payHistory, pro: "unlimited" },
+    { labelKey: "plan.row.workSchedules", free: FREE_PLAN_LIMITS.workSchedules, pro: "unlimited" },
+    { labelKey: "plan.row.livingTransactions", free: FREE_PLAN_LIMITS.livingTransactions, pro: "unlimited" },
+    { labelKey: "plan.row.fixedExpenses", free: FREE_PLAN_LIMITS.fixedExpenses || null, pro: "unlimited" },
+    { labelKey: "plan.row.trips", free: FREE_PLAN_LIMITS.trips, pro: "unlimited" },
+    { labelKey: "plan.row.categories", free: null, pro: "available" },
+    { labelKey: "plan.row.tripStats", free: null, pro: "available" },
 ];

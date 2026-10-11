@@ -3,13 +3,15 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import BackButtonHeader from "@/components/BackButtonHeader";
+import { translateServerMessage } from "@/lib/i18n/serverMessages";
+import { useI18n } from "@/components/I18nProvider";
 
 const NICKNAME_PATTERN = /^[가-힣a-z0-9._]{3,20}$/;
 
-const NICKNAME_RULE = "3~20자의 한글, 영문 소문자, 숫자, ., _를 사용할 수 있어요.";
-
 export default function NicknameSettingsPage() {
     const router = useRouter();
+    const { t } = useI18n();
+    const nicknameRule = t("settings.nicknamePage.rule");
 
     const [savedNickname, setSavedNickname] = useState("");
     const [nickname, setNickname] = useState("");
@@ -37,7 +39,7 @@ export default function NicknameSettingsPage() {
                 setNickname(data.nickname ?? "");
             } catch (loadError) {
                 console.error("프로필을 불러오지 못했어요.", loadError);
-                setError("프로필을 불러오지 못했어요.");
+                setError(t("settings.profileLoadFailed"));
             } finally {
                 setIsLoading(false);
             }
@@ -54,7 +56,7 @@ export default function NicknameSettingsPage() {
 
     const handleSave = async () => {
         if (!isValid) {
-            setError(NICKNAME_RULE);
+            setError(nicknameRule);
             return;
         }
 
@@ -73,14 +75,14 @@ export default function NicknameSettingsPage() {
             const data = await response.json();
 
             if (!response.ok) {
-                setError(data.error || "닉네임을 저장하지 못했어요.");
+                setError(translateServerMessage(data.error, t) || t("settings.nicknamePage.saveFailed"));
                 return;
             }
 
             router.push("/settings");
         } catch (saveError) {
             console.error("닉네임 저장 실패:", saveError);
-            setError("닉네임을 저장하지 못했어요. 다시 시도해 주세요.");
+            setError(t("settings.nicknamePage.saveFailedRetry"));
         } finally {
             setIsSaving(false);
         }
@@ -88,7 +90,7 @@ export default function NicknameSettingsPage() {
 
     return (
         <div className="mx-auto w-full max-w-md">
-            <BackButtonHeader href="/settings" title="닉네임" description="차곡에서 사용할 이름을 바꿀 수 있어요." />
+            <BackButtonHeader href="/settings" title={t("settings.nicknamePage.title")} description={t("settings.nicknamePage.description")} />
 
             <section className="mt-8 rounded-3xl bg-white p-6 shadow-sm">
                 <input
@@ -104,7 +106,7 @@ export default function NicknameSettingsPage() {
                         }
                     }}
                     disabled={isLoading}
-                    placeholder={isLoading ? "불러오는 중..." : "닉네임을 입력해 주세요"}
+                    placeholder={isLoading ? t("common.loadingEllipsis") : t("settings.nicknamePage.placeholder")}
                     maxLength={20}
                     className={`h-14 w-full rounded-2xl border bg-white px-5 text-sm text-gray-900 outline-none transition placeholder:text-gray-300 ${
                         error ? "border-red-300 focus:border-red-400" : "border-gray-200 focus:border-gray-400"
@@ -115,7 +117,7 @@ export default function NicknameSettingsPage() {
                 {error ? (
                     <p className="mt-2 text-xs text-red-400">{error}</p>
                 ) : (
-                    <p className="mt-2 text-xs text-gray-400">{NICKNAME_RULE}</p>
+                    <p className="mt-2 text-xs text-gray-400">{nicknameRule}</p>
                 )}
             </section>
 
@@ -125,7 +127,7 @@ export default function NicknameSettingsPage() {
                 disabled={isLoading || !isValid || !isChanged || isSaving}
                 className="mt-6 flex h-14 w-full items-center justify-center rounded-2xl bg-gray-900 text-sm font-medium text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400"
             >
-                {isSaving ? "저장 중..." : "저장"}
+                {isSaving ? t("common.saving") : t("common.save")}
             </button>
         </div>
     );

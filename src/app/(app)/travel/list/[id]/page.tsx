@@ -25,6 +25,9 @@ import { formatDate } from "@/lib/payPeriod";
 import { getCurrencySymbol } from "@/lib/salary/format";
 import { useUpgrade } from "@/components/UpgradeProvider";
 import { parseDateOnly } from "@/lib/dateOnly";
+import { useI18n } from "@/components/I18nProvider";
+import { formatTripLength } from "@/lib/i18n/format";
+import { getCategoryLabel } from "@/lib/i18n/categories";
 import BottomSheet from "@/components/BottomSheet";
 import { useDialog } from "@/components/DialogProvider";
 import UsageMeter from "@/components/UsageMeter";
@@ -187,7 +190,15 @@ const getDestinationLabel = (destinations: TripDestination[]) => {
         .join(" / ");
 };
 
+const withBold = (template: string, value: string) =>
+    template
+        .split("\u0000")
+        .flatMap((part, index) =>
+            index === 0 ? [part] : [<span key={`bold-${index}`} className="font-bold text-gray-900">{value}</span>, part],
+        );
+
 export default function TravelDetailPage() {
+    const { t } = useI18n();
     const { confirm, alert: showAlert } = useDialog();
     const { openUpgrade } = useUpgrade();
 
@@ -374,6 +385,7 @@ export default function TravelDetailPage() {
 
                 // 기존 카테고리가 하나도 없는 여행이면 기본 카테고리 생성
                 if (data.length === 0) {
+                    // 기본 카테고리는 한국어 이름으로 저장하고 화면에서만 번역한다
                     const defaultCategories = ["항공", "숙소", "식비", "교통", "쇼핑", "기타"];
 
                     const createdCategories: ExpenseCategory[] = [];
@@ -595,12 +607,12 @@ export default function TravelDetailPage() {
         const longitude = editNewCityLongitude.trim() === "" ? null : Number(editNewCityLongitude);
 
         if (!cityName || !countryCode) {
-            showAlert("도시와 국가를 입력해주세요.");
+            showAlert(t("td.alert.cityCountry"));
             return;
         }
 
         if (latitude === null || longitude === null || Number.isNaN(latitude) || Number.isNaN(longitude)) {
-            showAlert("위치 정보를 입력해주세요.");
+            showAlert(t("td.alert.location"));
             return;
         }
 
@@ -862,23 +874,23 @@ export default function TravelDetailPage() {
         return (
             <div className="mx-auto max-w-md">
                 <Link href="/travel/list" className="text-sm text-gray-500">
-                    ← 여행 목록
+                    {t("td.back")}
                 </Link>
 
                 <div className="flex min-h-[70vh] flex-col items-center justify-center text-center">
-                    <p className="text-base font-semibold text-gray-900">여행을 찾을 수 없어요</p>
+                    <p className="text-base font-semibold text-gray-900">{t("td.k001")}</p>
 
                     <p className="mt-2 text-sm leading-6 text-gray-400">
-                        존재하지 않는 여행이거나
+                        {t("td.k002")}
                         <br />
-                        삭제된 여행일 수 있어요.
+                        {t("td.k003")}
                     </p>
 
                     <Link
                         href="/travel/list"
                         className="mt-6 rounded-2xl bg-white px-5 py-3 text-sm font-medium text-gray-700 shadow-sm"
                     >
-                        여행 목록으로
+                        {t("td.k004")}
                     </Link>
                 </div>
             </div>
@@ -947,27 +959,27 @@ export default function TravelDetailPage() {
         const firstCity = firstDestination?.cities[0];
 
         if (!firstDestination || !firstCity) {
-            showAlert("여행지를 하나 이상 추가해주세요.");
+            showAlert(t("trip.alert.needDestination"));
             return;
         }
 
         if (!editStartDate || !editEndDate) {
-            showAlert("여행 일정을 입력해주세요.");
+            showAlert(t("td.alert.dates"));
             return;
         }
 
         if (parseDateOnly(editEndDate) < parseDateOnly(editStartDate)) {
-            showAlert("여행 종료일은 시작일보다 빠를 수 없어요.");
+            showAlert(t("trip.alert.endBeforeStart"));
             return;
         }
 
         if (!Number.isInteger(people) || people < 1) {
-            showAlert("인원은 1명 이상 입력해주세요.");
+            showAlert(t("td.alert.people"));
             return;
         }
 
         if (!firstCity.city.trim() || !firstDestination.country || !firstDestination.countryCode) {
-            showAlert("여행지와 국가 정보를 입력해주세요.");
+            showAlert(t("td.alert.destCountry"));
             return;
         }
 
@@ -1024,7 +1036,7 @@ export default function TravelDetailPage() {
             setIsEditingTrip(false);
         } catch (error) {
             console.error("여행 수정 실패:", error);
-            showAlert("여행 정보를 수정하지 못했어요.");
+            showAlert(t("td.alert.editFailed"));
         } finally {
             setIsSavingTrip(false);
         }
@@ -1034,7 +1046,7 @@ export default function TravelDetailPage() {
         if (!trip?.id || isDeletingTrip) return;
 
         const confirmed = await confirm(
-            `"${trip.title?.trim() || trip.city}" 여행을 삭제할까요?\n여행 정보와 입력한 경비가 모두 삭제됩니다.\n삭제한 내용은 복구할 수 없습니다.`,
+            t("td.confirm.deleteTrip", { title: trip.title?.trim() || trip.city }),
         );
 
         if (!confirmed) return;
@@ -1053,7 +1065,7 @@ export default function TravelDetailPage() {
             window.location.href = "/travel/list";
         } catch (error) {
             console.error("여행 삭제 실패:", error);
-            showAlert("여행을 삭제하지 못했어요. 다시 시도해주세요.");
+            showAlert(t("td.alert.deleteFailed"));
             setIsDeletingTrip(false);
         }
     };
@@ -1136,7 +1148,7 @@ export default function TravelDetailPage() {
                 const data = await response.json().catch(() => null);
 
                 if (data?.code === "TRIP_EXPENSE_LIMIT_REACHED") {
-                    showAlert("무료 플랜에서는 여행 하나당 지출을 최대 30개까지 저장할 수 있어요.");
+                    showAlert(t("td.alert.expenseLimit"));
 
                     return;
                 }
@@ -1291,7 +1303,7 @@ export default function TravelDetailPage() {
         if (!category) return;
 
         const confirmed = await confirm(
-            `"${category.name}" 카테고리를 삭제할까요?\n이 카테고리에 입력된 경비도 함께 삭제됩니다.`,
+            t("td.confirm.deleteCategory", { name: getCategoryLabel(category.name, t) }),
         );
 
         if (!confirmed) return;
@@ -1408,7 +1420,7 @@ export default function TravelDetailPage() {
             <Link
                 href="/travel/list"
                 className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-gray-500 shadow-sm"
-                aria-label="여행리스트로 돌아가기"
+                aria-label={t("td.k005")}
             >
                 <ArrowLeft size={19} strokeWidth={1.8} />
             </Link>
@@ -1439,7 +1451,7 @@ export default function TravelDetailPage() {
                                         type="button"
                                         onClick={handleStartEditTrip}
                                         className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-50 text-gray-500 transition hover:bg-gray-100"
-                                        aria-label="여행 정보 수정"
+                                        aria-label={t("td.k006")}
                                     >
                                         <Pencil size={15} strokeWidth={1.8} />
                                     </button>
@@ -1449,7 +1461,7 @@ export default function TravelDetailPage() {
                                         onClick={handleDeleteTrip}
                                         disabled={isDeletingTrip}
                                         className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-50 text-gray-500 transition hover:bg-red-50 hover:text-red-500 disabled:opacity-50"
-                                        aria-label="여행 삭제"
+                                        aria-label={t("td.k007")}
                                     >
                                         <Trash2 size={15} strokeWidth={1.8} />
                                     </button>
@@ -1469,9 +1481,7 @@ export default function TravelDetailPage() {
                                 </p>
 
                                 <p className="mt-1 text-sm text-gray-400">
-                                    {nights === 0
-                                        ? `당일치기 · ${trip.people}명`
-                                        : `${nights}박 ${nights + 1}일 · ${trip.people}명`}
+                                    {formatTripLength(t, nights, trip.people)}
                                 </p>
                             </div>
 
@@ -1517,9 +1527,9 @@ export default function TravelDetailPage() {
                                     ) : (
                                         <div className="mt-5 rounded-3xl p-5 shadow-sm">
                                             <p className="text-sm leading-6 text-gray-400">
-                                                아직 이 여행에 별점을
+                                                {t("td.k008")}
                                                 <br />
-                                                남기지 않았어요.
+                                                {t("td.k009")}
                                             </p>
 
                                             <button
@@ -1527,7 +1537,7 @@ export default function TravelDetailPage() {
                                                 onClick={handleStartEditTrip}
                                                 className="mt-5 w-full rounded-2xl bg-gray-900 py-4 text-sm font-medium text-white"
                                             >
-                                                별점 남기기
+                                                {t("td.k010")}
                                             </button>
                                         </div>
                                     )}
@@ -1546,13 +1556,13 @@ export default function TravelDetailPage() {
                         <>
                             {/* 수정 헤더 */}
                             <div className="flex items-center justify-between">
-                                <p className="text-sm font-medium text-gray-900">여행 정보 수정</p>
+                                <p className="text-sm font-medium text-gray-900">{t("td.k006")}</p>
 
                                 <button
                                     type="button"
                                     onClick={handleCancelEditTrip}
                                     className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-50 text-gray-400"
-                                    aria-label="수정 취소"
+                                    aria-label={t("td.k011")}
                                 >
                                     <X size={16} strokeWidth={1.8} />
                                 </button>
@@ -1560,7 +1570,7 @@ export default function TravelDetailPage() {
 
                             {/* 제목 */}
                             <div className="mt-6">
-                                <label className="text-xs font-medium text-gray-400">제목</label>
+                                <label className="text-xs font-medium text-gray-400">{t("td.k012")}</label>
 
                                 <input
                                     type="text"
@@ -1573,7 +1583,7 @@ export default function TravelDetailPage() {
 
                             {/* 여행지 */}
                             <div className="mt-6">
-                                <p className="text-xs font-medium text-gray-400">여행지</p>
+                                <p className="text-xs font-medium text-gray-400">{t("td.k013")}</p>
 
                                 {/* 현재 목적지 목록 */}
                                 <div className="mt-2 space-y-3">
@@ -1599,7 +1609,7 @@ export default function TravelDetailPage() {
                                                         }}
                                                         onDragEnd={handleDestinationDragEnd}
                                                         className="flex h-8 w-5 shrink-0 cursor-grab items-center justify-center text-gray-300 active:cursor-grabbing"
-                                                        aria-label={`${destination.country} 순서 변경`}
+                                                        aria-label={t("td.reorder", { name: destination.country })}
                                                         role="button"
                                                         tabIndex={0}
                                                     >
@@ -1647,7 +1657,7 @@ export default function TravelDetailPage() {
                                                                     }}
                                                                     onDragEnd={handleCityDragEnd}
                                                                     className="flex h-7 w-5 shrink-0 cursor-grab items-center justify-center text-gray-300 active:cursor-grabbing"
-                                                                    aria-label={`${city.city} 순서 변경`}
+                                                                    aria-label={t("td.reorder", { name: city.city })}
                                                                     role="button"
                                                                     tabIndex={0}
                                                                 >
@@ -1664,9 +1674,9 @@ export default function TravelDetailPage() {
                                                                         removeDestinationCity(destination.countryCode, city.city)
                                                                     }
                                                                     className="shrink-0 text-xs text-gray-400 transition hover:text-gray-700"
-                                                                    aria-label={`${city.city} 삭제`}
+                                                                    aria-label={t("trip.removeCity", { city: city.city })}
                                                                 >
-                                                                    삭제
+                                                                    {t("td.k014")}
                                                                 </button>
                                                             </div>
                                                         );
@@ -1678,7 +1688,7 @@ export default function TravelDetailPage() {
 
                                     {editDestinations.length === 0 && (
                                         <div className="rounded-2xl bg-gray-50 px-4 py-4">
-                                            <p className="text-sm text-gray-400">여행지를 하나 이상 추가해주세요.</p>
+                                            <p className="text-sm text-gray-400">{t("td.k015")}</p>
                                         </div>
                                     )}
                                 </div>
@@ -1702,7 +1712,7 @@ export default function TravelDetailPage() {
                                                 setShowEditCityResults(true);
                                             }
                                         }}
-                                        placeholder="도시를 추가해주세요 (예: 뉴욕)"
+                                        placeholder={t("td.k016")}
                                         className="h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
                                     />
 
@@ -1710,7 +1720,7 @@ export default function TravelDetailPage() {
                                     {showEditCityResults && (
                                         <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-2xl bg-white shadow-lg ring-1 ring-black/5">
                                             {isEditCitySearching ? (
-                                                <div className="px-4 py-4 text-sm text-gray-400">도시를 찾고 있어요...</div>
+                                                <div className="px-4 py-4 text-sm text-gray-400">{t("td.k017")}</div>
                                             ) : editCitySearchResults.length > 0 ? (
                                                 <div className="max-h-64 overflow-y-auto scrollbar-hide">
                                                     {editCitySearchResults.map((result) => (
@@ -1744,7 +1754,7 @@ export default function TravelDetailPage() {
                                                 </div>
                                             ) : (
                                                 <div className="px-4 py-4">
-                                                    <p className="text-sm text-gray-400">일치하는 도시를 찾지 못했어요.</p>
+                                                    <p className="text-sm text-gray-400">{t("td.k018")}</p>
 
                                                     <button
                                                         type="button"
@@ -1758,7 +1768,7 @@ export default function TravelDetailPage() {
                                                         }}
                                                         className="mt-3 w-full rounded-2xl bg-gray-50 px-4 py-3 text-sm font-medium text-gray-700 transition active:bg-gray-100"
                                                     >
-                                                        ＋ 이 도시 추가하기
+                                                        {t("trip.addThisCity")}
                                                     </button>
                                                 </div>
                                             )}
@@ -1769,7 +1779,7 @@ export default function TravelDetailPage() {
 
                             {/* 일정 */}
                             <div className="mt-4">
-                                <label className="text-xs font-medium text-gray-400">일정</label>
+                                <label className="text-xs font-medium text-gray-400">{t("td.k019")}</label>
 
                                 <div className="mt-2 grid grid-cols-2 gap-2">
                                     <input
@@ -1790,7 +1800,7 @@ export default function TravelDetailPage() {
 
                             {/* 인원 */}
                             <div className="mt-4">
-                                <label className="text-xs font-medium text-gray-400">인원</label>
+                                <label className="text-xs font-medium text-gray-400">{t("td.k020")}</label>
 
                                 <div className="mt-2 flex items-center rounded-2xl border border-gray-100 bg-gray-50 px-4">
                                     <input
@@ -1801,14 +1811,14 @@ export default function TravelDetailPage() {
                                         className="w-full bg-transparent py-3 text-sm text-gray-900 outline-none"
                                     />
 
-                                    <span className="text-sm text-gray-400">명</span>
+                                    <span className="text-sm text-gray-400">{t("td.k021")}</span>
                                 </div>
                             </div>
 
                             {/* 별점 */}
                             {trip.tripType === "completed" && (
                                 <div className="mt-4">
-                                    <p className="text-xs font-medium text-gray-400">여행 평점</p>
+                                    <p className="text-xs font-medium text-gray-400">{t("td.k022")}</p>
 
                                     <div className="mt-4 flex items-center gap-1">
                                         <div className="flex items-center">
@@ -1861,7 +1871,7 @@ export default function TravelDetailPage() {
                                                             type="button"
                                                             onClick={() => setEditRating(star - 0.5)}
                                                             className="absolute left-0 top-0 z-10 h-full w-1/2"
-                                                            aria-label={`${star - 0.5}점`}
+                                                            aria-label={t("trip.stars", { stars: star - 0.5 })}
                                                         />
 
                                                         {/* 오른쪽 = 1 */}
@@ -1869,7 +1879,7 @@ export default function TravelDetailPage() {
                                                             type="button"
                                                             onClick={() => setEditRating(star)}
                                                             className="absolute right-0 top-0 z-10 h-full w-1/2"
-                                                            aria-label={`${star}점`}
+                                                            aria-label={t("trip.stars", { stars: star })}
                                                         />
                                                     </div>
                                                 );
@@ -1889,7 +1899,7 @@ export default function TravelDetailPage() {
                                     disabled={isSavingTrip}
                                     className="flex-1 rounded-2xl border border-gray-200 py-4 text-sm font-medium text-gray-700 disabled:opacity-50"
                                 >
-                                    취소
+                                    {t("td.k023")}
                                 </button>
 
                                 <button
@@ -1898,7 +1908,7 @@ export default function TravelDetailPage() {
                                     disabled={isSavingTrip}
                                     className="flex-1 rounded-2xl bg-gray-900 py-4 text-sm font-medium text-white disabled:opacity-50"
                                 >
-                                    {isSavingTrip ? "저장 중..." : "저장하기"}
+                                    {isSavingTrip ? t("common.saving") : t("trip.saveBtn")}
                                 </button>
                             </div>
                         </>
@@ -1910,20 +1920,19 @@ export default function TravelDetailPage() {
             {trip.tripType === "upcoming" && (
                 <section className=" mt-8">
                     <div className="rounded-3xl bg-white p-5 shadow-sm">
-                        <p className="text-sm text-gray-400">여행 예산</p>
+                        <p className="text-sm text-gray-400">{t("td.k024")}</p>
 
                         <p className="mt-1 text-3xl font-bold tracking-tight text-gray-950">
                             {getCurrencySymbol(trip.currency ?? null)}{Number(trip.budget ?? 0).toLocaleString()}
                         </p>
 
                         <p className="mt-4 text-sm text-gray-400">
-                            지금까지{" "}
-                            <span className="font-bold text-gray-900">
-                                {trip.budget && Number(trip.budget) > 0
+                            {withBold(
+                                t("td.spentOfBudget", { percent: "\u0000" }),
+                                trip.budget && Number(trip.budget) > 0
                                     ? `${((totalExpense / Number(trip.budget)) * 100).toFixed(1)}%`
-                                    : "0%"}
-                            </span>
-                            을 썼어요
+                                    : "0%",
+                            )}
                             <span className="ml-1">
                                 ({getCurrencySymbol(trip.currency ?? null)}
                                 {totalExpense.toLocaleString(undefined, {
@@ -1941,15 +1950,16 @@ export default function TravelDetailPage() {
             {trip.tripType === "completed" && (
                 <section className="mt-8">
                     <div className="rounded-3xl bg-white p-5 shadow-sm">
-                        <p className="text-sm text-gray-400">총 지출</p>
+                        <p className="text-sm text-gray-400">{t("td.k026")}</p>
 
                         <p className="mt-1 text-3xl font-bold tracking-tight text-gray-950">{getCurrencySymbol(trip.currency ?? null)}{totalExpense.toLocaleString()}</p>
 
                         {nights > 0 && (
                             <p className="mt-4 text-sm text-gray-400">
-                                1박당 평균{" "}
-                                <span className="font-bold text-gray-900">{getCurrencySymbol(trip.currency ?? null)}{(totalExpense / (nights + 1)).toFixed(2)}</span>을
-                                썼어요
+                                {withBold(
+                                    t("td.avgPerNight", { amount: "\u0000" }),
+                                    `${getCurrencySymbol(trip.currency ?? null)}${(totalExpense / (nights + 1)).toFixed(2)}`,
+                                )}
                             </p>
                         )}
                     </div>
@@ -1960,16 +1970,16 @@ export default function TravelDetailPage() {
             {trip.tripType === "completed" && totalExpense > 0 && sortedCategories.length > 0 && (
                 <div className="mt-5 overflow-hidden rounded-3xl bg-gray-900 p-5 text-white shadow-sm">
                     <p className="text-sm font-medium">
-                        이번 여행에서는 어디에
+                        {t("td.k028")}
                         <br />
-                        돈을 가장 많이 썼을까요?
+                        {t("td.k029")}
                     </p>
 
                     <div className="relative mt-5 h-[72px] overflow-hidden">
                         <div key={displayCategory?.id} className="category-slide-up">
                             <div className="flex items-end justify-between">
                                 <div>
-                                    <p className="text-xs text-gray-400">{displayCategory?.name}</p>
+                                    <p className="text-xs text-gray-400">{displayCategory ? getCategoryLabel(displayCategory.name, t) : ""}</p>
 
                                     <p className="mt-1 text-2xl font-semibold tracking-tight tabular-nums">
                                         {getCurrencySymbol(trip.currency ?? null)}
@@ -2019,14 +2029,14 @@ export default function TravelDetailPage() {
             <section className="mt-8">
                 <div className="flex items-end justify-between">
                     <div>
-                        <h2 className="text-lg font-semibold text-gray-900">여행 경비</h2>
+                        <h2 className="text-lg font-semibold text-gray-900">{t("td.k030")}</h2>
 
-                        <p className="mt-1 text-sm text-gray-400">날짜별로 경비를 기록해보세요.</p>
+                        <p className="mt-1 text-sm text-gray-400">{t("td.k031")}</p>
                     </div>
                 </div>
 
                 <UsageMeter
-                    label="이 여행의 경비"
+                    label={t("td.k032")}
                     used={expenseCount}
                     limit={FREE_PLAN_LIMITS.tripExpensesPerTrip}
                     reason="trip-expense-limit"
@@ -2046,7 +2056,7 @@ export default function TravelDetailPage() {
 
                                     {/* 구분 */}
                                     <th className="sticky left-[32px] z-20 w-[100px] min-w-[100px] max-w-[100px] bg-white px-3 pb-4 text-left text-xs font-medium text-gray-400">
-                                        구분
+                                        {t("td.k033")}
                                     </th>
 
                                     {tripDates.map((date) => (
@@ -2063,7 +2073,7 @@ export default function TravelDetailPage() {
 
                                     {/* 합계 */}
                                     <th className="w-[78px] min-w-[78px] max-w-[78px] bg-white pb-4 pl-3 text-center text-xs font-medium text-gray-400">
-                                        합계
+                                        {t("td.k034")}
                                     </th>
                                 </tr>
                             </thead>
@@ -2106,7 +2116,7 @@ export default function TravelDetailPage() {
                                                             type="button"
                                                             onClick={() => handleDeleteCategory(category.id)}
                                                             className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:text-gray-700"
-                                                            aria-label="카테고리 삭제"
+                                                            aria-label={t("td.k035")}
                                                         >
                                                             <Trash2 size={15} strokeWidth={1.8} />
                                                         </button>
@@ -2119,7 +2129,7 @@ export default function TravelDetailPage() {
                                                         onDragStart={() => handleCategoryDragStart(category.id)}
                                                         onDragEnd={handleCategoryDragEnd}
                                                         className="flex h-8 w-8 cursor-grab items-center justify-center rounded-lg text-gray-300 active:cursor-grabbing"
-                                                        aria-label="카테고리 순서 변경"
+                                                        aria-label={t("td.k036")}
                                                     >
                                                         ⋮⋮
                                                     </div>
@@ -2136,7 +2146,7 @@ export default function TravelDetailPage() {
                                                     <input
                                                         readOnly={!isPro}
                                                         type="text"
-                                                        value={category.name}
+                                                        value={getCategoryLabel(category.name, t)}
                                                         autoFocus={newCategoryId === category.id}
                                                         onChange={(event) =>
                                                             handleCategoryNameChange(category.id, event.target.value)
@@ -2289,13 +2299,13 @@ export default function TravelDetailPage() {
                 {isAddEditCityModalOpen && (
                     <>
                             <div className="flex items-center justify-between">
-                                <h2 className="text-xl font-bold">도시 추가</h2>
+                                <h2 className="text-xl font-bold">{t("td.k037")}</h2>
 
                             </div>
 
                             {/* 도시 */}
                             <div className="mt-6">
-                                <p className="text-sm font-medium text-gray-700">도시</p>
+                                <p className="text-sm font-medium text-gray-700">{t("td.k038")}</p>
 
                                 <input
                                     type="text"
@@ -2303,14 +2313,14 @@ export default function TravelDetailPage() {
                                     onChange={(e) => {
                                         setEditNewCityName(e.target.value);
                                     }}
-                                    placeholder="도시명을 입력해주세요"
+                                    placeholder={t("td.k039")}
                                     className="mt-2 h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
                                 />
                             </div>
 
                             {/* 국가 */}
                             <div className="mt-5">
-                                <p className="text-sm font-medium text-gray-700">국가</p>
+                                <p className="text-sm font-medium text-gray-700">{t("td.k040")}</p>
 
                                 <select
                                     value={editNewCityCountryCode}
@@ -2319,21 +2329,21 @@ export default function TravelDetailPage() {
                                     }}
                                     className="mt-2 h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
                                 >
-                                    <option value="">국가를 선택해주세요</option>
-                                    <option value="CA">🇨🇦 캐나다</option>
-                                    <option value="US">🇺🇸 미국</option>
-                                    <option value="KR">🇰🇷 대한민국</option>
-                                    <option value="JP">🇯🇵 일본</option>
+                                    <option value="">{t("td.k041")}</option>
+                                    <option value="CA">{t("td.k042")}</option>
+                                    <option value="US">{t("td.k043")}</option>
+                                    <option value="KR">{t("td.k044")}</option>
+                                    <option value="JP">{t("td.k045")}</option>
                                 </select>
                             </div>
 
                             {/* 위도 / 경도 */}
                             <div className="mt-5">
-                                <p className="text-sm font-medium text-gray-700">위치 정보</p>
+                                <p className="text-sm font-medium text-gray-700">{t("td.k046")}</p>
 
                                 <div className="mt-2 grid grid-cols-2 gap-3">
                                     <div>
-                                        <p className="mb-2 text-xs text-gray-400">위도</p>
+                                        <p className="mb-2 text-xs text-gray-400">{t("td.k047")}</p>
 
                                         <input
                                             type="number"
@@ -2342,13 +2352,13 @@ export default function TravelDetailPage() {
                                             onChange={(e) => {
                                                 setEditNewCityLatitude(e.target.value);
                                             }}
-                                            placeholder="예: 50.1163"
+                                            placeholder={t("td.k048")}
                                             className="h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
                                         />
                                     </div>
 
                                     <div>
-                                        <p className="mb-2 text-xs text-gray-400">경도</p>
+                                        <p className="mb-2 text-xs text-gray-400">{t("td.k049")}</p>
 
                                         <input
                                             type="number"
@@ -2357,13 +2367,13 @@ export default function TravelDetailPage() {
                                             onChange={(e) => {
                                                 setEditNewCityLongitude(e.target.value);
                                             }}
-                                            placeholder="예: -122.9574"
+                                            placeholder={t("td.k050")}
                                             className="h-[52px] w-full rounded-2xl bg-gray-100 px-4 text-sm outline-none"
                                         />
                                     </div>
                                 </div>
 
-                                <p className="mt-2 text-xs text-gray-400">지도에 표시할 위치를 입력해주세요.</p>
+                                <p className="mt-2 text-xs text-gray-400">{t("td.k051")}</p>
                             </div>
 
                             {/* 버튼 */}
@@ -2375,7 +2385,7 @@ export default function TravelDetailPage() {
                                     }}
                                     className="flex-1 rounded-2xl border border-gray-200 py-4 text-sm font-medium text-gray-700"
                                 >
-                                    취소
+                                    {t("td.k023")}
                                 </button>
 
                                 <button
@@ -2391,7 +2401,7 @@ export default function TravelDetailPage() {
                                     onClick={handleAddManualDestinationCity}
                                     className="flex-1 rounded-2xl bg-black py-4 text-sm font-medium text-white disabled:opacity-30"
                                 >
-                                    추가하기
+                                    {t("td.k052")}
                                 </button>
                             </div>
                 

@@ -13,11 +13,12 @@ export type LanguageConfig = {
 };
 
 export const LANGUAGES: readonly LanguageConfig[] = [
-    { code: "ko", label: "한국어", englishLabel: "Korean" },
     { code: "en", label: "English", englishLabel: "English" },
+    { code: "ko", label: "한국어", englishLabel: "Korean" },
 ];
 
-export const DEFAULT_LANGUAGE = "ko";
+// 처음 오는 사람에게 보이는 언어 (계정에 저장된 언어가 있으면 그것이 우선)
+export const DEFAULT_LANGUAGE = "en";
 
 export const isSupportedLanguage = (code: unknown): code is string =>
     typeof code === "string" && LANGUAGES.some((language) => language.code === code);
@@ -110,11 +111,15 @@ export const getRegion = (countryCode: string | null | undefined, regionCode: st
     regionCode ? getCountry(countryCode)?.regions.find((region) => region.code === regionCode.toUpperCase()) : undefined;
 
 // 설정 등에서 나라 이름을 보여줄 때. 목록에 없는 코드는 코드 그대로.
-export const getCountryLabel = (code: string | null | undefined, options?: { short?: boolean }) => {
+export const getCountryLabel = (code: string | null | undefined, options?: { short?: boolean; language?: string }) => {
     const country = getCountry(code);
 
     if (!country) {
         return code ?? "";
+    }
+
+    if (options?.language === "en") {
+        return country.nameEn;
     }
 
     return options?.short ? (country.shortNameKo ?? country.nameKo) : country.nameKo;
