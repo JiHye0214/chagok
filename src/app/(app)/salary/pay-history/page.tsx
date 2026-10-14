@@ -1075,11 +1075,11 @@ export default function PayHistoryPage() {
                     <button
                         type="button"
                         onClick={() => setIsPendingExpectedOpen(true)}
-                        className={`${overduePayPeriod ? "mt-4" : "mt-10"} block w-full rounded-3xl border border-blue-100 bg-blue-50 p-5 text-left shadow-sm transition hover:bg-blue-100/70`}
+                        className={`${overduePayPeriod ? "mt-4" : "mt-10"} block w-full rounded-3xl border border-[#D9E7DE] bg-[#EEF4F0] p-5 text-left shadow-sm transition hover:bg-[#E3EDE6]`}
                     >
                         <div className="flex items-start justify-between gap-4">
                             <div>
-                                <p className="text-xs text-blue-500">{t("payh.k009")}</p>
+                                <p className="text-xs text-[#5B8A6A]">{t("payh.k009")}</p>
 
                                 <p className="mt-1 text-sm font-semibold text-gray-700">
                                     {formatDisplayDate(pendingPayPeriod.startDate)}
@@ -1088,14 +1088,14 @@ export default function PayHistoryPage() {
                                 </p>
 
                                 <p className="mt-3 text-lg font-semibold text-gray-900">
-                                    <span className="text-blue-600">{getDdayLabel(pendingPayPeriod.payDate, t)}</span>{" "}
+                                    <span className="text-[#3F6B4F]">{getDdayLabel(pendingPayPeriod.payDate, t)}</span>{" "}
                                     {t("sal.receive", { amount: formatMoney(animatedPendingNetPay) })}
                                 </p>
 
                                 <p className="mt-1 text-sm text-gray-500">{t("sal.payDate", { date: formatDisplayDate(pendingPayPeriod.payDate) })}</p>
                             </div>
 
-                            <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-blue-600 shadow-sm">
+                            <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#3F6B4F] shadow-sm">
                                 {t("payh.k010")}
                             </span>
                         </div>
@@ -1478,7 +1478,7 @@ export default function PayHistoryPage() {
                             <div className="flex items-start justify-between">
                                 <div>
                                     <div className="flex items-center gap-2">
-                                        <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-600">
+                                        <span className="rounded-full bg-[#EEF4F0] px-2.5 py-1 text-[11px] font-semibold text-[#3F6B4F]">
                                             {t("payh.k010")}
                                         </span>
 
@@ -1496,8 +1496,8 @@ export default function PayHistoryPage() {
 
                             </div>
 
-                            <div className="mt-6 rounded-3xl bg-blue-50 p-5">
-                                <p className="text-xs font-medium text-blue-500">{t("payh.k032")}</p>
+                            <div className="mt-6 rounded-3xl bg-[#EEF4F0] p-5">
+                                <p className="text-xs font-medium text-[#5B8A6A]">{t("payh.k032")}</p>
 
                                 <p className="mt-2 text-4xl font-bold tracking-tight text-gray-900">
                                     {formatMoney(pendingPeriodEstimate.netPay)}

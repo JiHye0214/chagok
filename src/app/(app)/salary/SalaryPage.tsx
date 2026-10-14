@@ -269,7 +269,7 @@ export default function SalaryPage() {
 
     const shouldShowPendingPay = Boolean(pendingPayPeriod && pendingPeriodEstimate);
 
-    const animatedPendingNetPay = useCountUp(pendingPeriodEstimate?.netPay ?? 0, shouldShowPendingPay);
+    const animatedPendingNetPay = useCountUp(pendingPeriodEstimate?.totalIncome ?? 0, shouldShowPendingPay);
 
     /*
      * --------------------------------------------------
@@ -444,14 +444,14 @@ export default function SalaryPage() {
                         <button
                             type="button"
                             onClick={() => setIsPendingExpectedOpen(true)}
-                            className="mt-4 block w-full rounded-3xl border border-blue-100 bg-blue-50 p-5 text-left shadow-sm transition hover:bg-blue-100/70"
+                            className="mt-4 block w-full rounded-3xl border border-[#D9E7DE] bg-[#EEF4F0] p-5 text-left shadow-sm transition hover:bg-[#E3EDE6]"
                         >
                             <div className="flex items-start justify-between gap-4">
                                 <div>
-                                    <p className="text-xs text-blue-500">{t("sal.k012")}</p>
+                                    <p className="text-xs text-[#5B8A6A]">{t("sal.k012")}</p>
 
                                     <p className="mt-2 text-lg font-semibold text-gray-900">
-                                        <span className="text-blue-600">{getDdayLabel(pendingPayPeriod.payDate, t)}</span>{" "}
+                                        <span className="text-[#3F6B4F]">{getDdayLabel(pendingPayPeriod.payDate, t)}</span>{" "}
                                         {t("sal.receive", { amount: formatMoney(animatedPendingNetPay, currency) })}{" "}
                                     </p>
 
@@ -460,7 +460,7 @@ export default function SalaryPage() {
                                     </p>
                                 </div>
 
-                                <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-blue-600 shadow-sm">
+                                <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#3F6B4F] shadow-sm">
                                     {t("sal.k014")}
                                 </span>
                             </div>
@@ -469,7 +469,7 @@ export default function SalaryPage() {
 
                     {salarySettings && !currentPayPeriod && (
                         <section className="mt-6 rounded-3xl bg-white p-5 shadow-sm">
-                            <p className="text-xs font-medium text-blue-500">{t("sal.k015")}</p>
+                            <p className="text-xs font-medium text-[#5B8A6A]">{t("sal.k015")}</p>
 
                             <p className="mt-2 text-lg font-bold text-gray-900">{t("sal.k016")}</p>
 
@@ -489,7 +489,7 @@ export default function SalaryPage() {
 
                     {currentPayPeriod && (
                         <div className="mt-6 rounded-3xl bg-white p-5 shadow-sm">
-                            <p className="text-xs font-medium text-blue-500">{t("sal.k018")}</p>
+                            <p className="text-xs font-medium text-[#5B8A6A]">{t("sal.k018")}</p>
 
                             <p className="mt-1 text-sm font-semibold text-gray-900">
                                 {formatDisplayDate(currentPayPeriod.startDate)}
@@ -510,7 +510,7 @@ export default function SalaryPage() {
                                     <p className="mt-5 text-xs text-gray-400">{t("sal.k021")}</p>
 
                                     <p className="mt-1 text-2xl font-bold text-gray-900">
-                                        {formatMoney(currentPeriodEstimate.netPay, currency)}
+                                        {formatMoney(currentPeriodEstimate.totalIncome, currency)}
                                     </p>
 
                                     <div className="mt-3 flex items-center gap-3 text-sm text-gray-500">
@@ -677,7 +677,7 @@ export default function SalaryPage() {
                                                                     cy={point.y}
                                                                     r="4"
                                                                     className={
-                                                                        point.isEstimate ? "fill-blue-500" : "fill-gray-900"
+                                                                        point.isEstimate ? "fill-[#6E9B7C]" : "fill-gray-900"
                                                                     }
                                                                 />
 
@@ -711,7 +711,7 @@ export default function SalaryPage() {
                                             {graphPayHistory.map((point) => (
                                                 <span
                                                     key={`${point.startDate}-${point.endDate}`}
-                                                    className={point.isEstimate ? "font-medium text-blue-500" : ""}
+                                                    className={point.isEstimate ? "font-medium text-[#5B8A6A]" : ""}
                                                 >
                                                     {point.payDate ? formatDisplayDate(point.payDate) : t("sal.graph.scheduled")}
                                                 </span>
@@ -837,7 +837,7 @@ export default function SalaryPage() {
                                     <div className="flex items-start justify-between">
                                         <div>
                                             <div className="flex items-center gap-2">
-                                                <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-600">
+                                                <span className="rounded-full bg-[#EEF4F0] px-2.5 py-1 text-[11px] font-semibold text-[#3F6B4F]">
                                                     {t("sal.k014")}
                                                 </span>
 
@@ -858,8 +858,8 @@ export default function SalaryPage() {
                                     </div>
 
                                     {/* Main Amount */}
-                                    <div className="mt-6 rounded-3xl bg-blue-50 p-5">
-                                        <p className="text-xs font-medium text-blue-500">{t("sal.k032")}</p>
+                                    <div className="mt-6 rounded-3xl bg-[#EEF4F0] p-5">
+                                        <p className="text-xs font-medium text-[#5B8A6A]">{t("sal.k032")}</p>
 
                                         <p className="mt-2 text-4xl font-bold tracking-tight text-gray-900">
                                             {formatMoney(pendingPeriodEstimate.netPay, currency)}
@@ -1056,7 +1056,7 @@ export default function SalaryPage() {
                                                         className={
                                                             selectedPayDifference >= 0
                                                                 ? "font-semibold text-red-400"
-                                                                : "font-semibold text-blue-400"
+                                                                : "font-semibold text-gray-500"
                                                         }
                                                     >
                                                         {selectedPayDifference >= 0

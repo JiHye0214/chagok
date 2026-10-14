@@ -942,4 +942,5 @@ export const en: Record<MessageKey, string> = {
     "srv.m115": "Couldn't save the trip.",
     "srv.m116": "Couldn't save your living settings.",
     "push.shiftStarts": "Your shift starts at {time}!",
+    "sched.tipsSaved": "Tips saved!",
 };

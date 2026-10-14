@@ -346,7 +346,7 @@ export default function SchedulePage() {
 
     const premiumContext = { country: countryCode, region: provinceCode, mode: holidayPayMode };
 
-    const animatedNetPay = useCountUp(currentPeriodEstimate?.netPay ?? 0, Boolean(currentPeriodEstimate));
+    const animatedNetPay = useCountUp(currentPeriodEstimate?.totalIncome ?? 0, Boolean(currentPeriodEstimate));
 
     /*
      * --------------------------------------------------
@@ -654,7 +654,7 @@ export default function SchedulePage() {
 
             setPaychequeTips(saved.paychequeTips > 0 ? String(saved.paychequeTips) : "");
 
-            // showAlert("팁이 저장됐어요!");
+            showAlert(t("sched.tipsSaved"));
         } catch (error) {
             console.error(error);
 

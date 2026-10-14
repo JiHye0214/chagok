@@ -1,7 +1,7 @@
 {
-    "name": "차곡",
-    "short_name": "차곡",
-    "description": "생활비와 급여, 스케줄을 한 곳에서 관리해요.",
+    "name": "Chagok",
+    "short_name": "Chagok",
+    "description": "Manage living costs, pay, and work schedules in one place.",
     "start_url": "/",
     "display": "standalone",
     "background_color": "#f9fafb",

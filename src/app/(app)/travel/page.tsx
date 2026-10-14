@@ -610,7 +610,7 @@ export default function TravelPage() {
                                     <div className="flex items-center justify-between px-5 py-4">
                                         <div className="min-w-0">
                                             <div className="flex items-center gap-2">
-                                                <p className="text-xs font-medium text-blue-500">{t("tp.k014")}</p>
+                                                <p className="text-xs font-medium text-[#5B8A6A]">{t("tp.k014")}</p>
 
                                                 <span className="h-1 w-1 rounded-full bg-gray-300" />
 

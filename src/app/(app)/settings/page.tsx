@@ -231,10 +231,15 @@ export default function SettingsPage() {
         }
 
         try {
-            await authClient.signOut();
+            const result = (await authClient.signOut()) as { error?: { message?: string } | null } | undefined;
 
-            router.replace("/");
-            router.refresh();
+            // better-auth 는 실패해도 예외를 던지지 않고 error 를 돌려준다
+            if (result?.error) {
+                throw new Error(result.error.message ?? "signOut failed");
+            }
+
+            // 화면 캐시가 남지 않도록 페이지를 새로 불러서 시작 화면으로 간다
+            window.location.href = "/";
         } catch (error) {
             console.error("로그아웃에 실패했어요.", error);
             showAlert(t("settings.logoutFailed"));

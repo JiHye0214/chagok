@@ -944,6 +944,7 @@ export const ko = {
     "srv.m115": "여행 저장에 실패했습니다.",
     "srv.m116": "생활 설정 저장에 실패했습니다.",
     "push.shiftStarts": "{time}에 근무가 시작돼요!",
+    "sched.tipsSaved": "팁이 저장됐어요!",
 } as const;
 
 export type MessageKey = keyof typeof ko;
