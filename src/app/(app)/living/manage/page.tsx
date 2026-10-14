@@ -1,7 +1,7 @@
 "use client";
 
 import LoadingScreen, { InlineLoading } from "@/components/LoadingScreen";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, X, GripVertical, Lock } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import BackButtonHeader from "@/components/BackButtonHeader";
@@ -147,7 +147,7 @@ const ProBadge = () => (
     </span>
 );
 
-export default function LivingManagePage() {
+function LivingManageContent() {
     const { confirm, alert: showAlert } = useDialog();
     const { openUpgrade } = useUpgrade();
     const { t, locale } = useI18n();
@@ -2147,5 +2147,14 @@ export default function LivingManagePage() {
                 </div>
             )}
         </div>
+    );
+}
+
+// useSearchParams 는 Suspense 안에서 써야 빌드(미리 그리기)가 통과한다
+export default function LivingManagePage() {
+    return (
+        <Suspense fallback={<LoadingScreen />}>
+            <LivingManageContent />
+        </Suspense>
     );
 }

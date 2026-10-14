@@ -9,7 +9,7 @@
 //  - 여행 경비: 남은 여행마다 한도를 넘는 오래된 날짜순 삭제
 //  - 고정지출: 전부 삭제
 //  - 카테고리: 직접 만든 것은 없애고 기본 카테고리로 되돌린다. 그 카테고리의 기록은 "기타"로 옮긴다.
-import { Pool } from "pg";
+import { Pool, type PoolClient } from "pg";
 import { FREE_PLAN_LIMITS } from "@/lib/plans";
 import { ko } from "@/lib/i18n/messages/ko";
 import { en } from "@/lib/i18n/messages/en";
@@ -622,7 +622,7 @@ export const cancelDowngradeRequest = async (userId: string): Promise<boolean> =
  * 앱을 열 때(/api/auth/me) 불리므로 어떤 경우에도 예외를 던지지 않는다.
  */
 export const processPendingDowngrade = async (userId: string): Promise<void> => {
-    let client: Awaited<ReturnType<typeof pool.connect>> | null = null;
+    let client: PoolClient | null = null;
 
     try {
         client = await pool.connect();
