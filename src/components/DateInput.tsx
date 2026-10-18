@@ -80,8 +80,18 @@ export default function DateInput({
                 max={max}
                 disabled={disabled}
                 onChange={(event) => onChange(event.target.value)}
+                onClick={(event) => {
+                    // 컴퓨터(마우스)에서는 칸의 아무 곳이나 눌러도 선택창이 열리게 한다. (폰은 기본 동작이 이미 열어 줌)
+                    try {
+                        if (window.matchMedia("(pointer: fine)").matches) {
+                            event.currentTarget.showPicker?.();
+                        }
+                    } catch {
+                        // 지원하지 않는 브라우저는 기본 동작에 맡긴다
+                    }
+                }}
                 aria-label={placeholder}
-                className="absolute inset-0 h-full w-full min-w-0 cursor-pointer appearance-none opacity-0 disabled:cursor-not-allowed"
+                className="absolute inset-0 h-full w-full min-w-0 cursor-pointer appearance-none opacity-0 disabled:cursor-not-allowed [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
             />
         </div>
     );
