@@ -32,6 +32,14 @@ export const toLocalDateString = (date: Date): string =>
 /** 오늘 날짜(로컬 기준) */
 export const todayDateString = (): string => toLocalDateString(new Date());
 
+/** 내일 날짜(로컬 기준) */
+export const tomorrowDateString = (): string => {
+    const date = new Date();
+    date.setDate(date.getDate() + 1);
+
+    return toLocalDateString(date);
+};
+
 /** 어제 날짜(로컬 기준) */
 export const yesterdayDateString = (): string => {
     const date = new Date();

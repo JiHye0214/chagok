@@ -705,6 +705,8 @@ export const ko = {
     "trip.length.nights": "{nights}박 {days}일 · {people}",
     "trip.count": "{count}개",
     "trip.alert.needAll": "여행지와 여행 정보를 모두 입력해주세요.",
+    "trip.alert.dateRangeUpcoming": "예정된 여행은 내일부터 선택할 수 있어요.",
+    "trip.alert.dateRangeCompleted": "끝난 여행은 오늘까지 선택할 수 있어요.",
     "trip.alert.endBeforeStart": "여행 종료일은 시작일보다 빠를 수 없어요.",
     "trip.alert.needDestination": "여행지를 하나 이상 추가해주세요.",
     "trip.alert.saveFailed": "여행을 저장하지 못했어요.",

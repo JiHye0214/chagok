@@ -703,6 +703,8 @@ export const en: Record<MessageKey, string> = {
     "trip.length.nights": "{nights} nights · {people}",
     "trip.count": "{count}",
     "trip.alert.needAll": "Please fill in the destination and trip details.",
+    "trip.alert.dateRangeUpcoming": "Upcoming trips can start from tomorrow.",
+    "trip.alert.dateRangeCompleted": "Past trips can be dated up to today.",
     "trip.alert.endBeforeStart": "The end date can't be before the start date.",
     "trip.alert.needDestination": "Please add at least one destination.",
     "trip.alert.saveFailed": "Couldn't save the trip.",

@@ -10,7 +10,7 @@ import { formatDate } from "@/lib/payPeriod";
 import BackButtonHeader from "@/components/BackButtonHeader";
 import { useUpgrade } from "@/components/UpgradeProvider";
 import { getCurrencySymbol } from "@/lib/salary/format";
-import { parseDateOnly, todayDateString, yesterdayDateString } from "@/lib/dateOnly";
+import { parseDateOnly, todayDateString, tomorrowDateString } from "@/lib/dateOnly";
 import DateInput from "@/components/DateInput";
 import BottomSheet from "@/components/BottomSheet";
 import { useDialog } from "@/components/DialogProvider";
@@ -591,6 +591,17 @@ export default function TravelListPage() {
 
         if (parseDateOnly(endDate) < parseDateOnly(startDate)) {
             showAlert(t("trip.alert.endBeforeStart"));
+            return;
+        }
+
+        // 예정된 여행은 내일부터, 끝난 여행은 오늘까지
+        if (tripType === "upcoming" && startDate < tomorrowDateString()) {
+            showAlert(t("trip.alert.dateRangeUpcoming"));
+            return;
+        }
+
+        if (tripType === "completed" && endDate > todayDateString()) {
+            showAlert(t("trip.alert.dateRangeCompleted"));
             return;
         }
 
@@ -1245,6 +1256,8 @@ export default function TravelListPage() {
                                                 type="button"
                                                 onClick={() => {
                                                     setTripType("upcoming");
+                                                    setStartDate("");
+                                                    setEndDate("");
 
                                                     if (formRef.current) {
                                                         formRef.current.scrollTop = 0;
@@ -1264,6 +1277,8 @@ export default function TravelListPage() {
                                                 type="button"
                                                 onClick={() => {
                                                     setTripType("completed");
+                                                    setStartDate("");
+                                                    setEndDate("");
 
                                                     if (formRef.current) {
                                                         formRef.current.scrollTop = 0;
@@ -1480,16 +1495,16 @@ export default function TravelListPage() {
                                                             setEndDate("");
                                                         }
                                                     }}
-                                                    min={tripType === "upcoming" ? todayDateString() : undefined}
-                                                    max={tripType === "completed" ? yesterdayDateString() : undefined}
+                                                    min={tripType === "upcoming" ? tomorrowDateString() : undefined}
+                                                    max={tripType === "completed" ? todayDateString() : undefined}
                                                 />
 
                                                 <DateInput
                                                     value={endDate}
                                                     placeholder={t("common.endDate")}
                                                     onChange={setEndDate}
-                                                    min={startDate || (tripType === "upcoming" ? todayDateString() : undefined)}
-                                                    max={tripType === "completed" ? yesterdayDateString() : undefined}
+                                                    min={startDate || (tripType === "upcoming" ? tomorrowDateString() : undefined)}
+                                                    max={tripType === "completed" ? todayDateString() : undefined}
                                                     disabled={!startDate}
                                                 />
                                             </div>

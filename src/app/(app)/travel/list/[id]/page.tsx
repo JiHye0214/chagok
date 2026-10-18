@@ -1773,6 +1773,7 @@ export default function TravelDetailPage() {
                                         value={editEndDate}
                                         placeholder={t("common.endDate")}
                                         onChange={setEditEndDate}
+                                        min={editStartDate || undefined}
                                     />
                                 </div>
                             </div>
