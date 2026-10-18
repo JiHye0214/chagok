@@ -126,7 +126,7 @@ const formatCityName = (value: string) => {
 
 export default function TravelPage() {
     const { t } = useI18n();
-    const { openUpgrade } = useUpgrade();
+    const { openUpgrade, planCode, isPlanLoaded } = useUpgrade();
 
     const isSelectingCityRef = useRef(false);
 
@@ -154,7 +154,6 @@ export default function TravelPage() {
     const [trips, setTrips] = useState<SavedTrip[]>([]);
     const [isTripsLoading, setIsTripsLoading] = useState(true);
 
-    const [planCode, setPlanCode] = useState<"free" | "pro">("free");
 
     const [latitude, setLatitude] = useState<number | null>(null);
     const [longitude, setLongitude] = useState<number | null>(null);
@@ -290,25 +289,6 @@ export default function TravelPage() {
     // premium user
     // --------------------------------------------------
 
-    useEffect(() => {
-        const fetchPlan = async () => {
-            try {
-                const response = await fetch("/api/auth/me");
-
-                if (!response.ok) {
-                    return;
-                }
-
-                const data = await response.json();
-
-                setPlanCode(data.planCode === "pro" ? "pro" : "free");
-            } catch (error) {
-                console.error("플랜 정보 조회 실패:", error);
-            }
-        };
-
-        fetchPlan();
-    }, []);
 
     // --------------------------------------------------
     // 국가별 소비 통계
@@ -488,7 +468,7 @@ export default function TravelPage() {
         })
         .slice(0, 3);
 
-    if (isTripsLoading) {
+    if (isTripsLoading || !isPlanLoaded) {
         return <LoadingScreen />;
     }
 

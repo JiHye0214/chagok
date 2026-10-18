@@ -145,8 +145,7 @@ export default function SalaryPage() {
 
     const currency = profile?.currency ?? null;
 
-    const { openUpgrade } = useUpgrade();
-    const [planCode, setPlanCode] = useState<"free" | "pro">("free");
+    const { openUpgrade, planCode, isPlanLoaded } = useUpgrade();
     const [isSalarySettingsOpen, setIsSalarySettingsOpen] = useState(false);
     // 최저시급 안내에서 시트를 열 때 미리 채워줄 시급/적용일
     const [wagePreset, setWagePreset] = useState<WagePreset | null>(null);
@@ -166,25 +165,6 @@ export default function SalaryPage() {
      * --------------------------------------------------
      */
 
-    useEffect(() => {
-        const loadPlan = async () => {
-            try {
-                const response = await fetch("/api/auth/me");
-
-                if (!response.ok) {
-                    return;
-                }
-
-                const data = await response.json();
-
-                setPlanCode(data.planCode === "pro" ? "pro" : "free");
-            } catch (error) {
-                console.error("요금제 조회 실패:", error);
-            }
-        };
-
-        loadPlan();
-    }, []);
 
     /*
      * --------------------------------------------------
@@ -345,7 +325,7 @@ export default function SalaryPage() {
      * --------------------------------------------------
      */
 
-    if (isLoading) {
+    if (isLoading || !isPlanLoaded) {
         return <LoadingScreen />;
     }
 

@@ -235,8 +235,7 @@ const getPresetDateRange = (filter: Exclude<HistoryFilter, "custom" | "all">) =>
 export default function PayHistoryPage() {
     const { t, language } = useI18n();
     const { confirm, alert: showAlert } = useDialog();
-    const { openUpgrade } = useUpgrade();
-    const [planCode, setPlanCode] = useState<"free" | "pro">("free");
+    const { openUpgrade, planCode, isPlanLoaded } = useUpgrade();
 
     const [payHistory, setPayHistory] = useState<PayHistory[]>([]);
 
@@ -411,25 +410,6 @@ export default function PayHistoryPage() {
      * 프리미엄 유저
      * 플랜
      */
-    useEffect(() => {
-        const loadPlan = async () => {
-            try {
-                const response = await fetch("/api/auth/me");
-
-                if (!response.ok) {
-                    return;
-                }
-
-                const data = await response.json();
-
-                setPlanCode(data.planCode === "pro" ? "pro" : "free");
-            } catch (error) {
-                console.error("요금제 조회 실패:", error);
-            }
-        };
-
-        void loadPlan();
-    }, []);
 
     useEffect(() => {
         void loadPayHistory();
@@ -1014,7 +994,7 @@ export default function PayHistoryPage() {
         }
     };
 
-    if (isLoading || isSalaryLoading) {
+    if (isLoading || isSalaryLoading || !isPlanLoaded) {
         return <LoadingScreen />;
     }
 

@@ -149,7 +149,7 @@ const ProBadge = () => (
 
 function LivingManageContent() {
     const { confirm, alert: showAlert } = useDialog();
-    const { openUpgrade } = useUpgrade();
+    const { openUpgrade, planCode, isPlanLoaded } = useUpgrade();
     const { t, locale } = useI18n();
 
     const searchParams = useSearchParams();
@@ -163,7 +163,6 @@ function LivingManageContent() {
     const [loading, setLoading] = useState(true);
     const [fixedLoading, setFixedLoading] = useState(true);
 
-    const [planCode, setPlanCode] = useState("free");
 
     // user_profiles 기준 지역 / 국가 / 통화
     const [countryCode, setCountryCode] = useState<string | null>(null);
@@ -376,25 +375,6 @@ function LivingManageContent() {
         }
     };
 
-    useEffect(() => {
-        const loadPlan = async () => {
-            try {
-                const response = await fetch("/api/auth/me");
-
-                if (!response.ok) {
-                    return;
-                }
-
-                const data = await response.json();
-
-                setPlanCode(data.planCode ?? "free");
-            } catch (error) {
-                console.error(error);
-            }
-        };
-
-        loadPlan();
-    }, []);
 
     /*
      * --------------------------------------------------
@@ -1071,7 +1051,7 @@ function LivingManageContent() {
     const categoryModalCategories = categories.filter((category) => category.kind === categoryForm.kind);
 
     // 처음 불러오는 동안에는 로딩 화면만 보여준다 (헤더가 비쳐 보이지 않게)
-    if (loading && fixedLoading) {
+    if ((loading && fixedLoading) || !isPlanLoaded) {
         return <LoadingScreen />;
     }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import LoadingScreen from "@/components/LoadingScreen";
+import { useUpgrade } from "@/components/UpgradeProvider";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronRight, Settings } from "lucide-react";
 import LivingStartSheet from "@/components/LivingStartSheet";
@@ -74,12 +75,12 @@ const formatDisplayDate = (date: string) => {
 export default function LivingPage() {
     const { alert: showAlert } = useDialog();
     const { t } = useI18n();
-    const [planCode, setPlanCode] = useState<"free" | "pro">("free");
 
     const router = useRouter();
 
     const [month] = useState(getCurrentMonth);
     const [data, setData] = useState<LivingSummary | null>(null);
+    const { planCode, isPlanLoaded } = useUpgrade();
     const [loading, setLoading] = useState(true);
 
     const [hasLivingSettings, setHasLivingSettings] = useState(false);
@@ -93,25 +94,6 @@ export default function LivingPage() {
 
     const [isLivingStartOpen, setIsLivingStartOpen] = useState(false);
 
-    useEffect(() => {
-        const loadPlan = async () => {
-            try {
-                const response = await fetch("/api/auth/me");
-
-                if (!response.ok) {
-                    return;
-                }
-
-                const result = await response.json();
-
-                setPlanCode(result.planCode === "pro" ? "pro" : "free");
-            } catch (error) {
-                console.error(error);
-            }
-        };
-
-        void loadPlan();
-    }, []);
 
     useEffect(() => {
         const loadLiving = async () => {
@@ -211,7 +193,7 @@ export default function LivingPage() {
     const savingsProgress = data?.savings.goal ? Math.min(((data?.savings.current ?? 0) / data.savings.goal) * 100, 100) : 0;
 
     // 다른 페이지처럼 불러오는 동안에는 로딩 화면만 보여준다 (헤더가 비쳐 보이지 않게)
-    if (isLivingSettingsLoading || loading) {
+    if (isLivingSettingsLoading || loading || !isPlanLoaded) {
         return <LoadingScreen />;
     }
 

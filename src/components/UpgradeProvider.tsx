@@ -44,7 +44,6 @@ export default function UpgradeProvider({ children }: { children: ReactNode }) {
                 const me = await meResponse.json();
 
                 setPlanCode(me.planCode === "pro" ? "pro" : "free");
-                setIsPlanLoaded(true);
             }
 
             if (profileResponse.ok) {
@@ -54,6 +53,9 @@ export default function UpgradeProvider({ children }: { children: ReactNode }) {
             }
         } catch (error) {
             console.error("요금제 정보를 불러오지 못했어요:", error);
+        } finally {
+            // 실패해도 로딩 화면에 갇히지 않게 한다. (이 경우 무료로 보인다)
+            setIsPlanLoaded(true);
         }
     }, []);
 

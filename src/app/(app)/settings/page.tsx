@@ -8,6 +8,7 @@ import { useI18n } from "@/components/I18nProvider";
 import { useUpgrade } from "@/components/UpgradeProvider";
 import { LANGUAGES, getCountry, getCountryLabel, getRegionLabel } from "@/lib/countries";
 import BottomSheet from "@/components/BottomSheet";
+import LoadingScreen from "@/components/LoadingScreen";
 import { useDialog } from "@/components/DialogProvider";
 import { BILLING_ENABLED, getPlanPrice, getYearlyDiscountPercent } from "@/lib/plans";
 import { formatCurrency } from "@/lib/salary/format";
@@ -57,7 +58,7 @@ const DOWNGRADE_ITEM_KEYS = {
 export default function SettingsPage() {
     const { confirm, alert: showAlert } = useDialog();
     const router = useRouter();
-    const { isPro, openUpgrade, refreshPlan } = useUpgrade();
+    const { isPro, isPlanLoaded, openUpgrade, refreshPlan } = useUpgrade();
     const { t, language, locale } = useI18n();
 
     const [profile, setProfile] = useState<Profile | null>(null);
@@ -292,6 +293,10 @@ export default function SettingsPage() {
             setIsDeleting(false);
         }
     };
+
+    if (loading || !isPlanLoaded) {
+        return <LoadingScreen />;
+    }
 
     const planPrice = getPlanPrice(profile?.currency);
 

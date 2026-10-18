@@ -200,9 +200,8 @@ const withBold = (template: string, value: string) =>
 export default function TravelDetailPage() {
     const { t } = useI18n();
     const { confirm, alert: showAlert } = useDialog();
-    const { openUpgrade } = useUpgrade();
+    const { openUpgrade, planCode, isPlanLoaded } = useUpgrade();
 
-    const [planCode, setPlanCode] = useState<"free" | "pro">("free");
     const isPro = planCode === "pro";
 
     const params = useParams();
@@ -269,25 +268,6 @@ export default function TravelDetailPage() {
     const [isDeletingTrip, setIsDeletingTrip] = useState(false);
 
     // User Plan
-    useEffect(() => {
-        const loadPlan = async () => {
-            try {
-                const response = await fetch("/api/auth/me");
-
-                if (!response.ok) {
-                    return;
-                }
-
-                const data = await response.json();
-
-                setPlanCode(data.planCode === "pro" ? "pro" : "free");
-            } catch (error) {
-                console.error("플랜 정보를 불러오지 못했습니다.", error);
-            }
-        };
-
-        loadPlan();
-    }, []);
 
     useEffect(() => {
         const fetchTrip = async () => {
@@ -866,7 +846,7 @@ export default function TravelDetailPage() {
         };
     }, [displayCategoryIndex, displayCategoryAmount, displayCategoryPercentage]);
 
-    if (isLoading || (trip?.id && !(hasLoadedExpenses && hasLoadedCategories))) {
+    if (isLoading || !isPlanLoaded || (trip?.id && !(hasLoadedExpenses && hasLoadedCategories))) {
         return <LoadingScreen />;
     }
 

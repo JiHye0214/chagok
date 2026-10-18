@@ -4,7 +4,7 @@ import { translate } from "@/lib/i18n";
 import { DEFAULT_LANGUAGE } from "@/lib/countries";
 
 webpush.setVapidDetails(
-    "mailto:devstudio.hey@gmail.com",
+    "mailto:qkrwlgp1526@gmail.com",
     process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
     process.env.VAPID_PRIVATE_KEY!,
 );

@@ -71,8 +71,7 @@ export default function SchedulePage() {
         new Date(2023, 0, 1 + index).toLocaleDateString(locale, { weekday: "short" }),
     );
     const { alert: showAlert } = useDialog();
-    const { openUpgrade } = useUpgrade();
-    const [planCode, setPlanCode] = useState<"free" | "pro">("free");
+    const { openUpgrade, planCode, isPlanLoaded } = useUpgrade();
 
     /*
      * --------------------------------------------------
@@ -198,25 +197,6 @@ export default function SchedulePage() {
      * --------------------------------------------------
      */
 
-    useEffect(() => {
-        const loadPlan = async () => {
-            try {
-                const response = await fetch("/api/auth/me");
-
-                if (!response.ok) {
-                    return;
-                }
-
-                const data = await response.json();
-
-                setPlanCode(data.planCode === "pro" ? "pro" : "free");
-            } catch (error) {
-                console.error("요금제 조회 실패:", error);
-            }
-        };
-
-        loadPlan();
-    }, []);
 
     /*
      * --------------------------------------------------
@@ -749,7 +729,7 @@ export default function SchedulePage() {
      * --------------------------------------------------
      */
 
-    if (isLoading) {
+    if (isLoading || !isPlanLoaded) {
         return <LoadingScreen />;
     }
 
