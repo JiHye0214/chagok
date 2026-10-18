@@ -1279,6 +1279,8 @@ function LivingManageContent() {
 
                             const isSelected = selectedDate === date;
 
+                            const isToday = date === formatDate(new Date());
+
                             const dayTransactions = getDayTransactions(day);
 
                             const normalTransactions = dayTransactions.filter((transaction) => transaction.type !== "transfer");
@@ -1314,6 +1316,12 @@ function LivingManageContent() {
                                                 : holiday
                                                   ? "text-red-500"
                                                   : "text-gray-700"
+                                        } ${
+                                            isToday
+                                                ? isSelected
+                                                    ? "ring-2 ring-[#7FA58D] ring-offset-1"
+                                                    : "bg-[#EEF4F0] font-bold ring-1 ring-[#7FA58D]"
+                                                : ""
                                         }`}
                                     >
                                         {day}

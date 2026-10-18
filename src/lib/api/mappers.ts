@@ -78,6 +78,8 @@ export const toPayHistoryDto = (row: Row) => {
 
         // 새 필드
         currencyCode: (row.currency_code as string | null) ?? null,
+        countryCode: (row.country_code as string | null) ?? null,
+        provinceCode: (row.province_code as string | null) ?? null,
         earningLines: Array.isArray(row.earning_lines) ? row.earning_lines : [],
         deductionLines: Array.isArray(row.deduction_lines) ? row.deduction_lines : [],
         estimateSnapshot: (row.estimate_snapshot as Record<string, unknown> | null) ?? null,

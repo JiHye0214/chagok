@@ -33,6 +33,13 @@ const resolveCurrency = async (userId: string, requested: string | null) => {
     return currency && /^[A-Z]{3}$/.test(currency) ? currency : null;
 };
 
+// 기록을 처음 저장할 때 그 시점의 나라/지역을 함께 남긴다. (이후 지역을 바꿔도 기존 기록은 그대로)
+const getProfileRegion = async (userId: string) => {
+    const profile = await getUserProfile(userId);
+
+    return { countryCode: profile?.countryCode ?? null, provinceCode: profile?.provinceCode ?? null };
+};
+
 export async function GET() {
     try {
         const user = await getCurrentUser();
@@ -56,6 +63,8 @@ export async function GET() {
                 adjustments,
                 actual_net_pay,
                 currency_code,
+                country_code,
+                province_code,
                 earning_lines,
                 deduction_lines,
                 estimate_snapshot,
@@ -117,6 +126,7 @@ export async function POST(request: Request) {
         }
 
         const currencyCode = await resolveCurrency(user.id, input.currencyCode);
+        const profileRegion = await getProfileRegion(user.id);
 
         // 새 필드는 보내지 않으면(null) 기존 값을 유지한다: COALESCE(새 값, 기존 값)
         const earningLinesJson = input.earningLines ? JSON.stringify(input.earningLines) : null;
@@ -138,6 +148,8 @@ export async function POST(request: Request) {
                 adjustments,
                 actual_net_pay,
                 currency_code,
+                country_code,
+                province_code,
                 earning_lines,
                 deduction_lines,
                 estimate_snapshot,
@@ -157,6 +169,8 @@ export async function POST(request: Request) {
                 ${JSON.stringify(input.adjustments)},
                 ${input.netPay},
                 ${currencyCode},
+                ${profileRegion.countryCode},
+                ${profileRegion.provinceCode},
                 COALESCE(${earningLinesJson}::jsonb, '[]'::jsonb),
                 COALESCE(${deductionLinesJson}::jsonb, '[]'::jsonb),
                 ${estimateSnapshotJson}::jsonb,
@@ -174,6 +188,8 @@ export async function POST(request: Request) {
                 adjustments = EXCLUDED.adjustments,
                 actual_net_pay = EXCLUDED.actual_net_pay,
                 currency_code = COALESCE(pay_period_actuals.currency_code, EXCLUDED.currency_code),
+                country_code = COALESCE(pay_period_actuals.country_code, EXCLUDED.country_code),
+                province_code = COALESCE(pay_period_actuals.province_code, EXCLUDED.province_code),
                 earning_lines = COALESCE(${earningLinesJson}::jsonb, pay_period_actuals.earning_lines),
                 deduction_lines = COALESCE(${deductionLinesJson}::jsonb, pay_period_actuals.deduction_lines),
                 estimate_snapshot = COALESCE(${estimateSnapshotJson}::jsonb, pay_period_actuals.estimate_snapshot),
@@ -192,6 +208,8 @@ export async function POST(request: Request) {
                 adjustments,
                 actual_net_pay,
                 currency_code,
+                country_code,
+                province_code,
                 earning_lines,
                 deduction_lines,
                 estimate_snapshot,
@@ -226,6 +244,7 @@ export async function PUT(request: Request) {
         const id = parseId(body.id, "급여 기록 ID");
         const input = parsePayHistoryInput(body);
         const currencyCode = await resolveCurrency(user.id, input.currencyCode);
+        const profileRegion = await getProfileRegion(user.id);
 
         const earningLinesJson = input.earningLines ? JSON.stringify(input.earningLines) : null;
         const deductionLinesJson = input.deductionLines ? JSON.stringify(input.deductionLines) : null;
@@ -246,6 +265,8 @@ export async function PUT(request: Request) {
                 adjustments = ${JSON.stringify(input.adjustments)},
                 actual_net_pay = ${input.netPay},
                 currency_code = COALESCE(currency_code, ${currencyCode}::text),
+                country_code = COALESCE(country_code, ${profileRegion.countryCode}::text),
+                province_code = COALESCE(province_code, ${profileRegion.provinceCode}::text),
                 earning_lines = COALESCE(${earningLinesJson}::jsonb, earning_lines),
                 deduction_lines = COALESCE(${deductionLinesJson}::jsonb, deduction_lines),
                 estimate_snapshot = COALESCE(${estimateSnapshotJson}::jsonb, estimate_snapshot),
@@ -266,6 +287,8 @@ export async function PUT(request: Request) {
                 adjustments,
                 actual_net_pay,
                 currency_code,
+                country_code,
+                province_code,
                 earning_lines,
                 deduction_lines,
                 estimate_snapshot,

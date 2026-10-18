@@ -73,8 +73,20 @@ export async function POST(request: Request) {
 
         const input = parseScheduleInput(body);
 
-        // Free는 근무 기록 최대 100개
+        // Free는 근무 기록 최대 100개, 하루에 근무 1개
         if ((await getPlanCode(user.id)) === "free") {
+            const [sameDay] = await sql`
+                SELECT 1 AS found
+                FROM work_schedules
+                WHERE user_id = ${user.id}
+                  AND work_date = ${input.date}::date
+                LIMIT 1
+            `;
+
+            if (sameDay) {
+                return forbidden("하루에 근무를 두 개 이상 등록하는 건 Pro에서 사용할 수 있습니다.", "MULTI_SHIFT_PRO_ONLY");
+            }
+
             const [countResult] = await sql`
                 SELECT COUNT(*)::int AS count
                 FROM work_schedules
@@ -140,6 +152,22 @@ export async function PUT(request: Request) {
 
         const id = parseId(body.id, "근무 ID");
         const input = parseScheduleInput(body);
+
+        // Free는 하루에 근무 1개: 다른 근무가 있는 날짜로 옮기는 것도 막는다
+        if ((await getPlanCode(user.id)) === "free") {
+            const [sameDay] = await sql`
+                SELECT 1 AS found
+                FROM work_schedules
+                WHERE user_id = ${user.id}
+                  AND work_date = ${input.date}::date
+                  AND id <> ${id}
+                LIMIT 1
+            `;
+
+            if (sameDay) {
+                return forbidden("하루에 근무를 두 개 이상 등록하는 건 Pro에서 사용할 수 있습니다.", "MULTI_SHIFT_PRO_ONLY");
+            }
+        }
 
         const result = await sql`
             UPDATE work_schedules

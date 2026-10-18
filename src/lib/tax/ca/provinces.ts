@@ -1,4 +1,5 @@
 // lib/tax/ca/provinces.ts
+import { calculateBritishColumbiaTax } from "@/lib/tax/ca/britishColumbia";
 import { calculateOntarioTax } from "@/lib/tax/ca/ontario";
 
 /*
@@ -19,5 +20,6 @@ export type ProvincialTaxRule = {
 };
 
 export const PROVINCIAL_TAX_RULES: Record<string, ProvincialTaxRule> = {
+    BC: { key: "british-columbia-income-tax", name: "British Columbia Income Tax", calculate: calculateBritishColumbiaTax },
     ON: { key: "ontario-income-tax", name: "Ontario Income Tax", calculate: calculateOntarioTax },
 };

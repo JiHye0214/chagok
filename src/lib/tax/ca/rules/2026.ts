@@ -1,7 +1,7 @@
 // lib/tax/ca/rules/2026.ts
 /*
  * 2026 캐나다 급여 세금 규칙. 숫자는 이 파일에만 둔다.
- * 출처: CRA T4127 (Payroll Deductions Formulas), Ontario 규칙.
+ * 출처: CRA T4127 (Payroll Deductions Formulas), Ontario·BC 규칙.
  * 새해에는 이 파일을 복사해 2027.ts로 만들고 숫자만 바꾸면 됨.
  */
 
@@ -65,4 +65,26 @@ export const ONTARIO_RULES = {
         { over: 72000, base: 600, rate: 0.25, cap: 750 },
         { over: 200000, base: 750, rate: 0.25, cap: 900 },
     ],
+} as const;
+
+/*
+ * British Columbia 2026 (연 기준 법정 세율).
+ * 출처: BC 2026 예산(최저 구간 5.06% -> 5.60%), 2026 구간표, 기본공제 13,216.
+ * 참고: CRA 급여 원천징수는 7월부터 최저 구간 6.14%로 따로 조정해 연 합계를 맞춘다.
+ *       여기서는 연 기준 법정 세율(5.60%)로 계산한다.
+ */
+export const BC_RULES = {
+    lowestRate: 0.056,
+    basicPersonalAmount: 13216,
+    brackets: [
+        { limit: 50363, rate: 0.056, constant: 0 },
+        { limit: 100728, rate: 0.077, constant: 1057.62 },
+        { limit: 115648, rate: 0.105, constant: 3878.01 },
+        { limit: 140430, rate: 0.1229, constant: 5948.11 },
+        { limit: 190405, rate: 0.147, constant: 9332.47 },
+        { limit: 265545, rate: 0.168, constant: 13330.97 },
+        { limit: Infinity, rate: 0.205, constant: 23156.14 },
+    ],
+    // BC tax reduction: 소득이 threshold 이하면 최대액, 넘으면 phaseOutRate 비율로 줄어 0이 됨
+    taxReduction: { max: 690, threshold: 25570, phaseOutRate: 0.0356 },
 } as const;

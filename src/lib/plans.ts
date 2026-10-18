@@ -20,7 +20,8 @@ export type UpgradeReason =
     | "trip-category"
     | "trip-stats"
     | "pay-history-limit"
-    | "schedule-limit";
+    | "schedule-limit"
+    | "multi-shift";
 
 // 결제 기능이 열리면 true 로 바꾼다. (false 이면 "준비 중" 안내만 보여줌)
 export const BILLING_ENABLED = false;
@@ -63,6 +64,7 @@ const UPGRADE_MESSAGE_KEYS: Record<UpgradeReason, MessageKey> = {
     "trip-stats": "plan.reason.tripStats",
     "pay-history-limit": "plan.reason.payHistoryLimit",
     "schedule-limit": "plan.reason.scheduleLimit",
+    "multi-shift": "plan.reason.multiShift",
 };
 
 const UPGRADE_MESSAGE_COUNTS: Partial<Record<UpgradeReason, number>> = {

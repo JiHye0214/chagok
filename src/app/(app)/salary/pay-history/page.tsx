@@ -19,6 +19,7 @@ import { translateWarning } from "@/lib/i18n/warnings";
 import type { MessageKey } from "@/lib/i18n";
 import UsageMeter from "@/components/UsageMeter";
 import { FREE_PLAN_LIMITS } from "@/lib/plans";
+import { getCountryLabel, getRegionLabel } from "@/lib/countries";
 import { calculateHourlyBasePay, getHourlyWageOn } from "@/lib/salary/wage";
 
 type AdjustmentType = "add" | "subtract";
@@ -49,6 +50,10 @@ type PayHistory = {
     totalIncome: number;
 
     currencyCode: string | null;
+
+    // 기록을 저장할 때의 나라/지역
+    countryCode?: string | null;
+    provinceCode?: string | null;
 };
 
 type FormState = {
@@ -228,7 +233,7 @@ const getPresetDateRange = (filter: Exclude<HistoryFilter, "custom" | "all">) =>
 };
 
 export default function PayHistoryPage() {
-    const { t } = useI18n();
+    const { t, language } = useI18n();
     const { confirm, alert: showAlert } = useDialog();
     const { openUpgrade } = useUpgrade();
     const [planCode, setPlanCode] = useState<"free" | "pro">("free");
@@ -327,6 +332,8 @@ export default function PayHistoryPage() {
                 hourlyWage?: number | null;
 
                 currencyCode?: string | null;
+                countryCode?: string | null;
+                provinceCode?: string | null;
             }>;
 
             const normalizedData: PayHistory[] = data.map((item) => {
@@ -381,6 +388,10 @@ export default function PayHistoryPage() {
                     totalIncome: Number(item.totalIncome ?? actualNetPay + actualTips),
 
                     currencyCode: item.currencyCode ?? null,
+
+                    countryCode: item.countryCode ?? null,
+
+                    provinceCode: item.provinceCode ?? null,
                 };
             });
 
@@ -1366,10 +1377,10 @@ export default function PayHistoryPage() {
             </div>
 
             {/* 상세 모달 */}
-            <BottomSheet isOpen={Boolean(selectedHistory && !isFormOpen)} onClose={() => setSelectedHistory(null)}>
+            <BottomSheet plain isOpen={Boolean(selectedHistory && !isFormOpen)} onClose={() => setSelectedHistory(null)}>
                 {selectedHistory && !isFormOpen && (
                     <>
-                            <section className="rounded-3xl bg-white p-6 text-gray-950 shadow-sm">
+                            <section className="text-gray-950">
                                 <div className="flex items-start justify-between">
                                     <div>
                                         <p className="text-xs text-gray-500">
@@ -1381,6 +1392,15 @@ export default function PayHistoryPage() {
                                         {selectedHistory.payDate && (
                                             <p className="mt-1 text-xs text-gray-500">
                                                 {t("sal.payDate", { date: formatDisplayDate(selectedHistory.payDate) })}
+                                            </p>
+                                        )}
+
+                                        {selectedHistory.countryCode && (
+                                            <p className="mt-1 text-xs text-gray-500">
+                                                {getCountryLabel(selectedHistory.countryCode, { short: true, language })}
+                                                {selectedHistory.provinceCode
+                                                    ? ` · ${getRegionLabel(selectedHistory.countryCode, selectedHistory.provinceCode) || selectedHistory.provinceCode}`
+                                                    : ""}
                                             </p>
                                         )}
                                     </div>

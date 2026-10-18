@@ -7,6 +7,8 @@ type BottomSheetProps = {
     isOpen: boolean;
     onClose: () => void;
     title?: string;
+    // true 이면 시트 바탕이 흰색 (카드 없이 내용을 바로 올릴 때)
+    plain?: boolean;
     children: ReactNode;
 };
 
@@ -37,7 +39,7 @@ const unlockBodyScroll = () => {
 // 사용법: 부모는 조건부로 지우지 말고 isOpen 으로만 열고 닫는다.
 //   <BottomSheet isOpen={Boolean(item)} onClose={...}>{item && <내용 />}</BottomSheet>
 // 닫히는 동안에는 마지막으로 열려 있던 내용을 그대로 보여줘서, item 이 null 이 돼도 깨지지 않는다.
-export default function BottomSheet({ isOpen, onClose, title, children }: BottomSheetProps) {
+export default function BottomSheet({ isOpen, onClose, title, plain = false, children }: BottomSheetProps) {
     const [isMounted, setIsMounted] = useState(isOpen);
 
     const sheetRef = useRef<HTMLDivElement>(null);
@@ -158,7 +160,7 @@ export default function BottomSheet({ isOpen, onClose, title, children }: Bottom
 
             <div
                 ref={sheetRef}
-                className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[95dvh] w-full max-w-md flex-col rounded-t-[2rem] bg-gray-50 shadow-2xl"
+                className={`absolute inset-x-0 bottom-0 mx-auto flex max-h-[95dvh] w-full max-w-md flex-col rounded-t-[2rem] ${plain ? "bg-white" : "bg-gray-50"} shadow-2xl`}
             >
                 <div className="flex shrink-0 items-center justify-center px-6 pb-4 pt-3">
                     <div className="h-1.5 w-10 rounded-full bg-gray-300" />

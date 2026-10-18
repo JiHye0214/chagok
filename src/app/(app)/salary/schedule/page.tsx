@@ -25,6 +25,20 @@ import { getHourlyWageOn } from "@/lib/salary/wage";
 
 type WorkSchedule = WorkScheduleData;
 
+// "HH:MM" 두 시간이 분 단위 구간으로 겹치는지 (종료가 시작보다 이르면 자정을 넘기는 근무)
+const toMinuteRange = (startTime: string, endTime: string): [number, number] => {
+    const [startHour, startMinute] = startTime.split(":").map(Number);
+    const [endHour, endMinute] = endTime.split(":").map(Number);
+    const start = startHour * 60 + startMinute;
+    let end = endHour * 60 + endMinute;
+
+    if (end <= start) {
+        end += 24 * 60;
+    }
+
+    return [start, end];
+};
+
 const calculateHours = (startTime: string, endTime: string, breakMinutes: number = 0) => {
     if (!startTime || !endTime) {
         return 0;
@@ -106,6 +120,9 @@ export default function SchedulePage() {
 
     const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
+    // 달력에서 눌러 아래 내역을 보고 있는 날짜
+    const [viewDate, setViewDate] = useState<string | null>(null);
+
     const [startTime, setStartTime] = useState("09:00");
 
     const [endTime, setEndTime] = useState("17:00");
@@ -149,6 +166,9 @@ export default function SchedulePage() {
     });
 
     const [isDefaultBreakConfirmOpen, setIsDefaultBreakConfirmOpen] = useState(false);
+
+    // 같은 날 다른 근무와 시간이 겹칠 때 보여주는 확인창 (겹친 근무의 시간 문구를 담는다)
+    const [overlapLabel, setOverlapLabel] = useState<string | null>(null);
 
     /*
      * --------------------------------------------------
@@ -385,6 +405,13 @@ export default function SchedulePage() {
             return;
         }
 
+        // 하루에 근무 둘 이상은 Pro 기능
+        if (planCode === "free" && schedules.some((item) => item.date.slice(0, 10) === date)) {
+            openUpgrade("multi-shift");
+
+            return;
+        }
+
         setEditingSchedule(null);
 
         setSelectedDate(date);
@@ -496,6 +523,16 @@ export default function SchedulePage() {
             });
 
             if (!response.ok) {
+                const errorData = await response.json().catch(() => null);
+
+                if (errorData?.code === "MULTI_SHIFT_PRO_ONLY") {
+                    setIsAddModalOpen(false);
+                    setEditingSchedule(null);
+                    openUpgrade("multi-shift");
+
+                    return;
+                }
+
                 throw new Error("근무 저장 실패");
             }
 
@@ -517,9 +554,39 @@ export default function SchedulePage() {
         }
     };
 
-    const handleSaveSchedule = () => {
+    const findOverlap = () => {
+        if (!selectedDate || !startTime || !endTime) {
+            return null;
+        }
+
+        const [newStart, newEnd] = toMinuteRange(startTime, endTime);
+
+        return (
+            schedules.find((item) => {
+                if (item.date.slice(0, 10) !== selectedDate || item.id === editingSchedule?.id) {
+                    return false;
+                }
+
+                const [otherStart, otherEnd] = toMinuteRange(item.startTime, item.endTime);
+
+                return newStart < otherEnd && otherStart < newEnd;
+            }) ?? null
+        );
+    };
+
+    const handleSaveSchedule = (skipOverlapCheck = false) => {
         if (!selectedDate) {
             return;
+        }
+
+        if (skipOverlapCheck !== true) {
+            const overlap = findOverlap();
+
+            if (overlap) {
+                setOverlapLabel(`${overlap.startTime.slice(0, 5)} - ${overlap.endTime.slice(0, 5)}`);
+
+                return;
+            }
         }
 
         const currentBreakMinutes = hasBreak ? Math.max(0, Number(breakMinutes) || 0) : 0;
@@ -789,6 +856,8 @@ export default function SchedulePage() {
 
                         const holiday = holidays.find((item) => item.date === date);
 
+                        const isToday = date === formatDate(new Date());
+
                         const daySchedules = schedules.filter((schedule) => schedule.date.slice(0, 10) === date);
 
                         const hasSchedule = daySchedules.length > 0;
@@ -830,7 +899,14 @@ export default function SchedulePage() {
                                 }`}
                             >
                                 <button
-                                    onClick={() => (hasSchedule ? openEditModal(daySchedules[0]) : openAddModal(date))}
+                                    onClick={() => {
+                                        if (hasSchedule) {
+                                            setViewDate(date);
+                                        } else {
+                                            setViewDate(null);
+                                            openAddModal(date);
+                                        }
+                                    }}
                                     className="flex h-full w-full flex-col items-center justify-start rounded-xl pt-1"
                                 >
                                     <span
@@ -838,10 +914,20 @@ export default function SchedulePage() {
                                             hasSchedule
                                                 ? `flex h-8 w-8 items-center justify-center rounded-full bg-black text-sm font-medium ${
                                                       holiday ? "text-red-500" : "text-white"
+                                                  } ${
+                                                      viewDate === date
+                                                          ? "ring-2 ring-gray-900 ring-offset-2"
+                                                          : isToday
+                                                            ? "ring-2 ring-[#7FA58D] ring-offset-2"
+                                                            : ""
                                                   }`
-                                                : holiday
-                                                  ? "flex h-8 w-8 items-center justify-center text-sm font-medium text-red-500"
-                                                  : "flex h-8 w-8 items-center justify-center text-sm text-gray-900"
+                                                : isToday
+                                                  ? `flex h-8 w-8 items-center justify-center rounded-full bg-[#EEF4F0] text-sm font-bold ring-1 ring-[#7FA58D] ${
+                                                        holiday ? "text-red-500" : "text-[#3F6B4F]"
+                                                    }`
+                                                  : holiday
+                                                    ? "flex h-8 w-8 items-center justify-center text-sm font-medium text-red-500"
+                                                    : "flex h-8 w-8 items-center justify-center text-sm text-gray-900"
                                         }
                                     >
                                         {day}
@@ -913,6 +999,84 @@ export default function SchedulePage() {
                     </span>
                 </div>
             </section>
+
+
+            {/* 선택한 날짜의 근무 내역 */}
+            {viewDate && (() => {
+                const dayList = schedules
+                    .filter((item) => item.date.slice(0, 10) === viewDate)
+                    .sort((a, b) => a.startTime.localeCompare(b.startTime));
+                const dayHoliday = holidays.find((item) => item.date === viewDate);
+                const hoursOf = (item: WorkScheduleData) =>
+                    calculateHours(item.startTime, item.endTime, item.hasBreak ? item.breakMinutes : 0);
+                const payOf = (item: WorkScheduleData) =>
+                    estimateDayPay({ hours: hoursOf(item), hourlyWage: getWageOn(viewDate), isHoliday: Boolean(dayHoliday), ...premiumContext });
+                const totalHours = dayList.reduce((sum, item) => sum + hoursOf(item), 0);
+                const totalPay = dayList.reduce((sum, item) => sum + payOf(item), 0);
+
+                return (
+                    <section className="mt-5 rounded-3xl bg-white p-5 shadow-sm">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className={`text-sm font-semibold ${dayHoliday ? "text-red-500" : "text-gray-900"}`}>
+                                    {formatDate(parseDateOnly(viewDate))}
+                                </p>
+                                {dayHoliday && <p className="mt-0.5 text-xs text-red-400">{dayHoliday.name}</p>}
+                            </div>
+
+                            <button
+                                type="button"
+                                onClick={() => openAddModal(viewDate)}
+                                className="rounded-full bg-gray-900 px-3 py-2 text-xs font-medium text-white"
+                            >
+                                + {t("sched.day.addShift")}
+                            </button>
+                        </div>
+
+                        {dayList.length === 0 ? (
+                            <p className="mt-4 text-sm text-gray-400">{t("sched.day.empty")}</p>
+                        ) : (
+                            <div className="mt-4 divide-y divide-gray-100">
+                                {dayList.map((item) => (
+                                    <button
+                                        key={item.id}
+                                        type="button"
+                                        onClick={() => openEditModal(item)}
+                                        className="flex w-full items-center justify-between py-3 text-left"
+                                    >
+                                        <div>
+                                            <p className="text-sm font-medium text-gray-900">
+                                                {item.startTime.slice(0, 5)} - {item.endTime.slice(0, 5)}
+                                            </p>
+                                            <p className="mt-0.5 text-xs text-gray-400">
+                                                {hoursOf(item).toFixed(2)}
+                                                {t("sched.k012")}
+                                            </p>
+                                        </div>
+
+                                        {salarySettings?.payType === "hourly" && (
+                                            <span className="text-sm font-semibold text-gray-700">{formatMoney(payOf(item))}</span>
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+
+                        {dayList.length > 1 && (
+                            <div className="mt-2 flex items-center justify-between border-t border-gray-100 pt-3 text-xs text-gray-500">
+                                <span>
+                                    {t("sched.day.total")} · {t("sched.day.count", { count: dayList.length })}
+                                </span>
+                                <span className="font-semibold text-gray-700">
+                                    {totalHours.toFixed(2)}
+                                    {t("sched.k012")}
+                                    {salarySettings?.payType === "hourly" ? ` · ${formatMoney(totalPay)}` : ""}
+                                </span>
+                            </div>
+                        )}
+                    </section>
+                );
+            })()}
 
             {/* Add / Edit Modal */}
             {isMounted && (
@@ -1173,7 +1337,7 @@ export default function SchedulePage() {
 
                             <div className="mt-5 flex gap-3">
                                 <button
-                                    onClick={handleSaveSchedule}
+                                    onClick={() => handleSaveSchedule()}
                                     className="flex-1 rounded-2xl bg-black py-4 font-semibold text-white"
                                 >
                                     {editingSchedule ? t("sched.edit") : t("sched.register")}
@@ -1192,6 +1356,40 @@ export default function SchedulePage() {
                     </div>
                 </div>
             )}
+
+            {/* 겹치는 근무 확인 */}
+            <BottomSheet isOpen={overlapLabel !== null} onClose={() => setOverlapLabel(null)}>
+                {overlapLabel !== null && (
+                    <>
+                        <p className="text-lg font-bold">{t("sched.overlap.title")}</p>
+
+                        <p className="mt-2 text-sm leading-6 text-gray-500">
+                            {t(editingSchedule ? "sched.overlap.descEdit" : "sched.overlap.desc", { time: overlapLabel })}
+                        </p>
+
+                        <div className="mt-6 grid grid-cols-2 gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setOverlapLabel(null)}
+                                className="rounded-2xl bg-gray-100 py-4 text-sm font-semibold"
+                            >
+                                {t("sched.overlap.cancel")}
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setOverlapLabel(null);
+                                    handleSaveSchedule(true);
+                                }}
+                                className="rounded-2xl bg-black py-4 text-sm font-semibold text-white"
+                            >
+                                {t("sched.overlap.confirm")}
+                            </button>
+                        </div>
+                    </>
+                )}
+            </BottomSheet>
 
             {/* Handle Break Modal */}
             <BottomSheet isOpen={Boolean(isDefaultBreakConfirmOpen)} onClose={() => setIsDefaultBreakConfirmOpen(false)}>
