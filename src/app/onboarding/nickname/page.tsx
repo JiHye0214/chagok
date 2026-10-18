@@ -112,6 +112,7 @@ export default function NicknamePage() {
                 },
                 body: JSON.stringify({
                     nickname: trimmedNickname,
+                    consent: allAgreed,
                     language,
                     countryCode: selectedCountry.code,
                     provinceCode: selectedCountry.hasRegions ? provinceCode : null,

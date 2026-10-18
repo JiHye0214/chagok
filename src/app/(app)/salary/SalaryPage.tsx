@@ -205,6 +205,52 @@ export default function SalaryPage() {
 
     const today = formatDate(new Date());
 
+    // 오늘 근무 카드: 지금 근무 중이거나 아직 남은 근무가 있을 때만 보여준다 (1분마다 갱신)
+    const [nowMinutes, setNowMinutes] = useState(() => {
+        const d = new Date();
+        return d.getHours() * 60 + d.getMinutes();
+    });
+
+    useEffect(() => {
+        const timer = setInterval(() => {
+            const d = new Date();
+            setNowMinutes(d.getHours() * 60 + d.getMinutes());
+        }, 60000);
+
+        return () => clearInterval(timer);
+    }, []);
+
+    const todayShifts = useMemo(() => {
+        const toMin = (time: string) => {
+            const [h, m] = time.split(":").map(Number);
+            return h * 60 + m;
+        };
+
+        return schedules
+            .filter((schedule) => schedule.date.slice(0, 10) === today)
+            .map((schedule) => {
+                const start = toMin(schedule.startTime);
+                let end = toMin(schedule.endTime);
+
+                if (end <= start) {
+                    end += 24 * 60;
+                }
+
+                return {
+                    id: schedule.id,
+                    startTime: schedule.startTime,
+                    endTime: schedule.endTime,
+                    status: nowMinutes >= end ? "done" : nowMinutes >= start ? "working" : "upcoming",
+                    start,
+                    end,
+                    workMinutes: Math.max(0, end - start - (schedule.hasBreak ? schedule.breakMinutes : 0)),
+                };
+            })
+            .sort((a, b) => a.start - b.start);
+    }, [schedules, today, nowMinutes]);
+
+    const visibleShifts = todayShifts.filter((shift) => shift.status !== "done");
+
     const currentPayPeriod = useMemo(
         () => (salarySettings ? (getSurroundingPayPeriods(salarySettings, today)?.current ?? null) : null),
         [salarySettings, today],
@@ -365,6 +411,54 @@ export default function SalaryPage() {
 
                 <p className="mt-2 text-sm text-gray-500">{t("sal.k005")}</p>
             </header>
+
+            {visibleShifts.length > 0 && (
+                <section className="mb-5 rounded-3xl bg-white p-5 shadow-sm">
+                    {(() => {
+                        const working = visibleShifts.find((shift) => shift.status === "working");
+
+                        return (
+                            <div className="flex items-center justify-between">
+                                <p className="text-xs font-medium text-[#5B8A6A]">{t("sal.today.upcoming")}</p>
+
+                                <span
+                                    className={`rounded-full px-3 py-1 text-xs font-medium ${
+                                        working ? "bg-[#EEF4F0] text-[#3F6B4F]" : "bg-gray-100 text-gray-500"
+                                    }`}
+                                >
+                                    {working
+                                        ? `${t("sal.today.working")} · ${t("sal.today.remain", {
+                                              h: Math.floor((working.end - nowMinutes) / 60),
+                                              m: (working.end - nowMinutes) % 60,
+                                          })}`
+                                        : t("sal.today.before")}
+                                </span>
+                            </div>
+                        );
+                    })()}
+
+                    <p className="mt-2 text-sm text-gray-500">{t("sal.today.hasShift")}</p>
+
+                    <div className="mt-1 space-y-1">
+                        {visibleShifts.map((shift) => {
+                            const h = Math.floor(shift.workMinutes / 60);
+                            const m = shift.workMinutes % 60;
+
+                            return (
+                                <p key={shift.id} className="text-xl font-bold text-gray-900">
+                                    {shift.startTime}~{shift.endTime}{" "}
+                                    <span className="text-sm font-medium text-gray-400">
+                                        ({h > 0 ? `${h}h` : ""}
+                                        {h > 0 && m > 0 ? " " : ""}
+                                        {m > 0 || h === 0 ? `${m}m` : ""})
+                                    </span>
+                                </p>
+                            );
+                        })}
+                    </div>
+                </section>
+            )}
+
             {!salarySettings ? (
                 <section className="rounded-3xl bg-white p-6 shadow-sm">
                     <p className="text-xs font-medium text-gray-400">{t("sal.k004")}</p>
@@ -898,6 +992,14 @@ export default function SalaryPage() {
                                                                 currency,
                                                             )}
                                                         </span>
+                                                    </div>
+                                                )}
+
+{pendingPeriodEstimate.overtimePay > 0 && (
+                                                    <div className="flex justify-between">
+                                                        <span className="text-gray-500">{t("sal.overtime")}</span>
+
+                                                        <span className="font-medium text-gray-900">{formatMoney(pendingPeriodEstimate.overtimePay, currency)}</span>
                                                     </div>
                                                 )}
 

@@ -7,6 +7,9 @@ const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
 });
 
+// 약관/개인정보처리방침 개정 시 이 값을 바꾼다
+const CONSENT_VERSION = "2026-10";
+
 const nicknameRegex = /^[가-힣a-z0-9._]{3,20}$/;
 
 const DEFAULT_LIVING_CATEGORIES = [
@@ -181,6 +184,19 @@ export async function PATCH(request: Request) {
                 [language, countryCode, normalizedProvinceCode, timezone, currency, nickname, session.user.id],
             );
 
+            if (body.consent === true) {
+                await client.query(
+                    `
+                    UPDATE user_profiles
+                    SET terms_agreed_at = COALESCE(terms_agreed_at, NOW()),
+                        privacy_agreed_at = COALESCE(privacy_agreed_at, NOW()),
+                        consent_version = COALESCE(consent_version, $2)
+                    WHERE user_id = $1
+                    `,
+                    [session.user.id, CONSENT_VERSION],
+                );
+            }
+
             /*
              * 국가가 바뀌면 금액과 관련된 데이터를 모두 지운다. (통화가 바뀌어 기존 금액을 해석할 수 없기 때문)
              * 삭제: 생활 내역 / 고정지출 / 저축 목표 / 생활 시작 금액, 급여 설정 / 근무 일정 / 급여 기록 / 팁, 여행(경비 포함)
@@ -199,6 +215,7 @@ export async function PATCH(request: Request) {
                     "DELETE FROM pay_period_tips WHERE user_id = $1",
                     "DELETE FROM pay_period_actuals WHERE user_id = $1",
                     "DELETE FROM work_schedules WHERE user_id = $1",
+                    "DELETE FROM hourly_wage_history WHERE user_id = $1",
                     "DELETE FROM salary_settings WHERE user_id = $1",
                     "DELETE FROM trip_expenses WHERE trip_id IN (SELECT id FROM trips WHERE user_id = $1)",
                     "DELETE FROM trip_expense_categories WHERE trip_id IN (SELECT id FROM trips WHERE user_id = $1)",
@@ -222,12 +239,19 @@ export async function PATCH(request: Request) {
                     timezone,
                     currency,
                     nickname,
+                    terms_agreed_at,
+                    privacy_agreed_at,
+                    consent_version,
                     created_at,
                     updated_at
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+                VALUES ($1, $2, $3, $4, $5, $6, $7,
+                    CASE WHEN $8::boolean THEN NOW() END,
+                    CASE WHEN $8::boolean THEN NOW() END,
+                    CASE WHEN $8::boolean THEN $9::text END,
+                    NOW(), NOW())
                 `,
-                [session.user.id, language, countryCode, normalizedProvinceCode, timezone, currency, nickname],
+                [session.user.id, language, countryCode, normalizedProvinceCode, timezone, currency, nickname, body.consent === true, CONSENT_VERSION],
             );
 
             // 최초 구독 생성

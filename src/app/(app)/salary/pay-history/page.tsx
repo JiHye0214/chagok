@@ -1559,6 +1559,14 @@ export default function PayHistoryPage() {
                                             </div>
                                         )}
 
+{pendingPeriodEstimate.overtimePay > 0 && (
+                                            <div className="flex justify-between">
+                                                <span className="text-gray-500">{t("sal.overtime")}</span>
+
+                                                <span className="font-medium text-gray-900">{formatMoney(pendingPeriodEstimate.overtimePay)}</span>
+                                            </div>
+                                        )}
+
                                         {pendingPeriodEstimate.vacationPay > 0 && (
                                             <div className="flex justify-between">
                                                 <span className="text-gray-500">{t("payh.k038")}</span>

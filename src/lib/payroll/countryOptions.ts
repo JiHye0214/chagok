@@ -8,14 +8,16 @@ export type CountryOptions = {
     vacationPayRate?: number;
     // CA/KR: 공휴일 수당 지급 방식
     holidayPayMode?: HolidayPayMode;
+    // CA/KR: 연장근무 수당을 받는지 (기본 꺼짐)
+    overtimeEnabled?: boolean;
 };
 
 const HOLIDAY_PAY_MODES: readonly HolidayPayMode[] = ["full", "worked-only", "none"];
 
 // 나라별로 받을 수 있는 항목. 목록에 없는 항목은 거부한다.
 const ALLOWED_KEYS: Record<PayrollCountry, readonly (keyof CountryOptions)[]> = {
-    CA: ["vacationPayRate", "holidayPayMode"],
-    KR: ["holidayPayMode"],
+    CA: ["vacationPayRate", "holidayPayMode", "overtimeEnabled"],
+    KR: ["holidayPayMode", "overtimeEnabled"],
 };
 
 export type ParsedCountryOptions = { ok: true; value: CountryOptions } | { ok: false; error: string };
@@ -53,6 +55,14 @@ export const parseCountryOptions = (country: PayrollCountry, raw: unknown): Pars
         }
 
         value.holidayPayMode = mode as HolidayPayMode;
+    }
+
+    if (input.overtimeEnabled !== undefined && input.overtimeEnabled !== null) {
+        if (typeof input.overtimeEnabled !== "boolean") {
+            return { ok: false, error: "연장근무 수당 설정이 올바르지 않아요." };
+        }
+
+        value.overtimeEnabled = input.overtimeEnabled;
     }
 
     return { ok: true, value };

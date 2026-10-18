@@ -28,6 +28,7 @@ type CountryOptionsInput = {
     // 분수 (0.04 = 4%)
     vacationPayRate?: number;
     holidayPayMode?: HolidayPayMode;
+    overtimeEnabled?: boolean;
 };
 
 type SalarySettings = {
@@ -97,6 +98,7 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePres
     // 베케이션 페이는 화면에서는 퍼센트(4), 저장할 때는 분수(0.04)로 다룬다
     const [vacationPayPercent, setVacationPayPercent] = useState("4");
     const [holidayPayMode, setHolidayPayMode] = useState<HolidayPayMode | null>(null);
+    const [overtimeEnabled, setOvertimeEnabled] = useState(false);
 
     const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -241,6 +243,7 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePres
                     );
 
                     setHolidayPayMode(settings.countryOptions?.holidayPayMode ?? null);
+                    setOvertimeEnabled(settings.countryOptions?.overtimeEnabled === true);
                 }
 
                 setSaveError(null);
@@ -359,6 +362,8 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePres
             if (holidayPayMode) {
                 countryOptions.holidayPayMode = holidayPayMode;
             }
+
+            countryOptions.overtimeEnabled = overtimeEnabled;
         }
 
         setSaveError(null);
@@ -835,6 +840,31 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePres
                                             </button>
                                         ))}
                                     </div>
+                                </div>
+                            )}
+
+                            {payType === "hourly" && (
+                                <div className="mt-5">
+                                    <p className="mb-2 text-sm text-gray-500">{t("sset.overtime.title")}</p>
+
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {([[false, t("sset.overtime.off")], [true, t("sset.overtime.on")]] as [boolean, string][]).map(
+                                            ([value, label]) => (
+                                                <button
+                                                    type="button"
+                                                    key={String(value)}
+                                                    onClick={() => setOvertimeEnabled(value)}
+                                                    className={`rounded-2xl p-4 text-sm ${
+                                                        overtimeEnabled === value ? "bg-black text-white" : "bg-gray-100"
+                                                    }`}
+                                                >
+                                                    {label}
+                                                </button>
+                                            ),
+                                        )}
+                                    </div>
+
+                                    <p className="mt-2 text-xs leading-5 text-gray-400">{t("sset.overtime.help")}</p>
                                 </div>
                             )}
                         </section>

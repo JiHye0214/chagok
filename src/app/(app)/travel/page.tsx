@@ -586,15 +586,15 @@ export default function TravelPage() {
                     return (
                         <section className="mt-7">
                             <Link href={`/travel/list/${upcomingTrip.id}`} className="block">
-                                <div className="group overflow-hidden rounded-3xl bg-white shadow-sm transition">
+                                <div className="group overflow-hidden rounded-3xl border border-[#D9E7DE] bg-[#EEF4F0] shadow-sm transition hover:bg-[#E3EDE6]">
                                     <div className="flex items-center justify-between px-5 py-4">
                                         <div className="min-w-0">
                                             <div className="flex items-center gap-2">
                                                 <p className="text-xs font-medium text-[#5B8A6A]">{t("tp.k014")}</p>
 
-                                                <span className="h-1 w-1 rounded-full bg-gray-300" />
+                                                <span className="h-1 w-1 rounded-full bg-[#B9D2C0]" />
 
-                                                <p className="text-xs text-gray-400">
+                                                <p className="text-xs text-gray-500">
                                                     {formatDate(parseDateOnly(upcomingTrip.startDate))}
                                                 </p>
                                             </div>
@@ -612,7 +612,7 @@ export default function TravelPage() {
                                         </div>
 
                                         <div className="ml-4 flex shrink-0 flex-col items-end">
-                                            <span className="text-2xl font-bold tracking-tight text-gray-950">
+                                            <span className="text-2xl font-bold tracking-tight text-[#3F6B4F]">
                                                 D-
                                                 {Math.max(
                                                     0,
@@ -627,7 +627,14 @@ export default function TravelPage() {
                                         </div>
                                     </div>
 
-                                    <div className="flex items-center justify-between border-t border-gray-100 bg-gray-50/70 px-5 py-3">
+                                    {/* 티켓 절취선: 점선과 양옆 둥근 홈 */}
+                                    <div className="relative h-0">
+                                        <span className="absolute -left-2 -top-2 h-4 w-4 rounded-full border border-[#D9E7DE] bg-gray-50" />
+                                        <span className="absolute -right-2 -top-2 h-4 w-4 rounded-full border border-[#D9E7DE] bg-gray-50" />
+                                        <div className="mx-4 border-t-2 border-dashed border-[#C5DACC]" />
+                                    </div>
+
+                                    <div className="flex items-center justify-between px-5 py-3">
                                         <p className="text-xs text-gray-500">
                                             {formatDate(parseDateOnly(upcomingTrip.startDate))} —{" "}
                                             {formatDate(parseDateOnly(upcomingTrip.endDate))}

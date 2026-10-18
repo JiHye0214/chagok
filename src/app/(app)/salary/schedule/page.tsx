@@ -854,18 +854,6 @@ export default function SchedulePage() {
                             0,
                         );
 
-                        const dayPay = daySchedules.reduce((total, schedule) => {
-                            const hours = calculateHours(
-                                schedule.startTime,
-                                schedule.endTime,
-                                schedule.hasBreak ? schedule.breakMinutes : 0,
-                            );
-
-                            return (
-                                total + estimateDayPay({ hours, hourlyWage: getWageOn(date), isHoliday: Boolean(holiday), ...premiumContext })
-                            );
-                        }, 0);
-
                         const isPayPeriodDay = currentPayPeriod
                             ? date >= currentPayPeriod.startDate && date <= currentPayPeriod.endDate
                             : false;
@@ -875,7 +863,7 @@ export default function SchedulePage() {
                         return (
                             <div
                                 key={date}
-                                className={`relative flex h-16 flex-col items-center rounded-xl ${
+                                className={`relative flex h-[4.25rem] flex-col items-center rounded-xl ${
                                     isPayPeriodDay ? "bg-gray-100" : ""
                                 }`}
                             >
@@ -888,7 +876,7 @@ export default function SchedulePage() {
                                             openAddModal(date);
                                         }
                                     }}
-                                    className="flex h-full w-full flex-col items-center justify-start rounded-xl pt-1"
+                                    className="flex h-full w-full flex-col items-center justify-start rounded-xl pt-2"
                                 >
                                     <span
                                         className={
@@ -915,21 +903,9 @@ export default function SchedulePage() {
                                     </span>
 
                                     {hasSchedule ? (
-                                        <>
-                                            <span className="mt-1.5 text-[8px] font-medium leading-none text-gray-500">
-                                                {dayHours.toFixed(2)}h
-                                            </span>
-
-                                            {salarySettings?.payType === "hourly" ? (
-                                                <span className="mt-1 text-[8px] font-semibold leading-none text-gray-700">
-                                                    {formatMoney(dayPay)}
-                                                </span>
-                                            ) : salarySettings?.payType === "salary" ? (
-                                                <span className="mt-1 text-[10px] font-medium leading-none text-gray-500">
-                                                    {t("sched.k009")}
-                                                </span>
-                                            ) : null}
-                                        </>
+                                        <span className="mt-2 text-[11px] font-semibold leading-none text-gray-700">
+                                            {Number(dayHours.toFixed(2))}h
+                                        </span>
                                     ) : (
                                         holiday && (
                                             <span className="mt-1 max-w-full truncate px-1 text-[9px] font-medium leading-none text-red-400">
@@ -1599,6 +1575,14 @@ export default function SchedulePage() {
                                     <span className="text-gray-400">{t("sched.k044")}</span>
 
                                     <span>{formatMoney(currentPeriodHolidayPay)}</span>
+                                </div>
+                            )}
+
+                            {currentPeriodEstimate.overtimePay > 0 && (
+                                <div className="flex justify-between">
+                                    <span className="text-gray-400">{t("sal.overtime")}</span>
+
+                                    <span>{formatMoney(currentPeriodEstimate.overtimePay)}</span>
                                 </div>
                             )}
 

@@ -66,6 +66,7 @@ export default function SettingsPage() {
     const [loading, setLoading] = useState(true);
 
     const [isBenefitsOpen, setIsBenefitsOpen] = useState(false);
+    const [isExportOpen, setIsExportOpen] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [deleteConfirmation, setDeleteConfirmation] = useState("");
@@ -487,6 +488,45 @@ export default function SettingsPage() {
                     </div>
                 </div>
             </section>
+
+            <section className="mt-8">
+                <h2 className="mb-3 px-1 text-xs font-medium text-gray-400">{t("settings.section.data")}</h2>
+
+                <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
+                    <button
+                        type="button"
+                        onClick={() => setIsExportOpen(true)}
+                        className="flex w-full items-center justify-between px-5 py-4 transition-colors active:bg-gray-50"
+                    >
+                        <span className="text-sm text-gray-900">{t("settings.export")}</span>
+                        <ChevronRight size={16} strokeWidth={1.7} className="text-gray-300" />
+                    </button>
+                </div>
+            </section>
+
+            <BottomSheet isOpen={isExportOpen} onClose={() => setIsExportOpen(false)} title={t("settings.export")}>
+                <p className="mb-4 text-sm leading-6 text-gray-500">{t("settings.export.help")}</p>
+
+                <div className="space-y-2">
+                    {(
+                        [
+                            ["pay", t("settings.export.pay")],
+                            ["schedule", t("settings.export.schedule")],
+                            ["living", t("settings.export.living")],
+                        ] as const
+                    ).map(([type, label]) => (
+                        <a
+                            key={type}
+                            href={`/api/export?type=${type}`}
+                            download
+                            className="flex w-full items-center justify-between rounded-2xl bg-gray-100 p-4 text-sm text-gray-900"
+                        >
+                            {label}
+                            <span className="text-xs text-gray-400">CSV</span>
+                        </a>
+                    ))}
+                </div>
+            </BottomSheet>
 
             <section className="mt-8">
                 <h2 className="mb-3 px-1 text-xs font-medium text-gray-400">{t("settings.section.about")}</h2>

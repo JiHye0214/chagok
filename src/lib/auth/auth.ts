@@ -20,6 +20,21 @@ export const auth = betterAuth({
         },
     },
 
+    /*
+     * 로그인 시도 제한 (IP 기준).
+     * 메모리 저장이라 서버리스 인스턴스마다 따로 센다. 완벽한 차단은 아니지만
+     * 한 인스턴스에서 반복되는 무차별 시도는 막는다.
+     */
+    rateLimit: {
+        enabled: true,
+        window: 60,
+        max: 100,
+        customRules: {
+            "/sign-in/social": { window: 60, max: 10 },
+            "/callback/*": { window: 60, max: 20 },
+        },
+    },
+
     advanced: {
         database: {
             generateId: "uuid",

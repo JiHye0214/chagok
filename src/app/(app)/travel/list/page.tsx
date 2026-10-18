@@ -873,7 +873,7 @@ export default function TravelListPage() {
                                             <Link
                                                 key={trip.id}
                                                 href={`/travel/list/${trip.id}`}
-                                                className="block rounded-3xl bg-white p-5 shadow-sm transition active:scale-[0.99]"
+                                                className="block rounded-3xl border border-[#D9E7DE] bg-[#EEF4F0] p-5 shadow-sm transition hover:bg-[#E3EDE6] active:scale-[0.99]"
                                             >
                                                 <div className="flex items-start justify-between gap-4">
                                                     <div className="min-w-0">
@@ -883,7 +883,7 @@ export default function TravelListPage() {
                                                                     {trip.title}
                                                                 </p>
 
-                                                                <p className="mt-1 truncate text-sm text-gray-400">
+                                                                <p className="mt-1 truncate text-sm text-[#5B8A6A]">
                                                                     {getDestinationLabel(tripDestinations)}
                                                                 </p>
                                                             </>
@@ -895,7 +895,7 @@ export default function TravelListPage() {
                                                                             key={destination.countryCode}
                                                                             src={`https://flagcdn.com/w40/${destination.countryCode.toLowerCase()}.png`}
                                                                             alt={destination.country}
-                                                                            className="h-3 w-auto object-cover ring-2 ring-white"
+                                                                            className="h-3 w-auto object-cover ring-2 ring-[#EEF4F0]"
                                                                         />
                                                                     ))}
                                                                 </div>
@@ -912,17 +912,17 @@ export default function TravelListPage() {
                                                             </div>
                                                         )}
 
-                                                        <p className="mt-4 text-xs text-gray-500">
+                                                        <p className="mt-4 text-xs text-gray-600">
                                                             {formatDate(parseDateOnly(trip.startDate))} ~{" "}
                                                             {formatDate(parseDateOnly(trip.endDate))}
                                                         </p>
 
-                                                        <p className="mt-1 text-xs text-gray-400">
+                                                        <p className="mt-1 text-xs text-[#5B8A6A]">
                                                             {formatTripLength(t, nights, trip.people)}
                                                         </p>
                                                     </div>
 
-                                                    <span className="shrink-0 rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-500">
+                                                    <span className="shrink-0 whitespace-nowrap rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#3F6B4F] shadow-sm">
                                                         D-
                                                         {Math.max(
                                                             0,

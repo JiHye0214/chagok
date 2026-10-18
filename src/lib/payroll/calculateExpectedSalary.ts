@@ -1,6 +1,7 @@
 // lib/payroll/calculateExpectedSalary.ts
 import { calculatePayroll } from "@/lib/payroll/calculatePayroll";
 import type { PayrollCountry } from "@/lib/payroll/calculatePayroll";
+import { calculateOvertime } from "@/lib/payroll/overtime";
 import { calculatePeriodHolidayPay } from "@/lib/holiday";
 import { getDefaultHolidayPayMode } from "@/lib/labor/rules";
 import type { Holiday, HolidayPayMode } from "@/lib/holiday";
@@ -31,6 +32,9 @@ export type ExpectedSalarySettings = {
     // 시급제: 공휴일 수당 지급 방식. 없으면 CA는 "full"(공휴일 수당 + 일했을 때 프리미엄), KR은 "none"
     holidayPayMode?: HolidayPayMode;
 
+    // 연장근무 수당을 받는지 (설정에서 켠 경우만 계산)
+    overtimeEnabled?: boolean;
+
     hasTips: boolean;
     tipType?: "cash" | "paycheque" | "both";
 };
@@ -51,6 +55,8 @@ export type ExpectedSalaryResult = {
     // 공휴일에 일한 시간의 추가분 / 공휴일 자체 수당 / 매 급여 베케이션 페이
     premiumPay: number;
     publicHolidayPay: number;
+    // 연장근무 가산분 (설정에서 켠 경우만)
+    overtimePay: number;
     vacationPay: number;
 
     paychequeTips: number;
@@ -236,8 +242,33 @@ export const calculateExpectedSalary = ({
         warnings.push(...holidayPay.warnings);
     }
 
-    // 베케이션 페이: 임금(기본급 + 공휴일 수당)에 비율 적용. 팁은 임금이 아니므로 제외.
-    const wages = basePay + premiumPay + publicHolidayPay;
+    // 연장근무 가산 (시급제 + 설정에서 켠 경우만)
+    let overtimePay = 0;
+
+    if (settings.payType === "hourly" && settings.overtimeEnabled) {
+        const hoursByDay: Record<string, number> = {};
+
+        workDays.forEach((day) => {
+            hoursByDay[day.date] = (hoursByDay[day.date] ?? 0) + day.hours;
+        });
+
+        const overtime = calculateOvertime({
+            country: settings.country,
+            region: settings.regionCode,
+            hoursByDate: hoursByDay,
+            wageOn: (date) => getHourlyWageOn(date, settings.hourlyWageHistory, toSafeNumber(settings.hourlyWage)),
+        });
+
+        if (!overtime.supported) {
+            warnings.push("이 지역은 연장근무 수당 계산을 아직 지원하지 않아요.");
+        } else if (overtime.premiumPay > 0) {
+            overtimePay = round2(overtime.premiumPay);
+            warnings.push("연장근무 수당은 일~토 기준 주로 나눠 추정했어요. 급여 기간 경계의 주는 실제와 다를 수 있어요.");
+        }
+    }
+
+    // 베케이션 페이: 임금(기본급 + 공휴일 수당 + 연장 수당)에 비율 적용. 팁은 임금이 아니므로 제외.
+    const wages = basePay + premiumPay + publicHolidayPay + overtimePay;
     const vacationPay = round2(wages * vacationPayRate);
 
     // 세전 금액 (페이첵에 찍히는 금액)
@@ -263,6 +294,7 @@ export const calculateExpectedSalary = ({
         basePay,
         premiumPay,
         publicHolidayPay,
+        overtimePay,
         vacationPay,
         paychequeTips: actualPaychequeTips,
         cashTips: actualCashTips,
