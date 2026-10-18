@@ -11,6 +11,7 @@ import BackButtonHeader from "@/components/BackButtonHeader";
 import { useUpgrade } from "@/components/UpgradeProvider";
 import { getCurrencySymbol } from "@/lib/salary/format";
 import { parseDateOnly, todayDateString, yesterdayDateString } from "@/lib/dateOnly";
+import DateInput from "@/components/DateInput";
 import BottomSheet from "@/components/BottomSheet";
 import { useDialog } from "@/components/DialogProvider";
 import UsageMeter from "@/components/UsageMeter";
@@ -829,18 +830,16 @@ export default function TravelListPage() {
 
                                             {upcomingFilter === "custom" && (
                                                 <div className="mt-3 grid grid-cols-2 gap-2">
-                                                    <input
-                                                        type="date"
+                                                    <DateInput
                                                         value={upcomingCustomStartDate}
-                                                        onChange={(e) => setUpcomingCustomStartDate(e.target.value)}
-                                                        className="w-full rounded-2xl bg-gray-50 px-3 py-3 text-xs outline-none"
+                                                        placeholder={t("common.startDate")}
+                                                        onChange={setUpcomingCustomStartDate}
                                                     />
 
-                                                    <input
-                                                        type="date"
+                                                    <DateInput
                                                         value={upcomingCustomEndDate}
-                                                        onChange={(e) => setUpcomingCustomEndDate(e.target.value)}
-                                                        className="w-full rounded-2xl bg-gray-50 px-3 py-3 text-xs outline-none"
+                                                        placeholder={t("common.endDate")}
+                                                        onChange={setUpcomingCustomEndDate}
                                                     />
                                                 </div>
                                             )}
@@ -1471,12 +1470,10 @@ export default function TravelListPage() {
                                             <p className="text-sm font-medium text-gray-700">{t("tl.k033")}</p>
 
                                             <div className="mt-2 grid grid-cols-2 gap-3">
-                                                <input
-                                                    type="date"
+                                                <DateInput
                                                     value={startDate}
-                                                    onChange={(e) => {
-                                                        const value = e.target.value;
-
+                                                    placeholder={t("common.startDate")}
+                                                    onChange={(value) => {
                                                         setStartDate(value);
 
                                                         if (endDate && value > endDate) {
@@ -1484,29 +1481,16 @@ export default function TravelListPage() {
                                                         }
                                                     }}
                                                     min={tripType === "upcoming" ? todayDateString() : undefined}
-                                                    max={
-                                                        tripType === "completed"
-                                                            ? yesterdayDateString()
-                                                            : undefined
-                                                    }
-                                                    className="w-full rounded-2xl bg-gray-100 px-4 py-4 text-sm outline-none"
+                                                    max={tripType === "completed" ? yesterdayDateString() : undefined}
                                                 />
 
-                                                <input
-                                                    type="date"
+                                                <DateInput
                                                     value={endDate}
-                                                    onChange={(e) => setEndDate(e.target.value)}
-                                                    min={
-                                                        startDate ||
-                                                        (tripType === "upcoming" ? todayDateString() : undefined)
-                                                    }
-                                                    max={
-                                                        tripType === "completed"
-                                                            ? yesterdayDateString()
-                                                            : undefined
-                                                    }
+                                                    placeholder={t("common.endDate")}
+                                                    onChange={setEndDate}
+                                                    min={startDate || (tripType === "upcoming" ? todayDateString() : undefined)}
+                                                    max={tripType === "completed" ? yesterdayDateString() : undefined}
                                                     disabled={!startDate}
-                                                    className="w-full rounded-2xl bg-gray-100 px-4 py-4 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-50"
                                                 />
                                             </div>
                                         </div>

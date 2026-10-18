@@ -1,5 +1,6 @@
 "use client";
 
+import DateInput from "@/components/DateInput";
 import LoadingScreen from "@/components/LoadingScreen";
 import { useEffect, useMemo, useState } from "react";
 import { formatDate, getSurroundingPayPeriods } from "@/lib/payPeriod";
@@ -1131,23 +1132,13 @@ export default function SchedulePage() {
                                 <div>
                                     <p className="mb-2 text-sm text-gray-500">{t("sched.k014")}</p>
 
-                                    <input
-                                        type="time"
-                                        value={startTime}
-                                        onChange={(e) => setStartTime(e.target.value)}
-                                        className="w-full rounded-2xl bg-gray-100 px-4 py-4 outline-none"
-                                    />
+                                    <DateInput type="time" value={startTime} onChange={setStartTime} placeholder={t("sched.k014")} />
                                 </div>
 
                                 <div>
                                     <p className="mb-2 text-sm text-gray-500">{t("sched.k015")}</p>
 
-                                    <input
-                                        type="time"
-                                        value={endTime}
-                                        onChange={(e) => setEndTime(e.target.value)}
-                                        className="w-full rounded-2xl bg-gray-100 px-4 py-4 outline-none"
-                                    />
+                                    <DateInput type="time" value={endTime} onChange={setEndTime} placeholder={t("sched.k015")} />
                                 </div>
                             </div>
 

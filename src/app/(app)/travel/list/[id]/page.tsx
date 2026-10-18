@@ -1,5 +1,6 @@
 "use client";
 
+import DateInput from "@/components/DateInput";
 import LoadingScreen from "@/components/LoadingScreen";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -1762,18 +1763,16 @@ export default function TravelDetailPage() {
                                 <label className="text-xs font-medium text-gray-400">{t("td.k019")}</label>
 
                                 <div className="mt-2 grid grid-cols-2 gap-2">
-                                    <input
-                                        type="date"
+                                    <DateInput
                                         value={editStartDate}
-                                        onChange={(event) => setEditStartDate(event.target.value)}
-                                        className="w-full rounded-2xl border border-gray-100 bg-gray-50 px-3 py-3 text-sm text-gray-900 outline-none transition"
+                                        placeholder={t("common.startDate")}
+                                        onChange={setEditStartDate}
                                     />
 
-                                    <input
-                                        type="date"
+                                    <DateInput
                                         value={editEndDate}
-                                        onChange={(event) => setEditEndDate(event.target.value)}
-                                        className="w-full rounded-2xl border border-gray-100 bg-gray-50 px-3 py-3 text-sm text-gray-900 outline-none transition"
+                                        placeholder={t("common.endDate")}
+                                        onChange={setEditEndDate}
                                     />
                                 </div>
                             </div>

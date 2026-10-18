@@ -1,5 +1,6 @@
 "use client";
 
+import DateInput from "@/components/DateInput";
 import LoadingScreen from "@/components/LoadingScreen";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -1234,28 +1235,30 @@ export default function PayHistoryPage() {
                                 <div>
                                     <p className="mb-2 text-xs text-gray-400">{t("payh.k015")}</p>
 
-                                    <input
-                                        type="date"
+                                    <DateInput
+                                        variant="outline"
+                                        compact
                                         value={customStartDate}
-                                        onChange={(event) => {
-                                            setCustomStartDate(event.target.value);
+                                        placeholder={t("common.startDate")}
+                                        onChange={(value) => {
+                                            setCustomStartDate(value);
                                             setIsHistoryExpanded(false);
                                         }}
-                                        className="w-full rounded-2xl border border-gray-200 px-3 py-3 text-sm outline-none"
                                     />
                                 </div>
 
                                 <div>
                                     <p className="mb-2 text-xs text-gray-400">{t("payh.k016")}</p>
 
-                                    <input
-                                        type="date"
+                                    <DateInput
+                                        variant="outline"
+                                        compact
                                         value={customEndDate}
-                                        onChange={(event) => {
-                                            setCustomEndDate(event.target.value);
+                                        placeholder={t("common.endDate")}
+                                        onChange={(value) => {
+                                            setCustomEndDate(value);
                                             setIsHistoryExpanded(false);
                                         }}
-                                        className="w-full rounded-2xl border border-gray-200 px-3 py-3 text-sm outline-none"
                                     />
                                 </div>
                             </div>
@@ -1690,18 +1693,20 @@ export default function PayHistoryPage() {
                                     <label className="text-sm font-medium">{t("payh.k047")}</label>
 
                                     <div className="mt-2 grid grid-cols-2 gap-2">
-                                        <input
-                                            type="date"
+                                        <DateInput
+                                            variant="outline"
+                                            compact
                                             value={form.startDate}
-                                            onChange={(event) => updateForm("startDate", event.target.value)}
-                                            className="rounded-2xl border border-gray-200 px-3 py-3 text-sm outline-none"
+                                            placeholder={t("common.startDate")}
+                                            onChange={(value) => updateForm("startDate", value)}
                                         />
 
-                                        <input
-                                            type="date"
+                                        <DateInput
+                                            variant="outline"
+                                            compact
                                             value={form.endDate}
-                                            onChange={(event) => updateForm("endDate", event.target.value)}
-                                            className="rounded-2xl border border-gray-200 px-3 py-3 text-sm outline-none"
+                                            placeholder={t("common.endDate")}
+                                            onChange={(value) => updateForm("endDate", value)}
                                         />
                                     </div>
                                 </div>
@@ -1711,11 +1716,13 @@ export default function PayHistoryPage() {
                                 <div>
                                     <label className="text-sm font-medium">{t("payh.k033")}</label>
 
-                                    <input
-                                        type="date"
+                                    <DateInput
+                                        variant="outline"
+                                        compact
+                                        className="mt-2"
                                         value={form.payDate}
-                                        onChange={(event) => updateForm("payDate", event.target.value)}
-                                        className="mt-2 w-full rounded-2xl border border-gray-200 px-4 py-3 outline-none"
+                                        placeholder={t("payh.k033")}
+                                        onChange={(value) => updateForm("payDate", value)}
                                     />
                                 </div>
 

@@ -427,7 +427,7 @@ export default function SalaryPage() {
                             className="mt-4 block w-full rounded-3xl border border-[#D9E7DE] bg-[#EEF4F0] p-5 text-left shadow-sm transition hover:bg-[#E3EDE6]"
                         >
                             <div className="flex items-start justify-between gap-4">
-                                <div>
+                                <div className="min-w-0">
                                     <p className="text-xs text-[#5B8A6A]">{t("sal.k012")}</p>
 
                                     <p className="mt-2 text-lg font-semibold text-gray-900">
@@ -440,7 +440,7 @@ export default function SalaryPage() {
                                     </p>
                                 </div>
 
-                                <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#3F6B4F] shadow-sm">
+                                <span className="shrink-0 whitespace-nowrap rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#3F6B4F] shadow-sm">
                                     {t("sal.k014")}
                                 </span>
                             </div>

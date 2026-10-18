@@ -1,5 +1,6 @@
 "use client";
 
+import DateInput from "@/components/DateInput";
 import LoadingScreen, { InlineLoading } from "@/components/LoadingScreen";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, X, GripVertical, Lock } from "lucide-react";
@@ -1595,16 +1596,16 @@ function LivingManageContent() {
                                     </div>
                                 )}
 
-                                <input
-                                    type="date"
+                                <DateInput
+                                    compact
                                     value={form.date}
-                                    onChange={(event) =>
+                                    placeholder={t("common.date")}
+                                    onChange={(value) =>
                                         setForm((prev) => ({
                                             ...prev,
-                                            date: event.target.value,
+                                            date: value,
                                         }))
                                     }
-                                    className="w-full rounded-2xl bg-gray-100 px-4 py-3.5 text-sm outline-none"
                                 />
 
                                 <div className="flex items-center rounded-2xl bg-gray-100 px-4 py-3">

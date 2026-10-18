@@ -1,5 +1,6 @@
 "use client";
 
+import DateInput from "@/components/DateInput";
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "@/components/I18nProvider";
 import { getPayPeriodEndDate } from "@/lib/payPeriod";
@@ -629,11 +630,13 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePres
                                     </div>
 
                                     {wageApplyMode === "from-date" ? (
-                                        <input
-                                            type="date"
+                                        <DateInput
+                                            variant="white"
+                                            compact
+                                            className="mt-3"
                                             value={wageApplyDate}
-                                            onChange={(e) => setWageApplyDate(e.target.value)}
-                                            className="mt-3 w-full rounded-xl bg-white px-4 py-3 text-sm outline-none"
+                                            placeholder={t("common.date")}
+                                            onChange={setWageApplyDate}
                                         />
                                     ) : (
                                         <p className="mt-3 text-xs leading-5 text-gray-500">
@@ -754,11 +757,10 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePres
                             <div>
                                 <p className="mb-2 text-sm text-gray-500">{t("sset.k024")}</p>
 
-                                <input
-                                    type="date"
+                                <DateInput
                                     value={payPeriodStartDate}
-                                    onChange={(e) => setPayPeriodStartDate(e.target.value)}
-                                    className="w-full rounded-2xl bg-gray-100 px-4 py-4 outline-none"
+                                    placeholder={t("sset.k024")}
+                                    onChange={setPayPeriodStartDate}
                                 />
                             </div>
 
@@ -773,12 +775,7 @@ export default function SalarySettingsSheet({ isOpen, onClose, onSaved, wagePres
                             <div>
                                 <p className="mb-2 text-sm text-gray-500">{t("sset.k027")}</p>
 
-                                <input
-                                    type="date"
-                                    value={payDate}
-                                    onChange={(e) => setPayDate(e.target.value)}
-                                    className="w-full rounded-2xl bg-gray-100 px-4 py-4 outline-none"
-                                />
+                                <DateInput value={payDate} placeholder={t("sset.k027")} onChange={setPayDate} />
                             </div>
                         </div>
                     </section>
