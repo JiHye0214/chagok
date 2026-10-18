@@ -9,6 +9,7 @@ import { useUpgrade } from "@/components/UpgradeProvider";
 import { LANGUAGES, getCountry, getCountryLabel, getRegionLabel } from "@/lib/countries";
 import BottomSheet from "@/components/BottomSheet";
 import LoadingScreen from "@/components/LoadingScreen";
+import PlanComparisonTable from "@/components/PlanComparisonTable";
 import { useDialog } from "@/components/DialogProvider";
 import { BILLING_ENABLED, getPlanPrice, getYearlyDiscountPercent } from "@/lib/plans";
 import { formatCurrency } from "@/lib/salary/format";
@@ -64,6 +65,7 @@ export default function SettingsPage() {
     const [profile, setProfile] = useState<Profile | null>(null);
     const [loading, setLoading] = useState(true);
 
+    const [isBenefitsOpen, setIsBenefitsOpen] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [deleteConfirmation, setDeleteConfirmation] = useState("");
@@ -334,49 +336,41 @@ export default function SettingsPage() {
 
                 {isPro ? (
                     <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
-                        <div className="flex items-center justify-between px-5 py-4">
+                        <button
+                            type="button"
+                            onClick={() => setIsBenefitsOpen(true)}
+                            className="flex w-full items-center justify-between px-5 py-4 text-left transition-colors active:bg-gray-50"
+                        >
                             <span className="text-sm text-gray-900">{t("settings.plan.mine")}</span>
 
-                            <span className="text-sm text-gray-400">Pro</span>
-                        </div>
+                            <span className="flex items-center gap-1 text-sm text-gray-400">
+                                Pro
+                                <ChevronRight size={16} strokeWidth={1.7} className="text-gray-300" />
+                            </span>
+                        </button>
 
-                        {downgradeInfo && (
+                        {downgradeInfo?.cancelRequestedAt && (
                             <>
                                 <div className="mx-5 border-t border-gray-100" />
 
-                                {downgradeInfo.cancelRequestedAt ? (
-                                    <div className="px-5 py-4">
-                                        <p className="text-sm text-gray-900">
-                                            {downgradeInfo.expiresAt
-                                                ? t("settings.plan.cancelScheduled", { date: formatLongDate(downgradeInfo.expiresAt, locale) })
-                                                : t("settings.plan.cancelScheduledNoDate")}
-                                        </p>
+                                <div className="px-5 py-4">
+                                    <p className="text-sm text-gray-900">
+                                        {downgradeInfo.expiresAt
+                                            ? t("settings.plan.cancelScheduled", { date: formatLongDate(downgradeInfo.expiresAt, locale) })
+                                            : t("settings.plan.cancelScheduledNoDate")}
+                                    </p>
 
-                                        <p className="mt-1 text-xs leading-5 text-gray-400">
-                                            {t("settings.plan.cancelScheduledNote")}
-                                        </p>
+                                    <p className="mt-1 text-xs leading-5 text-gray-400">{t("settings.plan.cancelScheduledNote")}</p>
 
-                                        <button
-                                            type="button"
-                                            onClick={() => void cancelDowngrade()}
-                                            disabled={isDowngradeBusy}
-                                            className="mt-3 rounded-xl bg-gray-100 px-4 py-2.5 text-sm font-medium text-gray-700 disabled:opacity-50"
-                                        >
-                                            {t("settings.plan.undoCancel")}
-                                        </button>
-                                    </div>
-                                ) : (
                                     <button
                                         type="button"
-                                        onClick={() => void openDowngrade()}
+                                        onClick={() => void cancelDowngrade()}
                                         disabled={isDowngradeBusy}
-                                        className="flex w-full items-center justify-between px-5 py-4 text-left transition-colors active:bg-gray-50 disabled:opacity-50"
+                                        className="mt-3 rounded-xl bg-gray-100 px-4 py-2.5 text-sm font-medium text-gray-700 disabled:opacity-50"
                                     >
-                                        <span className="text-sm text-gray-500">{t("settings.plan.cancelPro")}</span>
-
-                                        <ChevronRight size={16} strokeWidth={1.7} className="text-gray-300" />
+                                        {t("settings.plan.undoCancel")}
                                     </button>
-                                )}
+                                </div>
                             </>
                         )}
                     </div>
@@ -544,6 +538,26 @@ export default function SettingsPage() {
                     </button>
                 </div>
             </section>
+
+            <BottomSheet isOpen={isBenefitsOpen} onClose={() => setIsBenefitsOpen(false)} title={t("settings.plan.benefitsTitle")}>
+                <p className="text-sm leading-6 text-gray-600">{t("settings.plan.benefitsBody")}</p>
+
+                <PlanComparisonTable className="mt-5" />
+
+                {downgradeInfo && !downgradeInfo.cancelRequestedAt && (
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setIsBenefitsOpen(false);
+                            void openDowngrade();
+                        }}
+                        disabled={isDowngradeBusy}
+                        className="mx-auto mt-8 block px-4 py-2 text-xs text-gray-400 underline disabled:opacity-50"
+                    >
+                        {t("settings.plan.cancelProLink")}
+                    </button>
+                )}
+            </BottomSheet>
 
             <BottomSheet isOpen={downgradeStep > 0} onClose={isDowngradeBusy ? () => undefined : closeDowngrade}>
                 {downgradeStep === 1 && downgradeInfo?.preview && (

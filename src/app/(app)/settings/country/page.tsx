@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import BackButtonHeader from "@/components/BackButtonHeader";
 import { translateServerMessage } from "@/lib/i18n/serverMessages";
 import { useI18n } from "@/components/I18nProvider";
-import { COUNTRIES, getCountry } from "@/lib/countries";
+import { COUNTRIES, getCountry, getRegionLabel } from "@/lib/countries";
+import BottomSheet from "@/components/BottomSheet";
 
 export default function CountrySettingsPage() {
     const router = useRouter();
@@ -23,6 +24,8 @@ export default function CountrySettingsPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [isResetConfirmed, setIsResetConfirmed] = useState(false);
+    // 같은 나라 안에서 지역만 바꿀 때 한 번 더 확인받는 시트
+    const [isRegionConfirmOpen, setIsRegionConfirmOpen] = useState(false);
 
     useEffect(() => {
         const loadProfile = async () => {
@@ -70,6 +73,18 @@ export default function CountrySettingsPage() {
 
         // 같은 나라로 돌아오면 저장된 지역을 되살리고, 다른 나라면 지역을 다시 고르게 한다
         setRegionCode(nextCode === savedCountryCode ? savedRegionCode : null);
+    };
+
+    const hasRegionChanged = !hasCountryChanged && selectedCountry?.hasRegions === true && regionCode !== savedRegionCode;
+
+    // 저장 버튼: 같은 나라에서 지역만 바꾸면 먼저 안내를 보여주고, 확인하면 저장한다
+    const handleSaveClick = () => {
+        if (hasRegionChanged) {
+            setIsRegionConfirmOpen(true);
+            return;
+        }
+
+        void handleSave();
     };
 
     const handleSave = async () => {
@@ -194,12 +209,58 @@ export default function CountrySettingsPage() {
 
             <button
                 type="button"
-                onClick={() => void handleSave()}
+                onClick={handleSaveClick}
                 disabled={isLoading || !isChanged || !isRegionValid || isSaving || (hasCountryChanged && !isResetConfirmed)}
                 className="mt-6 flex h-14 w-full items-center justify-center rounded-2xl bg-gray-900 text-sm font-medium text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400"
             >
                 {isSaving ? t("common.saving") : hasCountryChanged ? t("settings.countryPage.changeCountry") : t("common.save")}
             </button>
+
+            <BottomSheet isOpen={isRegionConfirmOpen} onClose={() => setIsRegionConfirmOpen(false)}>
+                {isRegionConfirmOpen && selectedCountry && (
+                    <>
+                        <p className="text-lg font-bold">{t("settings.countryPage.regionChangeTitle")}</p>
+
+                        <p className="mt-2 text-sm leading-6 text-gray-500">
+                            {t("settings.countryPage.regionChangeDesc", {
+                                from: getRegionLabel(savedCountryCode, savedRegionCode) || "-",
+                                to: getRegionLabel(selectedCountry.code, regionCode) || "-",
+                            })}
+                        </p>
+
+                        <ul className="mt-3 space-y-1.5 text-sm leading-6 text-gray-500">
+                            <li>· {t("settings.countryPage.regionChangeKept")}</li>
+                            <li>
+                                ·{" "}
+                                {t("settings.countryPage.regionChangeEstimate", {
+                                    to: getRegionLabel(selectedCountry.code, regionCode) || "-",
+                                })}
+                            </li>
+                        </ul>
+
+                        <div className="mt-6 grid grid-cols-2 gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setIsRegionConfirmOpen(false)}
+                                className="rounded-2xl bg-gray-100 py-4 text-sm font-semibold"
+                            >
+                                {t("common.cancel")}
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setIsRegionConfirmOpen(false);
+                                    void handleSave();
+                                }}
+                                className="rounded-2xl bg-black py-4 text-sm font-semibold text-white"
+                            >
+                                {t("settings.countryPage.regionChangeConfirm")}
+                            </button>
+                        </div>
+                    </>
+                )}
+            </BottomSheet>
         </div>
     );
 }
