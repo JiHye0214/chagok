@@ -4,17 +4,21 @@ import { translate } from "@/lib/i18n";
 import { DEFAULT_LANGUAGE } from "@/lib/countries";
 
 webpush.setVapidDetails(
-    "mailto:qkrwlgp1526@gmail.com",
+    "mailto:devstudio.hey@gmail.com",
     process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
     process.env.VAPID_PRIVATE_KEY!,
 );
 
+// 크론이 이 주기(5분)마다 이 주소를 호출해야 한다. 주기를 바꾸면 이 값도 같이 바꾼다.
+const CHECK_INTERVAL_MS = 5 * 60 * 1000;
+
 export async function GET(request: Request) {
-    // 크론 호출만 허용. CRON_SECRET이 설정돼 있으면 Authorization: Bearer <CRON_SECRET> 이 필요하다.
+    // 크론 호출만 허용한다. Authorization: Bearer <CRON_SECRET> 이 맞아야 한다.
+    // CRON_SECRET 이 설정돼 있지 않으면 아무도 호출하지 못하게 막는다. (비밀번호 없이 열려 있지 않도록)
     // (Vercel Cron은 CRON_SECRET 환경변수가 있으면 이 헤더를 자동으로 붙여준다.)
     const cronSecret = process.env.CRON_SECRET;
 
-    if (cronSecret && request.headers.get("authorization") !== `Bearer ${cronSecret}`) {
+    if (!cronSecret || request.headers.get("authorization") !== `Bearer ${cronSecret}`) {
         return Response.json({ success: false, error: "권한이 없어요." }, { status: 401 });
     }
 
@@ -62,11 +66,12 @@ export async function GET(request: Request) {
             const notificationTime = new Date(schedule.notify_at as string | Date);
 
             // 알림 시간이 됐는지 확인
-            const difference = Math.abs(now.getTime() - notificationTime.getTime());
+            // 알림 시각이 지난 뒤 CHECK_INTERVAL_MS 안에 있을 때만 보낸다.
+            // 크론을 CHECK_INTERVAL_MS(5분)마다 호출하면 알림 하나가 정확히 한 번만 나간다.
+            // (앞뒤로 넓게 보면 크론이 자주 돌 때 같은 알림이 여러 번 간다)
+            const elapsed = now.getTime() - notificationTime.getTime();
 
-            // Cron이 하루에 한 번이라도 정확한 시간에 실행된다는 보장은 없기 때문에
-            // 10분 이내면 알림 전송
-            if (!Number.isFinite(difference) || difference > 10 * 60 * 1000) {
+            if (!Number.isFinite(elapsed) || elapsed < 0 || elapsed >= CHECK_INTERVAL_MS) {
                 continue;
             }
 

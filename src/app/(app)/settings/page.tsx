@@ -490,6 +490,34 @@ export default function SettingsPage() {
             </section>
 
             <section className="mt-8">
+                <h2 className="mb-3 px-1 text-xs font-medium text-gray-400">{t("settings.section.about")}</h2>
+
+                <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
+                    <a
+                        href="/legal/terms"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex w-full items-center justify-between px-5 py-4 transition-colors active:bg-gray-50"
+                    >
+                        <span className="text-sm text-gray-900">{t("settings.terms")}</span>
+                        <ChevronRight size={16} strokeWidth={1.7} className="text-gray-300" />
+                    </a>
+
+                    <div className="mx-5 border-t border-gray-100" />
+
+                    <a
+                        href="/legal/privacy"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex w-full items-center justify-between px-5 py-4 transition-colors active:bg-gray-50"
+                    >
+                        <span className="text-sm text-gray-900">{t("settings.privacy")}</span>
+                        <ChevronRight size={16} strokeWidth={1.7} className="text-gray-300" />
+                    </a>
+                </div>
+            </section>
+
+            <section className="mt-8">
                 <h2 className="mb-3 px-1 text-xs font-medium text-gray-400">{t("settings.section.account")}</h2>
 
                 <div className="overflow-hidden rounded-3xl bg-white shadow-sm">

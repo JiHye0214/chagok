@@ -15,6 +15,10 @@ export default function NicknamePage() {
     const [error, setError] = useState("");
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+    const [agreeAge, setAgreeAge] = useState(false);
+    const [agreeTerms, setAgreeTerms] = useState(false);
+    const [agreePrivacy, setAgreePrivacy] = useState(false);
+    const allAgreed = agreeAge && agreeTerms && agreePrivacy;
 
     useEffect(() => {
         const savedCountry = localStorage.getItem("chagok_country");
@@ -67,6 +71,10 @@ export default function NicknamePage() {
     const isValidNickname = /^[가-힣a-z0-9._]{3,20}$/.test(nickname);
 
     const handleNext = async () => {
+        if (!allAgreed) {
+            return;
+        }
+
         const trimmedNickname = nickname.trim();
 
         if (!/^[가-힣a-z0-9._]{3,20}$/.test(trimmedNickname)) {
@@ -121,6 +129,8 @@ export default function NicknamePage() {
             // 실제 저장은 DB가 담당하므로
             // 기존 nickname localStorage는 사용하지 않음
             localStorage.removeItem("chagok_nickname");
+            // 계정에 언어가 저장됐으니 온보딩 임시 값은 지운다 (남겨 두면 이후 언어 설정을 덮어쓴다)
+            localStorage.removeItem("chagok_language");
 
             router.push("/");
         } catch (error) {
@@ -183,10 +193,42 @@ export default function NicknamePage() {
                             )}
                         </div>
 
+                        <div className="opacity-0 animate-[onboardingFadeUp_0.6s_ease-out_forwards]" style={{ animationDelay: "0.4s" }}>
+                            <div className="mt-6 space-y-3">
+                                {[
+                                    { checked: agreeAge, set: setAgreeAge, label: t("onboarding.nickname.agreeAge"), href: null },
+                                    { checked: agreeTerms, set: setAgreeTerms, label: t("onboarding.nickname.agreeTerms"), href: "/legal/terms" },
+                                    { checked: agreePrivacy, set: setAgreePrivacy, label: t("onboarding.nickname.agreePrivacy"), href: "/legal/privacy" },
+                                ].map((item) => (
+                                    <div key={item.label} className="flex items-center justify-between gap-3">
+                                        <label className="flex flex-1 cursor-pointer items-center gap-3 text-sm text-gray-700">
+                                            <input
+                                                type="checkbox"
+                                                checked={item.checked}
+                                                onChange={(e) => item.set(e.target.checked)}
+                                                className="h-4 w-4 accent-gray-900"
+                                            />
+                                            {item.label}
+                                        </label>
+                                        {item.href && (
+                                            <a
+                                                href={item.href}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="shrink-0 text-xs text-gray-400 underline"
+                                            >
+                                                {t("onboarding.nickname.agreeView")}
+                                            </a>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
                         <button
                             type="button"
                             onClick={handleNext}
-                            disabled={!isValidNickname || isSaving}
+                            disabled={!isValidNickname || !allAgreed || isSaving}
                             className="mt-6 flex h-14 w-full items-center justify-center rounded-2xl bg-gray-900 text-sm font-medium text-white opacity-0 animate-[onboardingFadeUp_0.6s_ease-out_forwards] transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400"
                             style={{ animationDelay: "0.45s" }}
                         >
