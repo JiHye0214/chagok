@@ -151,6 +151,7 @@ export function calculatePeriodHolidayPay({
     hoursByDate,
     holidays,
     regularWagesBeforeHoliday,
+    regularWagesBeforeHolidayOn,
     vacationPayRate = 0,
     scheduledHoursPerDay = 8,
     mode = "full",
@@ -165,6 +166,8 @@ export function calculatePeriodHolidayPay({
     hoursByDate: Record<string, number>;
     holidays: Holiday[];
     regularWagesBeforeHoliday: number;
+    // 공휴일마다 실제 직전 4주 임금을 알 수 있으면 그 값을 돌려준다 (null이면 위의 추정값 사용)
+    regularWagesBeforeHolidayOn?: (date: string) => number | null;
     vacationPayRate?: number;
     scheduledHoursPerDay?: number;
     mode?: HolidayPayMode;
@@ -178,6 +181,8 @@ export function calculatePeriodHolidayPay({
     const warnings = new Set<string>();
 
     for (const holiday of getHolidaysInPayPeriod(startDate, endDate, holidays)) {
+        const wagesBefore = regularWagesBeforeHolidayOn?.(holiday.date) ?? regularWagesBeforeHoliday;
+
         const result = calculateHolidayPay({
             date: holiday.date,
             hourlyWage: hourlyWageOn ? hourlyWageOn(holiday.date) : hourlyWage,
@@ -185,8 +190,8 @@ export function calculatePeriodHolidayPay({
             country,
             province,
             holidays,
-            regularWagesBeforeHoliday,
-            vacationPayBeforeHoliday: regularWagesBeforeHoliday * vacationPayRate,
+            regularWagesBeforeHoliday: wagesBefore,
+            vacationPayBeforeHoliday: wagesBefore * vacationPayRate,
             scheduledHoursPerDay,
         });
 

@@ -145,6 +145,7 @@ export const calculateExpectedSalary = ({
     paychequeTips = 0,
     payPeriod,
     holidays = [],
+    scheduleHistory,
 }: {
     settings: ExpectedSalarySettings;
     schedules: ExpectedSalarySchedule[];
@@ -153,6 +154,8 @@ export const calculateExpectedSalary = ({
     payPeriod: PayPeriod;
     // 공휴일 목록 (CA 시급제일 때 공휴일 수당 계산에 사용)
     holidays?: Holiday[];
+    // 전체 근무 기록. 있으면 공휴일 수당을 직전 4주의 실제 근무로 계산한다 (없거나 4주치가 없으면 추정)
+    scheduleHistory?: ExpectedSalarySchedule[];
 }): ExpectedSalaryResult => {
     const warnings: string[] = [];
     const isCanada = settings.country === "CA";
@@ -213,6 +216,46 @@ export const calculateExpectedSalary = ({
         // [KR] 하루 소정근로시간 추정: 공휴일이 아닌 근무일의 평균 (최대 8시간, 근무 기록이 없으면 8시간)
         const scheduledHoursPerDay = regularDayCount > 0 ? Math.min(8, regularDayHours / regularDayCount) : 8;
 
+        // [CA] 공휴일이 든 주(일~토)의 직전 4주 임금. 그 4주가 근무 기록에 모두 들어 있을 때만 쓴다.
+        const earliestHistoryDate = scheduleHistory?.reduce(
+            (min, schedule) => (schedule.date.slice(0, 10) < min ? schedule.date.slice(0, 10) : min),
+            "9999-12-31",
+        );
+
+        const actualWagesBeforeHoliday = (holidayDate: string): number | null => {
+            if (!isCanada || !scheduleHistory || !earliestHistoryDate) {
+                return null;
+            }
+
+            const weekStart = new Date(`${holidayDate}T00:00:00Z`);
+            weekStart.setUTCDate(weekStart.getUTCDate() - weekStart.getUTCDay());
+
+            const windowEnd = new Date(weekStart);
+            windowEnd.setUTCDate(windowEnd.getUTCDate() - 1);
+
+            const windowStart = new Date(weekStart);
+            windowStart.setUTCDate(windowStart.getUTCDate() - 28);
+
+            const startKey = windowStart.toISOString().slice(0, 10);
+            const endKey = windowEnd.toISOString().slice(0, 10);
+
+            if (earliestHistoryDate > startKey) {
+                return null;
+            }
+
+            return scheduleHistory.reduce((total, schedule) => {
+                const date = schedule.date.slice(0, 10);
+
+                if (date < startKey || date > endKey) {
+                    return total;
+                }
+
+                const hours = calculateHours(schedule.startTime, schedule.endTime, schedule.hasBreak ? schedule.breakMinutes : 0);
+
+                return total + hours * getHourlyWageOn(date, settings.hourlyWageHistory, toSafeNumber(settings.hourlyWage));
+            }, 0);
+        };
+
         const holidayPay = calculatePeriodHolidayPay({
             country: settings.country,
             province: settings.regionCode ?? "",
@@ -223,6 +266,7 @@ export const calculateExpectedSalary = ({
             hoursByDate,
             holidays,
             regularWagesBeforeHoliday: estimatedRegularWagesBeforeHoliday,
+            regularWagesBeforeHolidayOn: actualWagesBeforeHoliday,
             vacationPayRate,
             scheduledHoursPerDay,
             mode: settings.holidayPayMode ?? getDefaultHolidayPayMode(settings.country),
@@ -234,7 +278,7 @@ export const calculateExpectedSalary = ({
         if (publicHolidayPay > 0) {
             warnings.push(
                 isCanada
-                    ? "공휴일 수당은 직전 4주 급여를 이번 급여 기간 기준으로 추정해서 계산했어요."
+                    ? "공휴일 수당은 직전 4주 근무 기록으로 계산해요. 기록이 4주치에 못 미치면 이번 급여 기간 기준으로 추정하고, 회사 계산과 다를 수 있어요."
                     : "유급휴일 수당은 공휴일이 원래 근무하는 날일 때만 해당돼요. 하루 근무시간은 이번 기간 평균(최대 8시간)으로 추정했어요.",
             );
         }

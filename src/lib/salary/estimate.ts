@@ -79,6 +79,7 @@ export const buildPeriodEstimate = ({
         paychequeTips: tips?.paychequeTips ?? 0,
         payPeriod: period,
         holidays,
+        scheduleHistory: schedules,
     });
 
     return { status: "ok", estimate, currency: profile.currency, countryOptions };
